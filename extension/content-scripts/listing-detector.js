@@ -7,8 +7,8 @@
  * etsy-dom-extractor.js is injected first (see manifest.json content_scripts order).
  *
  * Mode logic:
- *   'reference' — public listing page: /listing/<id> or /<locale>/listing/<id>
- *   'admin'     — shop edit page: /your/shops/*/listings/<id>
+ *   'reference' — public listing page: /listing/{id} or /{locale}/listing/{id}
+ *   'admin'     — shop edit page: /your/shops/{shop}/listings/{id}
  */
 
 (function detectListing() {
