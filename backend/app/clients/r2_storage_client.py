@@ -13,22 +13,23 @@ logger = logging.getLogger(__name__)
 class R2StorageClient:
     """Thin wrapper around boto3 S3 client pointing at Cloudflare R2 endpoint.
 
-    Requires env vars: R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_ENDPOINT,
-    R2_BUCKET_NAME, R2_PUBLIC_URL.
+    Requires env vars: R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY,
+    R2_BUCKET_NAME, R2_PUBLIC_URL. Endpoint URL is derived from R2_ACCOUNT_ID.
     """
 
     def __init__(self) -> None:
-        if not settings.r2_endpoint or not settings.r2_access_key_id:
+        if not settings.r2_account_id or not settings.r2_access_key_id:
             raise ValueError(
-                "R2 not configured: missing R2_ENDPOINT or R2_ACCESS_KEY_ID in settings"
+                "R2 not configured: missing R2_ACCOUNT_ID or R2_ACCESS_KEY_ID in settings"
             )
 
         self._bucket = settings.r2_bucket_name
         self._public_url = settings.r2_public_url.rstrip("/")
 
+        endpoint_url = f"https://{settings.r2_account_id}.r2.cloudflarestorage.com"
         self._client = boto3.client(
             "s3",
-            endpoint_url=settings.r2_endpoint,
+            endpoint_url=endpoint_url,
             aws_access_key_id=settings.r2_access_key_id,
             aws_secret_access_key=settings.r2_secret_access_key,
             region_name="auto",
