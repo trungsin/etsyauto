@@ -113,8 +113,10 @@ FastAPI · SQLite · APScheduler · Anthropic Claude Sonnet 4.6 · remove.bg · 
 | [Project Overview (PDR)](docs/project-overview-pdr.md) | Problem statement, decisions, cost breakdown |
 | [System Architecture](docs/system-architecture.md) | Diagrams: components, sequence, state machine, DB schema |
 | [Template System Guide](docs/template-system-guide.md) | Setup, admin UI walkthrough, API reference, anchor convention, troubleshooting |
+| [Reference Workflow Guide](docs/reference-workflow-guide.md) | Capture Etsy public listings → AI suggest title → BG cutout → save to Notion Idea Bank |
 | [Deployment Guide](docs/deployment-guide.md) | Full setup from scratch, API key registration |
 | [Notion DB Setup](docs/notion-db-setup.md) | Notion database creation and review workflow |
+| [Notion Idea Bank Setup](docs/notion-idea-bank-setup.md) | Idea Bank database creation, properties, integration share, data_source_id |
 | [Troubleshooting](docs/troubleshooting.md) | 9 common errors with diagnosis and fixes |
 | [Code Standards](docs/code-standards.md) | Python + JS conventions, testing rules |
 | [Codebase Summary](docs/codebase-summary.md) | Module index with line counts |
@@ -127,7 +129,7 @@ FastAPI · SQLite · APScheduler · Anthropic Claude Sonnet 4.6 · remove.bg · 
 
 ```bash
 cd backend && uv run pytest -v
-# 125 tests, < 35 seconds
+# 163 tests, < 50 seconds
 ```
 
 ---

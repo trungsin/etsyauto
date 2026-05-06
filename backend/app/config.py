@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     notion_api_key: str = ""
     notion_database_id: str = ""
     notion_data_source_id: str = ""
+    # Notion Idea Bank DB — separate database for saving reference listings
+    notion_idea_bank_data_source_id: str = ""
 
     # Cloudflare R2
     r2_account_id: str = ""

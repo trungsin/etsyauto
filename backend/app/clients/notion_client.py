@@ -5,13 +5,17 @@ Uses the Sept 2025 Notion API "data sources" model:
 - data_source_id = actual table (properties + rows); used for query, schema validation,
                    and page creation parent
 """
+import json
 import logging
 from datetime import datetime, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from notion_client import Client
 
 from app.config import settings
+
+if TYPE_CHECKING:
+    from app.models.reference import Reference
 
 logger = logging.getLogger(__name__)
 
@@ -148,6 +152,87 @@ class NotionClient:
     # Schema validation (best-effort)
     # ------------------------------------------------------------------
 
+    # ------------------------------------------------------------------
+    # Idea Bank — create / update / validate
+    # ------------------------------------------------------------------
+
+    def create_idea_bank_page(
+        self,
+        reference: "Reference",
+        cutout_url: str | None = None,
+    ) -> str:
+        """Create a Notion Idea Bank page for *reference* and return page_id.
+
+        Parent uses notion_idea_bank_data_source_id (data_sources API).
+        Properties map to the Idea Bank schema exactly (names must match Notion DB).
+        """
+        ds_id = settings.notion_idea_bank_data_source_id
+        if not ds_id:
+            raise ValueError("NOTION_IDEA_BANK_DATA_SOURCE_ID not configured")
+
+        properties = _build_idea_bank_properties(reference, cutout_url)
+        children = _build_idea_bank_children(reference, cutout_url)
+
+        response = self._client.pages.create(
+            parent={"type": "data_source_id", "data_source_id": ds_id},
+            properties=properties,
+            children=children,
+        )
+        page_id: str = response["id"]
+        logger.info("Created Notion Idea Bank page %s for reference id=%d", page_id, reference.id)
+        return page_id
+
+    def update_idea_bank_page(
+        self,
+        page_id: str,
+        reference: "Reference",
+        cutout_url: str | None = None,
+    ) -> None:
+        """Update properties of an existing Idea Bank page (children unchanged)."""
+        properties = _build_idea_bank_properties(reference, cutout_url)
+        self._client.pages.update(page_id=page_id, properties=properties)
+        logger.info("Updated Notion Idea Bank page %s for reference id=%d", page_id, reference.id)
+
+    def validate_idea_bank_schema(self) -> bool:
+        """Check Idea Bank data source has required properties; logs warnings, never raises.
+
+        Returns True if all required properties found, False otherwise.
+        """
+        ds_id = settings.notion_idea_bank_data_source_id
+        if not ds_id:
+            logger.info("NOTION_IDEA_BANK_DATA_SOURCE_ID not set — skipping Idea Bank schema check")
+            return False
+
+        required = {
+            "Reference Title", "Source URL", "Original Title", "Edited Title",
+            "AI Variants", "Notes", "Tags", "Cutout Image", "Status", "Created",
+        }
+        try:
+            ds = self._client.data_sources.retrieve(data_source_id=ds_id)
+            existing = set(ds.get("properties", {}).keys())
+            missing = required - existing
+            if missing:
+                logger.warning(
+                    "Notion Idea Bank schema mismatch — missing properties: %s. "
+                    "See docs/notion-idea-bank-setup.md for setup instructions.",
+                    ", ".join(sorted(missing)),
+                )
+                return False
+            logger.info("Notion Idea Bank schema validated OK")
+            return True
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Notion Idea Bank schema validation failed: %s", exc)
+            return False
+
+    def archive_page(self, page_id: str) -> None:
+        """Archive a Notion page (soft-delete). Does not raise on API error."""
+        self._client.pages.update(page_id=page_id, archived=True)
+        logger.info("Archived Notion page %s", page_id)
+
+    # ------------------------------------------------------------------
+    # Schema validation (best-effort) — review DB
+    # ------------------------------------------------------------------
+
     def validate_database_schema(self) -> bool:
         """Check that the Notion data source has the expected properties.
 
@@ -270,6 +355,72 @@ def _build_mockup_blocks(variants: list[Any]) -> list[dict]:
             }}]
         },
     })
+    return blocks
+
+
+def _build_idea_bank_properties(reference: "Reference", cutout_url: str | None) -> dict[str, Any]:
+    """Build Notion properties dict for Idea Bank schema."""
+    title = (reference.edited_title or reference.original_title or "")[:2000]
+
+    # AI Variants: concat 3 items with bullet prefix
+    variants_text = ""
+    if reference.ai_title_variants_json:
+        try:
+            variants = json.loads(reference.ai_title_variants_json)
+            lines = []
+            for v in variants[:3]:
+                text = v.get("text", "") if isinstance(v, dict) else str(v)
+                lines.append(f"• {text}")
+            variants_text = "\n".join(lines)
+        except (json.JSONDecodeError, TypeError, AttributeError):
+            pass
+
+    # Tags: list of {name: tag}
+    tags_list: list[dict] = []
+    if reference.tags_json:
+        try:
+            tags_list = [{"name": t} for t in json.loads(reference.tags_json)]
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    created_iso = reference.created_at.isoformat() if reference.created_at else datetime.now(timezone.utc).isoformat()
+
+    props: dict[str, Any] = {
+        "Reference Title": {"title": [{"type": "text", "text": {"content": title}}]},
+        "Source URL": {"url": reference.source_url or ""},
+        "Original Title": {"rich_text": [{"type": "text", "text": {"content": (reference.original_title or "")[:2000]}}]},
+        "Edited Title": {"rich_text": [{"type": "text", "text": {"content": (reference.edited_title or "")[:2000]}}]},
+        "AI Variants": {"rich_text": [{"type": "text", "text": {"content": variants_text[:2000]}}]},
+        "Notes": {"rich_text": [{"type": "text", "text": {"content": (reference.notes or "")[:2000]}}]},
+        "Tags": {"multi_select": tags_list},
+        "Status": {"select": {"name": "idea"}},
+        "Created": {"date": {"start": created_iso}},
+    }
+
+    # Cutout Image — Notion files property with external URL
+    if cutout_url:
+        props["Cutout Image"] = {
+            "files": [{"type": "external", "name": "cutout", "external": {"url": cutout_url}}]
+        }
+    else:
+        props["Cutout Image"] = {"files": []}
+
+    return props
+
+
+def _build_idea_bank_children(reference: "Reference", cutout_url: str | None) -> list[dict]:
+    """Build page body blocks: optional image block for cutout preview."""
+    blocks: list[dict] = []
+    if cutout_url:
+        blocks.append({
+            "object": "block",
+            "type": "image",
+            "image": {
+                "type": "external",
+                "external": {"url": cutout_url},
+                "caption": [{"type": "text", "text": {"content": "Cutout"}}],
+            },
+        })
     return blocks
 
 

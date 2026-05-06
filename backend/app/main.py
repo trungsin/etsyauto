@@ -22,6 +22,7 @@ from app.routes.templates_admin import (
     designs_router as designs_admin_router,
     router as templates_admin_router,
 )
+from app.routes.references_api import router as references_api_router
 from app.routes.variations_api import router as variations_api_router
 
 # Jinja2 templates — shared instance; imported by templates_admin.py lazily
@@ -33,6 +34,27 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+
+def _validate_notion_idea_bank_schema() -> None:
+    """Best-effort validation of Notion Idea Bank DB on startup — logs warning, never blocks."""
+    from app.config import settings as _s
+    if not _s.notion_idea_bank_data_source_id:
+        logger.info(
+            "NOTION_IDEA_BANK_DATA_SOURCE_ID not set — Notion Idea Bank sync will be a no-op."
+        )
+        return
+    try:
+        from app.clients.notion_client import NotionClient
+        client = NotionClient()
+        client.validate_idea_bank_schema()
+    except ValueError:
+        logger.warning(
+            "Notion Idea Bank not fully configured. "
+            "Set NOTION_API_KEY + NOTION_IDEA_BANK_DATA_SOURCE_ID to enable sync."
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Notion Idea Bank schema validation error (non-fatal): %s", exc)
 
 
 def _validate_notion_schema() -> None:
@@ -57,8 +79,9 @@ def _validate_notion_schema() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup: validate Notion schema, start scheduler. Shutdown: stop scheduler."""
+    """Startup: validate Notion schemas, start scheduler. Shutdown: stop scheduler."""
     _validate_notion_schema()
+    _validate_notion_idea_bank_schema()
     sched.start()
     yield
     sched.shutdown()
@@ -79,7 +102,7 @@ app.add_middleware(
     allow_origins=["http://localhost:3000", "http://localhost:8787"],
     allow_origin_regex=r"chrome-extension://.*",
     allow_credentials=False,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type"],
 )
 
@@ -105,3 +128,4 @@ app.include_router(composite_api_router)
 app.include_router(templates_admin_router)
 app.include_router(designs_admin_router)
 app.include_router(composite_admin_router)
+app.include_router(references_api_router)

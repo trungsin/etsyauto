@@ -16,10 +16,10 @@
   <main class="main">
     <!-- No listing detected -->
     <div id="view-empty" class="view">
-      <p class="hint">Navigate to an Etsy listing edit page to get started.</p>
+      <p class="hint">Navigate to an Etsy listing page to get started.</p>
     </div>
 
-    <!-- Listing loaded -->
+    <!-- Admin mode: listing edit page -->
     <div id="view-listing" class="view hidden">
       <div class="listing-card">
         <div id="image-preview" class="image-preview"></div>
@@ -32,18 +32,80 @@
         <p id="action-msg" class="action-msg hidden"></p>
       </div>
     </div>
+
+    <!-- Reference mode: public listing page -->
+    <div id="view-reference" class="view hidden">
+      <div class="ref-section">
+        <p class="ref-label">Source</p>
+        <p id="ref-source-url" class="ref-source-url"></p>
+      </div>
+
+      <div class="ref-section">
+        <p class="ref-label">Original Title</p>
+        <p id="ref-original-title" class="ref-original-title"></p>
+      </div>
+
+      <div class="ref-section">
+        <button id="ref-btn-suggest" class="btn btn-ghost btn-sm">AI Suggest Title</button>
+        <div id="ref-variants-list" class="variants-list"></div>
+      </div>
+
+      <div class="ref-section">
+        <label for="ref-edited-title" class="ref-label">Edited Title</label>
+        <textarea id="ref-edited-title" class="ref-textarea" rows="3"
+                  placeholder="Edit or paste a title variant…"></textarea>
+      </div>
+
+      <div class="ref-section">
+        <p class="ref-label">Images <span class="ref-hint">(click to cycle keep / skip / pick)</span></p>
+        <div id="ref-image-grid" class="image-grid"></div>
+      </div>
+
+      <div class="ref-section ref-row">
+        <button id="ref-btn-remove-bg" class="btn btn-ghost btn-sm" disabled>Remove BG</button>
+        <img id="ref-cutout-thumb" class="cutout-result hidden" src="" alt="cutout" />
+      </div>
+
+      <div class="ref-section">
+        <label for="ref-notes" class="ref-label">Notes</label>
+        <textarea id="ref-notes" class="ref-textarea" rows="3"
+                  placeholder="Any notes about this reference…"></textarea>
+      </div>
+
+      <div class="ref-section">
+        <p class="ref-label">Tags</p>
+        <div id="ref-tags" class="tags-container"></div>
+      </div>
+
+      <div class="ref-section">
+        <button id="ref-btn-save" class="btn btn-primary">Save Reference</button>
+      </div>
+
+      <div id="ref-toast" class="ref-toast hidden"></div>
+
+      <div class="ref-section ref-row ref-footer">
+        <span class="ref-label">Status:</span>
+        <span id="ref-status-badge" class="status-badge">—</span>
+      </div>
+    </div>
   </main>
 
   <footer class="footer">
     <span id="status-label" class="status-label">Checking connection…</span>
     <button id="btn-refresh" class="btn btn-ghost btn-sm">Refresh</button>
-    <button id="btn-config" class="btn btn-ghost btn-sm" title="Backend URL">⚙</button>
+    <button id="btn-config" class="btn btn-ghost btn-sm" title="Settings">⚙</button>
   </footer>
 
+  <!-- Config panel: Backend URL + Admin Token -->
   <div id="config-panel" class="config-panel hidden">
     <label for="input-backend-url" class="config-label">Backend URL</label>
     <input id="input-backend-url" type="text" class="config-input"
            placeholder="http://172.16.10.168:8787" />
+
+    <label for="input-admin-token" class="config-label" style="margin-top:8px;">Admin Token</label>
+    <input id="input-admin-token" type="password" class="config-input"
+           placeholder="your-admin-token" />
+
     <div class="config-actions">
       <button id="btn-config-save" class="btn btn-primary btn-sm">Save</button>
       <button id="btn-config-cancel" class="btn btn-ghost btn-sm">Cancel</button>
@@ -51,6 +113,7 @@
   </div>
 
   <script src="../shared/backend-client.js"></script>
+  <script src="reference-mode.js"></script>
   <script src="side-panel.js"></script>
 </body>
 </html>

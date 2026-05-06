@@ -78,12 +78,13 @@ def _validate_variants(raw_variants: list[dict]) -> list[dict]:
 class GeminiTextClient:
     """Wraps google-genai SDK for structured text generation (title variants)."""
 
-    def __init__(self, api_key: str | None = None) -> None:
+    def __init__(self, api_key: str | None = None, prompt_path: Path | None = None) -> None:
         key = api_key or settings.gemini_api_key
         if not key:
             raise ValueError("GEMINI_API_KEY is not configured")
         self._client = genai.Client(api_key=key)
-        self._prompt_template = _load_prompt_template()
+        self._prompt_path = prompt_path or PROMPT_PATH
+        self._prompt_template = self._prompt_path.read_text(encoding="utf-8")
 
     def generate_title_variants(self, listing_data: dict) -> list[dict]:
         """Call Gemini and return validated title variants.
@@ -98,11 +99,16 @@ class GeminiTextClient:
             ValueError: if response yields no valid variants.
             google.genai.errors.APIError: on API-level errors.
         """
+        # Support both prompt templates: old uses {description}, new reference
+        # prompt uses {original_description}. Pass both so either template works.
+        desc = listing_data.get("description") or listing_data.get("original_description", "")
         prompt = self._prompt_template.format(
             original_title=listing_data.get("original_title", ""),
-            description=listing_data.get("description", ""),
+            description=desc,
+            original_description=listing_data.get("original_description") or desc,
             tags=listing_data.get("tags", ""),
             category=listing_data.get("category", ""),
+            material=listing_data.get("material", ""),
         )
 
         response = self._client.models.generate_content(

@@ -3,9 +3,14 @@
  * MV3 service worker: caches detected listing data and handles side panel opening.
  *
  * Messages handled:
- *   LISTING_DETECTED  — from content script, stores payload in chrome.storage.session
- *   GET_LISTING       — from side panel, returns cached listing
- *   SEND_TO_OPTIMIZER — from side panel, POSTs to backend /ingest
+ *   LISTING_DETECTED  — from content script, stores payload+mode in chrome.storage.session
+ *   GET_LISTING       — from side panel, returns cached listing + mode
+ *   SEND_TO_OPTIMIZER — from side panel, POSTs to backend /ingest (admin mode)
+ *   SCRAPE_REFERENCE  — POST /references/scrape
+ *   SUGGEST_TITLE     — POST /references/{id}/suggest-title
+ *   CUTOUT_IMAGE      — POST /references/{id}/cutout
+ *   UPDATE_REFERENCE  — PUT /references/{id}
+ *   SAVE_REFERENCE    — POST /references/{id}/save
  */
 
 'use strict';
@@ -21,8 +26,8 @@ chrome.action.onClicked.addListener((tab) => {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   switch (message.type) {
     case 'LISTING_DETECTED':
-      handleListingDetected(message.payload, sendResponse);
-      return true; // keep channel open for async response
+      handleListingDetected(message.payload, message.mode, sendResponse);
+      return true;
 
     case 'GET_LISTING':
       handleGetListing(sendResponse);
@@ -32,6 +37,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       handleSendToOptimizer(message.payload, sendResponse);
       return true;
 
+    case 'SCRAPE_REFERENCE':
+      handleApiCall('POST', '/references/scrape', message.payload, null, sendResponse);
+      return true;
+
+    case 'SUGGEST_TITLE':
+      handleApiCall('POST', `/references/${message.referenceId}/suggest-title`, null, null, sendResponse);
+      return true;
+
+    case 'CUTOUT_IMAGE':
+      handleApiCall('POST', `/references/${message.referenceId}/cutout`,
+        { image_url: message.imageUrl }, null, sendResponse);
+      return true;
+
+    case 'UPDATE_REFERENCE':
+      handleApiCall('PUT', `/references/${message.referenceId}`, message.body, null, sendResponse);
+      return true;
+
+    case 'SAVE_REFERENCE':
+      handleApiCall('POST', `/references/${message.referenceId}/save`, null, null, sendResponse);
+      return true;
+
     default:
       sendResponse({ ok: false, error: 'Unknown message type' });
       return false;
@@ -39,11 +65,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 /**
- * Cache listing payload in chrome.storage.session (survives SW idle restarts).
+ * Cache listing payload + mode in chrome.storage.session.
  */
-async function handleListingDetected(payload, sendResponse) {
+async function handleListingDetected(payload, mode, sendResponse) {
   try {
-    await chrome.storage.session.set({ currentListing: payload });
+    await chrome.storage.session.set({ currentListing: payload, currentMode: mode || 'admin' });
     sendResponse({ ok: true });
   } catch (err) {
     console.error('[EtsyAuto SW] Failed to cache listing:', err);
@@ -52,20 +78,23 @@ async function handleListingDetected(payload, sendResponse) {
 }
 
 /**
- * Return the currently cached listing (or null if none).
+ * Return the currently cached listing and mode (or null if none).
  */
 async function handleGetListing(sendResponse) {
   try {
-    const result = await chrome.storage.session.get(['currentListing']);
-    sendResponse({ ok: true, listing: result.currentListing || null });
+    const result = await chrome.storage.session.get(['currentListing', 'currentMode']);
+    sendResponse({
+      ok: true,
+      listing: result.currentListing || null,
+      mode: result.currentMode || null,
+    });
   } catch (err) {
     sendResponse({ ok: false, error: err.message });
   }
 }
 
 /**
- * POST listing to backend /ingest and relay the result.
- * Imports backend-client.js helpers inline to avoid ES module complexity in SW.
+ * POST listing to backend /ingest and relay the result (admin mode).
  */
 async function handleSendToOptimizer(payload, sendResponse) {
   try {
@@ -88,6 +117,41 @@ async function handleSendToOptimizer(payload, sendResponse) {
 
     if (!resp.ok) {
       sendResponse({ ok: false, error: data.detail || `HTTP ${resp.status}`, data });
+      return;
+    }
+    sendResponse({ ok: true, data });
+  } catch (err) {
+    sendResponse({ ok: false, error: err.message });
+  }
+}
+
+/**
+ * Generic helper to call reference API endpoints with admin token.
+ * @param {'GET'|'POST'|'PUT'|'DELETE'} method
+ * @param {string} path  — e.g. '/references/scrape'
+ * @param {object|null} body
+ * @param {object|null} _unused
+ * @param {function} sendResponse
+ */
+async function handleApiCall(method, path, body, _unused, sendResponse) {
+  try {
+    const stored = await chrome.storage.local.get(['backendUrl', 'adminToken']);
+    const base = stored.backendUrl || 'http://172.16.10.168:8787';
+    const token = stored.adminToken || '';
+
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['X-Admin-Token'] = token;
+
+    const opts = { method, headers };
+    if (body && (method === 'POST' || method === 'PUT')) {
+      opts.body = JSON.stringify(body);
+    }
+
+    const resp = await fetch(`${base}${path}`, opts);
+    const data = await resp.json().catch(() => ({}));
+
+    if (!resp.ok) {
+      sendResponse({ ok: false, error: data.detail || data.error || `HTTP ${resp.status}`, data });
       return;
     }
     sendResponse({ ok: true, data });

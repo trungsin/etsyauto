@@ -26,6 +26,7 @@ Module-by-module index with line counts. Updated: 2026-05-06.
 | `routes/designs_api.py` | 104 | `GET/POST /designs`, `GET/DELETE /designs/{id}` — design upload/list/delete, RGBA PNG validation |
 | `routes/composite_api.py` | 56 | `POST /composite/preview` — trigger Pillow alpha-composite, return cached R2 URL |
 | `routes/templates_admin.py` | 407 | Jinja2 + HTMX admin UI — `/admin/templates` CRUD pages, composite preview UI |
+| `routes/references_api.py` | 329 | `POST /references/scrape`, `GET/PUT/DELETE /references/{id}`, `/{id}/suggest-title`, `/{id}/cutout`, `/{id}/save` — reference workflow, X-Admin-Token protected |
 
 ### Models (`app/models/`)
 
@@ -39,6 +40,7 @@ Module-by-module index with line counts. Updated: 2026-05-06.
 | `models/template.py` | 32 | `Template` — product blank image, composite anchor JSON, variation_options JSON, R2 URL |
 | `models/template_variation.py` | 24 | `TemplateVariation` — size/color/price_cents/sku row; max 30 per template (Etsy limit) |
 | `models/design.py` | 25 | `Design` — uploaded artwork PNG; source_type ∈ {upload, ai_generated, reference_only} |
+| `models/reference.py` | 43 | `Reference` — scraped public Etsy listing: listing_id, source_url, original/edited title, ai_variants, tags, notes, status, optional cutout_design_id FK, notion_page_id |
 
 ### Workers (`app/workers/`)
 
@@ -62,6 +64,7 @@ Module-by-module index with line counts. Updated: 2026-05-06.
 | `services/variation_service.py` | 102 | Bulk replace, list, update, clear variations; enforces max-30 and unique (size, color) |
 | `services/design_service.py` | 156 | Design upload/list/delete with PNG+alpha validation, R2 upload, composite cache cascade |
 | `services/composite_service.py` | 134 | `get_or_create_composite` — cache-check → Pillow composite → R2 upload; rejects reference_only |
+| `services/reference_service.py` | 364 | Reference scrape (idempotent), CRUD, Gemini suggest-title (3 variants), remove.bg cutout → `Design.source_type='reference_only'`, Notion Idea Bank save (data_sources API + image embed), schema validation on startup |
 
 ### Clients (`app/clients/`)
 
@@ -79,7 +82,9 @@ Module-by-module index with line counts. Updated: 2026-05-06.
 
 | File | LOC | Purpose |
 |------|-----|---------|
-| *(prompt templates)* | — | Claude system/user prompt strings for title generation |
+| *(claude prompt templates)* | — | Claude system/user prompt strings for v0.1.0 title generation |
+| `title-reference-prompt.md` | 16 | Gemini prompt for AI Suggest Title from a scraped Etsy reference (sub-feature A) |
+| `title-own-draft-prompt.md` | 16 | Gemini prompt scaffold for user's own draft titles (reserved for sub-feature C) |
 
 ### Migrations (`alembic/versions/`)
 
@@ -89,6 +94,7 @@ Module-by-module index with line counts. Updated: 2026-05-06.
 | `aa88c2baf005_*.py` | Add `push_attempts`, `last_push_error` columns to listings |
 | `e7d4a402ca7b_*.py` | Add `notion_page_id`, `final_image_url` columns to listings |
 | `240d6e765e57_*.py` | Add template system — `templates`, `template_variations`, `designs` tables |
+| `33596c423a0e_references_table.py` | Add `references` table with FK to `designs.id` (sub-feature A) |
 
 ### Tests (`tests/`)
 
@@ -105,8 +111,11 @@ Module-by-module index with line counts. Updated: 2026-05-06.
 | `test_designs_api.py` | ~10 | Upload RGBA PNG, reject JPEG/RGB/oversized, list+filter, delete |
 | `test_composite_service.py` | ~11 | Cache miss/hit, reference_only rejection, cache invalidation on update/delete |
 | `test_e2e_template_workflow.py` | 4 | Full workflow: create→variations→design→composite with cache miss/hit/invalidation |
+| `test_references_api.py` | ~12 | Scrape idempotency, CRUD, auth guards, tag/status filter, cascade delete |
+| `test_references_ai_cutout_api.py` | ~14 | Suggest-title 3 variants + replace, cutout creation + replacement, transient 503, source_type filter exclusion |
+| `test_references_notion_save_api.py` | ~10 | Notion page create/update idempotency, archive on delete, schema validation, image embed |
 
-**Total: 125 tests passing**
+**Total: 163 tests passing**
 
 ---
 
@@ -114,14 +123,16 @@ Module-by-module index with line counts. Updated: 2026-05-06.
 
 | File | LOC | Purpose |
 |------|-----|---------|
-| `manifest.json` | ~40 | MV3 manifest — permissions, host_permissions, background, side_panel, content_scripts |
-| `background/service-worker.js` | ~120 | Handles messages from content script, calls backend API, manages auth state |
-| `side-panel/side-panel.html` | ~60 | Side panel UI shell |
-| `side-panel/side-panel.js` | ~150 | Side panel logic — display listing status, show variants, trigger ingest |
-| `side-panel/side-panel.css` | ~80 | Side panel styles |
-| `content-scripts/listing-detector.js` | ~80 | Detects Etsy listing page, extracts listing_id/title/images, sends to service worker |
+| `manifest.json` | ~50 | MV3 manifest — host_permissions covers `/your/shops/*` + `/listing/*`, side_panel, content_scripts; v0.3.0 |
+| `background/service-worker.js` | ~210 | Handles messages from content script, routes admin vs reference mode, calls backend API |
+| `side-panel/side-panel.html` | ~130 | Side panel UI shell with mode switcher (admin / reference) |
+| `side-panel/side-panel.js` | 224 | Side panel logic — admin listing flow, mode detection, dispatches to reference-mode.js |
+| `side-panel/reference-mode.js` | 332 | Reference Mode UI — image gallery, AI suggest, BG remove, tag toggles, notes, save flow |
+| `side-panel/side-panel.css` | ~250 | Side panel styles incl. reference mode gallery + tag chips |
+| `content-scripts/listing-detector.js` | ~120 | Detects admin shop pages and public `/listing/*`, dispatches to scrape vs ingest |
 | `content-scripts/listing-detector.css` | ~20 | Injected styles for detection indicators |
-| `shared/` | ~60 | Shared constants and utility functions |
+| `shared/etsy-dom-extractor.js` | ~150 | Title + image gallery scrape with og:meta fallback (admin + public) |
+| `shared/backend-client.js` | ~250 | Backend HTTP wrapper — admin endpoints + reference endpoints |
 
 ---
 

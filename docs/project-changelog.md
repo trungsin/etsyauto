@@ -4,6 +4,64 @@ All notable changes to EtsyAuto. Format: [Keep a Changelog](https://keepachangel
 
 ---
 
+## [0.3.0] — 2026-05-06
+
+Extension Reference Mode (Sub-feature A). Capture inspiration from public Etsy listings: scrape title + images, AI-suggest 3 alternate titles via Gemini, remove background of one image (remove.bg → R2), tag, and save to a Notion Idea Bank database.
+
+### Added
+
+#### Database Models
+- `Reference` — scraped public Etsy listing: `listing_id`, `source_url`, `original_title`, `edited_title`, `ai_variants` (JSON), `tags` (JSON), `notes`, `status` ∈ {idea, saved, archived}, optional `cutout_design_id` FK, `notion_page_id`
+
+#### Alembic Migration
+- `33596c423a0e_references_table` — creates `references` table with FK to `designs.id`
+
+#### Routes — Reference API
+- `POST /references/scrape` — idempotent scrape (returns existing row if `listing_id` already known)
+- `GET /references` — list with `status`, `tags` filters
+- `GET /references/{id}` — fetch detail
+- `PUT /references/{id}` — update `edited_title`, `tags`, `notes`
+- `DELETE /references/{id}` — cascades cutout design + R2 cleanup; archives Notion page if saved
+- `POST /references/{id}/suggest-title` — Gemini 2.5 Flash returns 3 variants ≤140 chars; replaces existing on re-call
+- `POST /references/{id}/cutout` — remove.bg → R2 → creates `Design` with `source_type='reference_only'`; replaces previous cutout on re-call
+- `POST /references/{id}/save` — creates/updates Notion Idea Bank page; embeds cutout as image block; sets status=saved
+
+#### Services
+- `reference_service.py` — scrape (idempotent), CRUD, suggest-title (Gemini wrapper), cutout (remove.bg + design create), save (Notion data_sources API), schema validation on startup
+- Prompt templates: `app/prompts/title-reference-prompt.md` (U1, this release), `title-own-draft-prompt.md` (U2, future sub-feature C scaffold)
+
+#### Extension — Reference Mode
+- Content script auto-detects `https://www.etsy.com/listing/*` (broadened from `/your/shops/*` only)
+- `etsy-dom-extractor.js` — title + image gallery scrape with og:meta fallback
+- `side-panel/reference-mode.js` — Reference Mode UI: thumbnail gallery, AI suggest button, BG remove, tag toggles, notes textarea, Save Reference
+- `side-panel/side-panel.js` + CSS + HTML extended with mode switcher (admin vs reference)
+- `manifest.json` bumped to v0.3.0
+
+#### Tests (38 new, 163 total)
+- `test_references_api.py` (~12 tests) — scrape idempotency, CRUD, auth, filters, cascade delete
+- `test_references_ai_cutout_api.py` (~14 tests) — suggest-title 3 variants + replace, cutout creation + replacement, transient 503, source_type filter
+- `test_references_notion_save_api.py` (~10 tests) — Notion page create/update idempotency, archive on delete, schema validation, image embed
+
+#### Documentation
+- `docs/notion-idea-bank-setup.md` — step-by-step Notion DB creation, required properties + types, integration share, data_source_id retrieval, schema validation
+- `docs/reference-workflow-guide.md` — user-facing walkthrough, cost table (~$0.20/reference), troubleshooting, limits
+
+### Architecture Decisions
+- **`source_type='reference_only'` cutouts excluded from composite preview dropdowns** — IP risk mitigation; references stay inspiration-only
+- **2 prompt templates upfront** — `title-reference-prompt.md` (this release) + `title-own-draft-prompt.md` (sub-feature C scaffold). Single prompts directory, KISS
+- **Notion data_sources API** (consistent with v0.1.0 review DB pattern), not the legacy databases endpoint
+- **Manual tag toggle** (5 categories: style/color/layout/season/niche) — no auto-classification (YAGNI)
+- **Notion mandatory** — `NOTION_IDEA_BANK_DATA_SOURCE_ID` validated on startup, fails loud
+- **Cutout cost tracking deferred** — remove.bg dashboard sufficient for v0.3.0; per-day quota guard out of scope
+
+### Known Limitations
+- Bulk reference import not supported (anti-bot friendly: 1 click = 1 reference)
+- No reverse image search; tags are manual
+- One cutout per reference (re-running replaces it)
+- Reference cutouts cannot be promoted to upload-type designs (intentional IP boundary)
+
+---
+
 ## [0.2.0] — 2026-05-06
 
 Template System & Mockup Composer (Sub-feature B). POD-style template management with Pillow alpha-composite preview, variations matrix, design library, and Jinja2+HTMX admin UI.

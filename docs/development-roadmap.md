@@ -31,7 +31,7 @@
 | Sub-feature | Title | Status | Completed |
 |-------------|-------|--------|-----------|
 | B | [Template System & Mockup Composer](../plans/260506-0803-template-system-mockup-composer/plan.md) | **Complete** | 2026-05-06 |
-| A | Extension Reference Mode Upgrade | Planned | — |
+| A | [Extension Reference Mode Upgrade](../plans/260506-0947-extension-reference-mode/plan.md) | **Complete** | 2026-05-06 |
 | C | Etsy Listing Creator (with Variations) | Planned | — |
 
 ### v0.2.0 Success Metrics
@@ -44,8 +44,29 @@
 - [x] All endpoints protected by X-Admin-Token
 - [x] Jinja2 + HTMX admin UI for full template/design/composite CRUD
 - [x] 125 tests passing (121 unit + 4 E2E integration)
-- [ ] Sub-feature A: extension sends reference cutout → designs table (next plan)
+- [x] Sub-feature A: extension scrapes Etsy public listings → AI suggest title → cutout → Notion Idea Bank
 - [ ] Sub-feature C: Etsy listing creation reads templates + designs (next plan)
+
+---
+
+## v0.3.0 — Extension Reference Mode
+
+### Scope
+
+| Sub-feature | Title | Status | Completed |
+|-------------|-------|--------|-----------|
+| A | [Extension Reference Mode Upgrade](../plans/260506-0947-extension-reference-mode/plan.md) | **Complete** | 2026-05-06 |
+
+### v0.3.0 Success Metrics
+
+- [x] Extension auto-detects public Etsy listings (`/listing/<id>`)
+- [x] Scrape title + up to 10 images, idempotent by `listing_id`
+- [x] Gemini 2.5 Flash returns 3 alternate titles ≤140 chars in <5s
+- [x] remove.bg cutout uploaded to R2 as `Design.source_type='reference_only'`
+- [x] Reference cutouts excluded from composite preview dropdowns (IP boundary)
+- [x] Save Reference creates/updates Notion Idea Bank page with cutout image embed
+- [x] All endpoints protected by `X-Admin-Token`
+- [x] 163 tests passing (38 new vs v0.2.0's 125)
 
 ---
 

@@ -22,6 +22,7 @@ from app.models.api_credential import ApiCredential  # noqa: E402, F401
 from app.models.template import Template  # noqa: E402, F401
 from app.models.template_variation import TemplateVariation  # noqa: E402, F401
 from app.models.design import Design  # noqa: E402, F401
+from app.models.reference import Reference  # noqa: E402, F401
 
 alembic_config = context.config
 
