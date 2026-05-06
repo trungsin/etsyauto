@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "EtsyAuto Optimizer",
-  "version": "0.3.0",
-  "description": "Send Etsy listings to the local optimizer backend; capture public listing references to your Notion Idea Bank.",
+  "version": "0.4.0",
+  "description": "Send Etsy listings to the local optimizer backend; capture public listing references to your Notion Idea Bank; create new Etsy listings from templates with per-color mockups.",
 
   "permissions": ["activeTab", "sidePanel", "storage"],
   "host_permissions": [

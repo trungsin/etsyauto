@@ -114,6 +114,7 @@ FastAPI · SQLite · APScheduler · Anthropic Claude Sonnet 4.6 · remove.bg · 
 | [System Architecture](docs/system-architecture.md) | Diagrams: components, sequence, state machine, DB schema |
 | [Template System Guide](docs/template-system-guide.md) | Setup, admin UI walkthrough, API reference, anchor convention, troubleshooting |
 | [Reference Workflow Guide](docs/reference-workflow-guide.md) | Capture Etsy public listings → AI suggest title → BG cutout → save to Notion Idea Bank |
+| [Etsy Listing Creator Guide](docs/etsy-listing-creator-guide.md) | End-to-end: per-color mockups → variations matrix → Etsy draft listing (v0.4.0) |
 | [Deployment Guide](docs/deployment-guide.md) | Full setup from scratch, API key registration |
 | [Notion DB Setup](docs/notion-db-setup.md) | Notion database creation and review workflow |
 | [Notion Idea Bank Setup](docs/notion-idea-bank-setup.md) | Idea Bank database creation, properties, integration share, data_source_id |
@@ -129,7 +130,7 @@ FastAPI · SQLite · APScheduler · Anthropic Claude Sonnet 4.6 · remove.bg · 
 
 ```bash
 cd backend && uv run pytest -v
-# 163 tests, < 50 seconds
+# 197 tests, < 100 seconds
 ```
 
 ---

@@ -4,6 +4,63 @@ All notable changes to EtsyAuto. Format: [Keep a Changelog](https://keepachangel
 
 ---
 
+## [0.4.0] — 2026-05-06
+
+Etsy Listing Creator (Sub-feature C). End-to-end "create new listing" flow: per-color base images, multi-color composite rendering, full N×M variations matrix, and Etsy draft creation with property-value resolution + sequential image upload.
+
+### Added
+
+#### Database
+- `Listing.template_id`, `Listing.design_id` — nullable FKs link a created listing back to the template+design used; idempotency key for `POST /listings/from-template`
+- `Template.color_base_images_json` — JSON map `{Color: r2_url}` for per-color blank mockups
+
+#### Alembic Migrations
+- `a3d8008fe208_add_color_base_images_json_to_templates.py`
+- `7e644acd83eb_add_template_id_design_id_to_listings.py` — adds FKs + composite index `(template_id, design_id)` for idempotency lookup
+
+#### Routes
+- `POST /templates/{id}/color-bases/{color}` — upload per-color blank
+- `DELETE /templates/{id}/color-bases/{color}` — remove
+- `POST /templates/{id}/expand-variations` — auto-build cartesian (size, color) variations from `variation_options_json`
+- `POST /composite/preview-all-colors` — parallel render of every template color (ThreadPoolExecutor, max 5 workers)
+- `POST /listings/from-template` — create Etsy draft with full inventory matrix + N color images; idempotent on `(template_id, design_id)`
+
+#### Services & Clients
+- `services/listing_creator_service.py` — orchestrates: validate → render composites → resolve Etsy property values → create draft → update inventory → upload images → persist Listing
+- `services/etsy_taxonomy.py` — Etsy property/value lookup with in-memory cache; hardcoded apparel constants (taxonomy 1209, color=200, size=506)
+- `clients/etsy_api_client.py` extended: `create_draft_listing`, `update_listing_inventory`, `upload_listing_image_bytes`, `get_taxonomy_property_values`
+
+#### Extension — Creator Mode
+- Content script detects `/your/shops/*/listings/new` + `/create-listing` URLs → mode='creator'
+- New `side-panel/creator-mode.js` (~270 LOC) — template+design pickers, variations matrix toggle, multi-color preview grid, "Create Etsy Draft" flow
+- `service-worker.js` adds 4 message handlers: `LIST_TEMPLATES`, `LIST_DESIGNS`, `PREVIEW_ALL_COLORS`, `CREATE_LISTING_FROM_TEMPLATE`
+- `manifest.json` bumped to v0.4.0
+
+#### Tests (34 new, 197 total — was 163)
+- `tests/test_listings_creator_api.py` (9 tests) — auth, validation, happy path, idempotency, image rank order, taxonomy cache, unknown-value 422
+- `tests/test_e2e_listing_creator_workflow.py` (3 E2E tests) — full pipeline (create template → color bases → expand → design → preview-all → from-template), idempotent re-call, partial failure on unknown color
+- Phase 1 + 2 tests for color-bases API, expand-variations, preview-all-colors
+
+#### Documentation
+- `docs/etsy-listing-creator-guide.md` — full walkthrough, API reference, cost breakdown, troubleshooting
+- `docs/template-system-guide.md` — new section "Multi-Color Base Images" documenting per-color upload + JSON convention
+
+### Architecture Decisions
+- **Per-color base images stored as JSON map on Template** (not new table) — KISS, single migration
+- **Etsy draft only, never auto-publish** — seller finalizes from Etsy UI; safer
+- **Idempotency via `Listing(template_id, design_id)`** — re-call returns existing `etsy_listing_id` without hitting Etsy
+- **Apparel-only taxonomy hardcoded** (1209/200/506); future categories add separate constants
+- **Sequential image upload with 200 ms gap** — stays below Etsy 5 req/s soft limit
+- **Image rank**: `primary_color` → rank 1, others by `variation_options.colors` order
+
+### Known Limitations
+- Apparel taxonomy only (mug/poster/sticker need additional `taxonomy_id` mapping)
+- Plain-text description (no rich-text editor in v0.4.0)
+- Per-(size, color) pricing not supported — pricing is per-size only
+- Composite preview is single-color anchor; design is scaled identically across all color blanks
+
+---
+
 ## [0.3.0] — 2026-05-06
 
 Extension Reference Mode (Sub-feature A). Capture inspiration from public Etsy listings: scrape title + images, AI-suggest 3 alternate titles via Gemini, remove background of one image (remove.bg → R2), tag, and save to a Notion Idea Bank database.

@@ -1,6 +1,6 @@
 # Codebase Summary
 
-Module-by-module index with line counts. Updated: 2026-05-06.
+Module-by-module index with line counts. Updated: 2026-05-06 (v0.4.0).
 
 ## Backend (`backend/`)
 
@@ -27,12 +27,13 @@ Module-by-module index with line counts. Updated: 2026-05-06.
 | `routes/composite_api.py` | 56 | `POST /composite/preview` — trigger Pillow alpha-composite, return cached R2 URL |
 | `routes/templates_admin.py` | 407 | Jinja2 + HTMX admin UI — `/admin/templates` CRUD pages, composite preview UI |
 | `routes/references_api.py` | 329 | `POST /references/scrape`, `GET/PUT/DELETE /references/{id}`, `/{id}/suggest-title`, `/{id}/cutout`, `/{id}/save` — reference workflow, X-Admin-Token protected |
+| `routes/listings_creator_api.py` | 83 | `POST /listings/from-template` — idempotent Etsy draft creator (sub-feature C, v0.4.0) |
 
 ### Models (`app/models/`)
 
 | File | LOC | Purpose |
 |------|-----|---------|
-| `models/listing.py` | 34 | `Listing` table — core state machine, etsy_listing_id, status, notion_page_id |
+| `models/listing.py` | 37 | `Listing` table — core state machine, etsy_listing_id, status, notion_page_id, template_id+design_id (v0.4.0 idempotency) |
 | `models/title_variant.py` | 20 | `TitleVariant` — 3 Claude-generated variants per listing |
 | `models/mockup_variant.py` | 22 | `MockupVariant` — 3 Imagen-generated variants with R2 URLs |
 | `models/job.py` | 21 | `Job` — async task execution tracking |
@@ -65,13 +66,15 @@ Module-by-module index with line counts. Updated: 2026-05-06.
 | `services/design_service.py` | 156 | Design upload/list/delete with PNG+alpha validation, R2 upload, composite cache cascade |
 | `services/composite_service.py` | 134 | `get_or_create_composite` — cache-check → Pillow composite → R2 upload; rejects reference_only |
 | `services/reference_service.py` | 364 | Reference scrape (idempotent), CRUD, Gemini suggest-title (3 variants), remove.bg cutout → `Design.source_type='reference_only'`, Notion Idea Bank save (data_sources API + image embed), schema validation on startup |
+| `services/etsy_taxonomy.py` | 117 | Etsy taxonomy + property value lookup with in-memory cache; apparel constants (taxonomy 1209, color=200, size=506) |
+| `services/listing_creator_service.py` | 295 | Orchestrator: composite all colors → resolve property values → Etsy create draft → update inventory → upload images sequentially → persist Listing |
 
 ### Clients (`app/clients/`)
 
 | File | LOC | Purpose |
 |------|-----|---------|
 | `clients/claude_client.py` | 124 | Anthropic SDK wrapper — `generate_title_variants(title, desc, tags)` → `list[TitleVariantData]` |
-| `clients/etsy_api_client.py` | 198 | Etsy Open API v3 — `get_listing()`, `update_listing_title()`, `upload_listing_image()` |
+| `clients/etsy_api_client.py` | 321 | Etsy Open API v3 — `get_listing/update_listing/upload_listing_image` (v0.1.0); `create_draft_listing/update_listing_inventory/upload_listing_image_bytes/get_taxonomy_property_values` (v0.4.0) |
 | `clients/etsy_oauth.py` | 145 | PKCE helpers — `generate_pkce_pair()`, `build_auth_url()`, `exchange_code()`, `get_valid_token()` |
 | `clients/gemini_imagen_client.py` | 82 | Google GenAI SDK wrapper — `generate_mockup_image(prompt)` → base64 PNG |
 | `clients/notion_client.py` | 243 | Notion API wrapper — `create_review_page()`, `query_approved_listings()`, `validate_database_schema()` |
@@ -95,6 +98,8 @@ Module-by-module index with line counts. Updated: 2026-05-06.
 | `e7d4a402ca7b_*.py` | Add `notion_page_id`, `final_image_url` columns to listings |
 | `240d6e765e57_*.py` | Add template system — `templates`, `template_variations`, `designs` tables |
 | `33596c423a0e_references_table.py` | Add `references` table with FK to `designs.id` (sub-feature A) |
+| `a3d8008fe208_*.py` | Add `color_base_images_json` to templates (sub-feature C) |
+| `7e644acd83eb_*.py` | Add `template_id`, `design_id` to listings + `(template_id, design_id)` index (sub-feature C idempotency) |
 
 ### Tests (`tests/`)
 
@@ -114,8 +119,11 @@ Module-by-module index with line counts. Updated: 2026-05-06.
 | `test_references_api.py` | ~12 | Scrape idempotency, CRUD, auth guards, tag/status filter, cascade delete |
 | `test_references_ai_cutout_api.py` | ~14 | Suggest-title 3 variants + replace, cutout creation + replacement, transient 503, source_type filter exclusion |
 | `test_references_notion_save_api.py` | ~10 | Notion page create/update idempotency, archive on delete, schema validation, image embed |
+| `test_templates_color_bases_api.py` | ~8 | Per-color base upload/delete, validation against `variation_options.colors`, replacement |
+| `test_listings_creator_api.py` | 9 | Auth, validation, happy path, idempotency, image rank order, taxonomy cache, unknown-value 422 |
+| `test_e2e_listing_creator_workflow.py` | 3 | Full pipeline (template → color bases → expand → design → preview-all → from-template), idempotent re-call, partial-failure 422 |
 
-**Total: 163 tests passing**
+**Total: 197 tests passing**
 
 ---
 
@@ -123,7 +131,8 @@ Module-by-module index with line counts. Updated: 2026-05-06.
 
 | File | LOC | Purpose |
 |------|-----|---------|
-| `manifest.json` | ~50 | MV3 manifest — host_permissions covers `/your/shops/*` + `/listing/*`, side_panel, content_scripts; v0.3.0 |
+| `manifest.json` | ~50 | MV3 manifest — host_permissions covers `/your/shops/*` + `/listing/*`, side_panel, content_scripts; v0.4.0 |
+| `side-panel/creator-mode.js` | 272 | Creator UI: template/design pickers, variations matrix toggle, multi-color preview grid, Create Etsy Draft button (sub-feature C) |
 | `background/service-worker.js` | ~210 | Handles messages from content script, routes admin vs reference mode, calls backend API |
 | `side-panel/side-panel.html` | ~130 | Side panel UI shell with mode switcher (admin / reference) |
 | `side-panel/side-panel.js` | 224 | Side panel logic — admin listing flow, mode detection, dispatches to reference-mode.js |
@@ -158,6 +167,9 @@ Module-by-module index with line counts. Updated: 2026-05-06.
 | `development-roadmap.md` | Phase history + post-MVP ideas |
 | `project-changelog.md` | Version history |
 | `notion-db-setup.md` | Notion database setup + review workflow |
+| `template-system-guide.md` | Template + variations + composite preview UI/API; multi-color base images section (v0.4.0) |
+| `reference-workflow-guide.md` | Reference Mode walkthrough (sub-feature A, v0.3.0) |
+| `etsy-listing-creator-guide.md` | End-to-end Creator Mode walkthrough — per-color mockups, variations matrix, Etsy draft creation (sub-feature C, v0.4.0) |
 
 ---
 

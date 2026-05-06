@@ -63,6 +63,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       handleApiCall('POST', `/references/${message.referenceId}/save`, null, null, sendResponse);
       return true;
 
+    case 'LIST_TEMPLATES':
+      handleApiCall('GET', '/templates', null, null, sendResponse);
+      return true;
+
+    case 'LIST_DESIGNS':
+      handleApiCall('GET', '/designs?source_type=upload', null, null, sendResponse);
+      return true;
+
+    case 'PREVIEW_ALL_COLORS':
+      handleApiCall('POST', '/composite/preview-all-colors', message.body, null, sendResponse);
+      return true;
+
+    case 'CREATE_LISTING_FROM_TEMPLATE':
+      handleApiCall('POST', '/listings/from-template', message.body, null, sendResponse);
+      return true;
+
     default:
       sendResponse({ ok: false, error: 'Unknown message type' });
       return false;

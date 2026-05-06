@@ -196,3 +196,126 @@ class EtsyApiClient:
                 files=files,
                 data=data,
             ).json()
+
+    # ------------------------------------------------------------------
+    # Listing creation (sub-feature C)
+    # ------------------------------------------------------------------
+
+    def create_draft_listing(
+        self,
+        shop_id: str | int,
+        *,
+        title: str,
+        description: str,
+        price: float,
+        quantity: int,
+        taxonomy_id: int,
+        tags: list[str] | None = None,
+        who_made: str = "i_did",
+        when_made: str = "made_to_order",
+        is_supply: bool = False,
+        **extra,
+    ) -> dict:
+        """Create a draft listing (state='draft' until seller publishes).
+
+        Etsy ref: POST /shops/{shop_id}/listings (draftListing).
+        Returns the created listing dict including `listing_id`.
+        """
+        body: dict = {
+            "title": title,
+            "description": description,
+            "price": price,
+            "quantity": quantity,
+            "taxonomy_id": taxonomy_id,
+            "who_made": who_made,
+            "when_made": when_made,
+            "is_supply": "true" if is_supply else "false",
+            "state": "draft",
+        }
+        if tags:
+            body["tags"] = ",".join(tags[:13])  # Etsy max 13 tags
+        body.update(extra)
+
+        # Etsy v3 wants form-encoded for create
+        return self._request(
+            "POST",
+            f"/shops/{shop_id}/listings",
+            data=body,
+        ).json()
+
+    def update_listing_inventory(
+        self,
+        listing_id: str | int,
+        products: list[dict],
+        *,
+        price_on_property: list[int] | None = None,
+        quantity_on_property: list[int] | None = None,
+        sku_on_property: list[int] | None = None,
+    ) -> dict:
+        """Replace listing inventory with full variations matrix.
+
+        Each product in `products` is:
+            {
+                "sku": "...",  # optional
+                "property_values": [
+                    {"property_id": 200, "value_id": 1, "value": "White", ...},
+                    {"property_id": 506, "value_id": 4, "value": "M", ...},
+                ],
+                "offerings": [{"price": 19.0, "quantity": 100, "is_enabled": True}],
+            }
+
+        Etsy ref: PUT /listings/{listing_id}/inventory.
+        """
+        body = {
+            "products": products,
+            "price_on_property": price_on_property or [],
+            "quantity_on_property": quantity_on_property or [],
+            "sku_on_property": sku_on_property or [],
+        }
+        return self._request(
+            "PUT",
+            f"/listings/{listing_id}/inventory",
+            json=body,
+        ).json()
+
+    def upload_listing_image_bytes(
+        self,
+        shop_id: str | int,
+        listing_id: str | int,
+        image_bytes: bytes,
+        *,
+        filename: str = "mockup.png",
+        rank: int = 1,
+    ) -> dict:
+        """Upload an in-memory image to a listing (multipart POST), with rank.
+
+        Etsy ref: POST /shops/{shop_id}/listings/{listing_id}/images.
+        rank=1 is the primary image, used as the listing's main thumbnail.
+        """
+        files = {"image": (filename, image_bytes, "image/png")}
+        data = {"rank": str(rank)}
+        return self._request(
+            "POST",
+            f"/shops/{shop_id}/listings/{listing_id}/images",
+            files=files,
+            data=data,
+        ).json()
+
+    # ------------------------------------------------------------------
+    # Taxonomy
+    # ------------------------------------------------------------------
+
+    def get_taxonomy_property_values(
+        self,
+        taxonomy_id: int,
+        property_id: int,
+    ) -> dict:
+        """List allowed value_ids for a property within a taxonomy node.
+
+        Etsy ref: GET /seller-taxonomy/nodes/{taxonomy_id}/properties/{property_id}.
+        Returns Etsy response dict with `possible_values` array.
+        """
+        return self._request(
+            "GET",
+            f"/seller-taxonomy/nodes/{taxonomy_id}/properties/{property_id}",
+        ).json()

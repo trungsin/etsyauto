@@ -1,0 +1,407 @@
+"""Tests for sub-feature C Phase 3: POST /listings/from-template + listing_creator_service.
+
+Etsy API + R2 fully mocked — no network.
+"""
+from __future__ import annotations
+
+import io
+import json
+from unittest.mock import MagicMock, patch
+
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+
+from app.database import Base, get_db
+from app.main import app
+from app.models.design import Design
+from app.models.listing import Listing  # noqa: F401
+from app.models.template import Template
+
+
+_TEST_DB_URL = "sqlite:///:memory:"
+_engine = create_engine(
+    _TEST_DB_URL,
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
+)
+_TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
+
+ADMIN_TOKEN = "test-admin-token-creator"
+VALID_HEADERS = {"X-Admin-Token": ADMIN_TOKEN}
+
+
+def _override_get_db():
+    db = _TestingSessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+@pytest.fixture(autouse=True)
+def reset_db():
+    Base.metadata.drop_all(bind=_engine)
+    Base.metadata.create_all(bind=_engine)
+    # Clear taxonomy cache between tests
+    from app.services import etsy_taxonomy
+    etsy_taxonomy.clear_cache()
+    yield
+
+
+@pytest.fixture
+def client(monkeypatch):
+    monkeypatch.setenv("ADMIN_TOKEN", ADMIN_TOKEN)
+    from app import config
+    config.settings.admin_token = ADMIN_TOKEN
+    config.settings.r2_public_url = "https://cdn.example.com"
+    app.dependency_overrides[get_db] = _override_get_db
+    with TestClient(app, raise_server_exceptions=True) as c:
+        yield c
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def db_session():
+    s = _TestingSessionLocal()
+    yield s
+    s.close()
+
+
+# ---------------------------------------------------------------------------
+# Seed helpers
+# ---------------------------------------------------------------------------
+
+def _seed_template(session, colors=("White", "Black"), primary="White") -> Template:
+    color_bases = {c: f"https://cdn.example.com/templates/{c.lower()}.png" for c in colors}
+    options = {
+        "sizes": [
+            {"name": "S", "price_cents": 1900},
+            {"name": "M", "price_cents": 1900},
+            {"name": "XL", "price_cents": 2200},
+        ],
+        "colors": list(colors),
+        "primary_color": primary,
+        "etsy_taxonomy_id": 1209,
+    }
+    t = Template(
+        name="Comfort Tee",
+        category="apparel",
+        base_image_url="https://cdn.example.com/templates/default.png",
+        composite_anchor_json=json.dumps({"x": 0.2, "y": 0.2, "w": 0.6, "h": 0.6}),
+        default_price_cents=1900,
+        variation_options_json=json.dumps(options),
+        color_base_images_json=json.dumps(color_bases),
+    )
+    session.add(t)
+    session.commit()
+    session.refresh(t)
+    return t
+
+
+def _seed_design(session) -> Design:
+    d = Design(
+        name="logo",
+        source_type="upload",
+        file_url="https://cdn.example.com/designs/logo.png",
+        width=1000, height=1000,
+    )
+    session.add(d)
+    session.commit()
+    session.refresh(d)
+    return d
+
+
+def _make_etsy_client_mock(*, listing_id="9999"):
+    """Mock EtsyApiClient with all methods needed by listing_creator_service."""
+    mock = MagicMock()
+    mock.__enter__ = MagicMock(return_value=mock)
+    mock.__exit__ = MagicMock(return_value=False)
+    # Taxonomy lookup — return same value names that resolve to deterministic IDs
+    mock.get_taxonomy_property_values.side_effect = lambda tid, pid: {
+        "results": [
+            {"value_id": 1, "name": "White"},
+            {"value_id": 2, "name": "Black"},
+            {"value_id": 3, "name": "Sand"},
+            {"value_id": 100, "name": "S"},
+            {"value_id": 101, "name": "M"},
+            {"value_id": 102, "name": "XL"},
+        ]
+    }
+    mock.create_draft_listing.return_value = {"listing_id": listing_id}
+    mock.update_listing_inventory.return_value = {}
+    mock.upload_listing_image_bytes.return_value = {"listing_image_id": 1}
+    return mock
+
+
+def _patch_externals(etsy_mock):
+    """Combo patch for EtsyApiClient + composite + httpx + sleep used by service."""
+    return [
+        patch("app.services.listing_creator_service.EtsyApiClient", return_value=etsy_mock),
+        patch(
+            "app.services.listing_creator_service.composite_service.get_or_create_composite",
+            side_effect=lambda s, tid, did, color: (f"https://cdn.example.com/composites/{tid}-{did}-{color}.png", False),
+        ),
+        patch(
+            "app.services.listing_creator_service.httpx.Client",
+            return_value=MagicMock(
+                __enter__=MagicMock(return_value=MagicMock(get=MagicMock(return_value=MagicMock(content=b"\x89PNG fake")))),
+                __exit__=MagicMock(return_value=False),
+            ),
+        ),
+        patch("app.services.listing_creator_service.time.sleep", return_value=None),
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Auth + validation
+# ---------------------------------------------------------------------------
+
+def test_from_template_requires_token(client):
+    resp = client.post("/listings/from-template", json={
+        "template_id": 1, "design_id": 1,
+        "title": "x", "description": "y",
+        "shop_id": "1",
+        "enabled_combos": [{"size": "S", "color": "White"}],
+    })
+    assert resp.status_code == 401
+
+
+def test_from_template_template_not_found(client):
+    etsy = _make_etsy_client_mock()
+    patches = _patch_externals(etsy)
+    with patches[0], patches[1], patches[2], patches[3]:
+        resp = client.post(
+            "/listings/from-template",
+            headers=VALID_HEADERS,
+            json={
+                "template_id": 9999, "design_id": 9999,
+                "title": "x", "description": "y",
+                "shop_id": "shop1",
+                "enabled_combos": [{"size": "S", "color": "White"}],
+            },
+        )
+    assert resp.status_code == 404
+
+
+def test_from_template_rejects_reference_only_design(client, db_session):
+    template = _seed_template(db_session)
+    design = Design(
+        name="ref", source_type="reference_only",
+        file_url="https://cdn.example.com/designs/ref.png",
+        width=100, height=100,
+    )
+    db_session.add(design)
+    db_session.commit()
+    db_session.refresh(design)
+
+    etsy = _make_etsy_client_mock()
+    patches = _patch_externals(etsy)
+    with patches[0], patches[1], patches[2], patches[3]:
+        resp = client.post(
+            "/listings/from-template",
+            headers=VALID_HEADERS,
+            json={
+                "template_id": template.id, "design_id": design.id,
+                "title": "x", "description": "y",
+                "shop_id": "shop1",
+                "enabled_combos": [{"size": "S", "color": "White"}],
+            },
+        )
+    assert resp.status_code == 400
+    assert "reference_only" in resp.json()["detail"]
+
+
+def test_from_template_invalid_combo_size(client, db_session):
+    template = _seed_template(db_session)
+    design = _seed_design(db_session)
+
+    etsy = _make_etsy_client_mock()
+    patches = _patch_externals(etsy)
+    with patches[0], patches[1], patches[2], patches[3]:
+        resp = client.post(
+            "/listings/from-template",
+            headers=VALID_HEADERS,
+            json={
+                "template_id": template.id, "design_id": design.id,
+                "title": "x", "description": "y",
+                "shop_id": "shop1",
+                "enabled_combos": [{"size": "XXXL", "color": "White"}],  # not in template sizes
+            },
+        )
+    assert resp.status_code == 400
+    assert "size" in resp.json()["detail"].lower()
+
+
+# ---------------------------------------------------------------------------
+# Happy path
+# ---------------------------------------------------------------------------
+
+def test_from_template_happy_path(client, db_session):
+    template = _seed_template(db_session, colors=("White", "Black"))
+    design = _seed_design(db_session)
+
+    etsy = _make_etsy_client_mock(listing_id="42424242")
+    patches = _patch_externals(etsy)
+    with patches[0], patches[1], patches[2], patches[3]:
+        resp = client.post(
+            "/listings/from-template",
+            headers=VALID_HEADERS,
+            json={
+                "template_id": template.id, "design_id": design.id,
+                "title": "Custom Comfort Tee", "description": "Hand-printed",
+                "tags": ["t-shirt", "custom", "gift"],
+                "shop_id": "shop42",
+                "enabled_combos": [
+                    {"size": "S", "color": "White"},
+                    {"size": "M", "color": "White"},
+                    {"size": "XL", "color": "Black"},
+                ],
+            },
+        )
+
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["etsy_listing_id"] == "42424242"
+    assert body["draft_url"].startswith("https://www.etsy.com/your/shops/me/listings/draft/")
+    assert body["idempotent"] is False
+
+    # Etsy was called exactly once for create + inventory
+    assert etsy.create_draft_listing.call_count == 1
+    assert etsy.update_listing_inventory.call_count == 1
+
+    # Inventory products carry size + color property values
+    inv_call = etsy.update_listing_inventory.call_args
+    products = inv_call.args[1] if len(inv_call.args) > 1 else inv_call.kwargs["products"]
+    assert len(products) == 3
+    for p in products:
+        prop_ids = {pv["property_id"] for pv in p["property_values"]}
+        assert 506 in prop_ids and 200 in prop_ids
+
+    # Image upload called once per distinct color (2 colors used)
+    assert etsy.upload_listing_image_bytes.call_count == 2
+
+    # Listing row persisted with template/design link
+    listings = list(db_session.scalars(__import__("sqlalchemy").select(Listing)))
+    assert len(listings) == 1
+    assert listings[0].etsy_listing_id == "42424242"
+    assert listings[0].template_id == template.id
+    assert listings[0].design_id == design.id
+
+
+def test_from_template_is_idempotent(client, db_session):
+    template = _seed_template(db_session)
+    design = _seed_design(db_session)
+
+    etsy = _make_etsy_client_mock(listing_id="11111")
+    patches = _patch_externals(etsy)
+    with patches[0], patches[1], patches[2], patches[3]:
+        body = {
+            "template_id": template.id, "design_id": design.id,
+            "title": "x", "description": "y",
+            "shop_id": "shop1",
+            "enabled_combos": [{"size": "S", "color": "White"}],
+        }
+        resp1 = client.post("/listings/from-template", headers=VALID_HEADERS, json=body)
+        resp2 = client.post("/listings/from-template", headers=VALID_HEADERS, json=body)
+
+    assert resp1.status_code == 201
+    assert resp2.status_code == 201
+    assert resp1.json()["etsy_listing_id"] == resp2.json()["etsy_listing_id"]
+    assert resp2.json()["idempotent"] is True
+    # Second call did NOT hit Etsy
+    assert etsy.create_draft_listing.call_count == 1
+
+
+def test_from_template_image_rank_primary_first(client, db_session):
+    """Primary color → rank 1, others follow template order."""
+    template = _seed_template(db_session, colors=("White", "Black", "Sand"), primary="Sand")
+    design = _seed_design(db_session)
+
+    etsy = _make_etsy_client_mock(listing_id="555")
+    patches = _patch_externals(etsy)
+    with patches[0], patches[1], patches[2], patches[3]:
+        client.post(
+            "/listings/from-template",
+            headers=VALID_HEADERS,
+            json={
+                "template_id": template.id, "design_id": design.id,
+                "title": "x", "description": "y",
+                "shop_id": "shop1",
+                "enabled_combos": [
+                    {"size": "S", "color": "White"},
+                    {"size": "S", "color": "Black"},
+                    {"size": "S", "color": "Sand"},
+                ],
+            },
+        )
+
+    # Ranks were assigned 1, 2, 3 in order: Sand (primary), then White, Black per template order
+    rank_calls = [c.kwargs.get("rank") or c.args[-1] for c in etsy.upload_listing_image_bytes.call_args_list]
+    assert rank_calls == [1, 2, 3]
+
+    # First call's filename mentions Sand
+    first_call_kwargs = etsy.upload_listing_image_bytes.call_args_list[0].kwargs
+    assert "Sand" in first_call_kwargs.get("filename", "")
+
+
+# ---------------------------------------------------------------------------
+# Taxonomy lookup
+# ---------------------------------------------------------------------------
+
+def test_taxonomy_resolve_caches_results(client, db_session):
+    """2nd call with same template+taxonomy doesn't re-fetch property values."""
+    template = _seed_template(db_session)
+    design = _seed_design(db_session)
+    other_design = Design(
+        name="logo2", source_type="upload",
+        file_url="https://cdn.example.com/designs/logo2.png",
+        width=1000, height=1000,
+    )
+    db_session.add(other_design)
+    db_session.commit()
+    db_session.refresh(other_design)
+
+    etsy = _make_etsy_client_mock(listing_id="111")
+    patches = _patch_externals(etsy)
+    with patches[0], patches[1], patches[2], patches[3]:
+        for did in (design.id, other_design.id):
+            etsy.create_draft_listing.return_value = {"listing_id": str(100 + did)}
+            client.post(
+                "/listings/from-template",
+                headers=VALID_HEADERS,
+                json={
+                    "template_id": template.id, "design_id": did,
+                    "title": "x", "description": "y",
+                    "shop_id": "shop1",
+                    "enabled_combos": [{"size": "S", "color": "White"}],
+                },
+            )
+
+    # 2 properties (color + size) × 1 taxonomy = 2 total fetches across BOTH listings
+    # because cache persists per (taxonomy_id, property_id).
+    assert etsy.get_taxonomy_property_values.call_count == 2
+
+
+def test_taxonomy_unknown_value_raises(client, db_session):
+    """If template uses a color that Etsy taxonomy doesn't know, return 422."""
+    template = _seed_template(db_session, colors=("White", "Mauve"))  # Mauve not in mock taxonomy
+    design = _seed_design(db_session)
+
+    etsy = _make_etsy_client_mock()
+    patches = _patch_externals(etsy)
+    with patches[0], patches[1], patches[2], patches[3]:
+        resp = client.post(
+            "/listings/from-template",
+            headers=VALID_HEADERS,
+            json={
+                "template_id": template.id, "design_id": design.id,
+                "title": "x", "description": "y",
+                "shop_id": "shop1",
+                "enabled_combos": [{"size": "S", "color": "Mauve"}],
+            },
+        )
+    assert resp.status_code == 422
+    assert "Mauve" in resp.json()["detail"] or "no value" in resp.json()["detail"].lower()

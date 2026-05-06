@@ -369,3 +369,49 @@ body {
   display: flex; gap: 8px; justify-content: flex-end;
 }
 
+
+/* Creator mode (sub-feature C) */
+.creator-section { margin-top: 12px; }
+.color-grid {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  margin-top: 8px;
+}
+.color-grid-item {
+  width: 96px;
+  display: flex; flex-direction: column; align-items: center;
+}
+.color-thumb {
+  width: 96px; height: 96px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid var(--color-border);
+}
+.color-label {
+  font-size: 11px;
+  margin: 0 0 4px;
+  color: var(--color-muted);
+}
+.color-error {
+  font-size: 10px;
+  color: var(--color-error);
+  text-align: center;
+}
+.variations-matrix-wrap {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.variations-matrix {
+  border-collapse: collapse;
+  font-size: 11px;
+}
+.variations-matrix th, .variations-matrix td {
+  border: 1px solid var(--color-border);
+  padding: 4px 6px;
+  text-align: center;
+}
+.variations-matrix th[scope="row"] {
+  text-align: left;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.variations-matrix input[type="checkbox"] { cursor: pointer; }

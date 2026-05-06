@@ -434,5 +434,70 @@ Use this checklist to verify the admin UI is working end-to-end after deployment
 
 ---
 
-*Template System — Sub-feature B of EtsyAuto v0.2.0*
+## Multi-Color Base Images (v0.4.0)
+
+For Comfort-Colors–style listings where each colorway has a distinct mockup blank, you upload one base image per color. Composite preview is then rendered against the *correct* color's blank — not a single hardcoded one.
+
+### Why per-color matters
+
+A heather grey blank composited with a red logo looks fine. The same red logo on a yellow blank composited as if it were grey ships the wrong colors to your customer. Per-color bases keep mockup truth = product truth.
+
+### Convention in `variation_options_json`
+
+```jsonc
+{
+  "sizes": [
+    {"name": "S",  "price_cents": 1900},
+    {"name": "M",  "price_cents": 1900},
+    {"name": "XL", "price_cents": 2200}
+  ],
+  "colors": ["White", "Black", "Sand", "Forest"],
+  "primary_color": "Sand",        // optional — used as Etsy listing primary image (rank=1)
+  "etsy_taxonomy_id": 1209          // optional — overrides default apparel taxonomy
+}
+```
+
+### API: per-color base image upload
+
+| Method | Path | Body | Status | Response |
+|--------|------|------|--------|----------|
+| `POST` | `/templates/{id}/color-bases/{color}` | multipart: `base_image` (PNG) | 200 / 400 / 404 / 413 | Updated template |
+| `DELETE` | `/templates/{id}/color-bases/{color}` | — | 204 / 404 | Removes that color's base |
+
+`{color}` must be present in `variation_options.colors`. Re-uploading replaces the existing R2 object (best-effort delete) and keeps the URL stable in `color_base_images_json`.
+
+```bash
+curl -X POST http://localhost:8787/templates/1/color-bases/Sand \
+  -H "X-Admin-Token: $ADMIN_TOKEN" \
+  -F "base_image=@blanks/comfort-sand.png"
+```
+
+### API: cartesian variations + multi-color preview
+
+```bash
+# 1. Auto-build variations matrix from variation_options (sizes × colors)
+curl -X POST http://localhost:8787/templates/1/expand-variations \
+  -H "X-Admin-Token: $ADMIN_TOKEN"
+# → 12 rows for 3 sizes × 4 colors
+
+# 2. Render composites for every color in parallel
+curl -X POST http://localhost:8787/composite/preview-all-colors \
+  -H "X-Admin-Token: $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"template_id": 1, "design_id": 1}'
+# → {results: [{color: "White", composite_url, cached}, ...]}
+```
+
+Cache key includes color: `composites/{template_id}-{design_id}-{Color}.png`. A template price update invalidates *all* color variants.
+
+### Image rank ordering
+
+When the listing creator uploads composites to Etsy, ranks are assigned:
+- `rank=1` → `variation_options.primary_color` (becomes Etsy thumbnail)
+- `rank=2..N` → remaining colors in the order listed in `variation_options.colors`
+
+---
+
+*Template System — Sub-feature B (v0.2.0) + Multi-Color (v0.4.0) of EtsyAuto*
 *Related plans: extension-reference-upgrade (Sub-feature A), etsy-listing-creator (Sub-feature C)*
+*See `etsy-listing-creator-guide.md` for the end-to-end creator workflow.*

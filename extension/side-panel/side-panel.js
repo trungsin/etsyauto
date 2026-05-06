@@ -17,6 +17,7 @@
 const viewEmpty     = document.getElementById('view-empty');
 const viewListing   = document.getElementById('view-listing');
 const viewReference = document.getElementById('view-reference');
+const viewCreator   = document.getElementById('view-creator');
 const imgPreview    = document.getElementById('image-preview');
 const elListingId   = document.getElementById('listing-id');
 const elTitle       = document.getElementById('listing-title');
@@ -73,6 +74,9 @@ async function loadListing() {
     if (mode === 'reference') {
       showView('reference');
       window.__referenceMode.initReferenceMode(currentListing);
+    } else if (mode === 'creator') {
+      showView('creator');
+      if (window.__creatorMode) window.__creatorMode.initCreatorMode(currentListing);
     } else {
       showView('listing');
       renderListing(currentListing);
@@ -94,10 +98,12 @@ function showView(name) {
   viewEmpty.classList.add('hidden');
   viewListing.classList.add('hidden');
   viewReference.classList.add('hidden');
+  if (viewCreator) viewCreator.classList.add('hidden');
 
   if (name === 'empty')     viewEmpty.classList.remove('hidden');
   if (name === 'listing')   viewListing.classList.remove('hidden');
   if (name === 'reference') viewReference.classList.remove('hidden');
+  if (name === 'creator' && viewCreator) viewCreator.classList.remove('hidden');
 }
 
 // ---------------------------------------------------------------------------

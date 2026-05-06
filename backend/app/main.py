@@ -24,6 +24,7 @@ from app.routes.templates_admin import (
 )
 from app.routes.references_api import router as references_api_router
 from app.routes.variations_api import router as variations_api_router
+from app.routes.listings_creator_api import router as listings_creator_api_router
 
 # Jinja2 templates — shared instance; imported by templates_admin.py lazily
 _templates_dir = Path(__file__).parent / "templates"
@@ -129,3 +130,4 @@ app.include_router(templates_admin_router)
 app.include_router(designs_admin_router)
 app.include_router(composite_admin_router)
 app.include_router(references_api_router)
+app.include_router(listings_creator_api_router)

@@ -32,7 +32,7 @@
 |-------------|-------|--------|-----------|
 | B | [Template System & Mockup Composer](../plans/260506-0803-template-system-mockup-composer/plan.md) | **Complete** | 2026-05-06 |
 | A | [Extension Reference Mode Upgrade](../plans/260506-0947-extension-reference-mode/plan.md) | **Complete** | 2026-05-06 |
-| C | Etsy Listing Creator (with Variations) | Planned | — |
+| C | Etsy Listing Creator (with Variations) | **Complete** | 2026-05-06 (v0.4.0) |
 
 ### v0.2.0 Success Metrics
 
@@ -45,7 +45,31 @@
 - [x] Jinja2 + HTMX admin UI for full template/design/composite CRUD
 - [x] 125 tests passing (121 unit + 4 E2E integration)
 - [x] Sub-feature A: extension scrapes Etsy public listings → AI suggest title → cutout → Notion Idea Bank
-- [ ] Sub-feature C: Etsy listing creation reads templates + designs (next plan)
+- [x] Sub-feature C: Etsy listing creation reads templates + designs (delivered in v0.4.0)
+
+---
+
+## v0.4.0 — Etsy Listing Creator
+
+### Scope
+
+| Sub-feature | Title | Status | Completed |
+|-------------|-------|--------|-----------|
+| C | [Etsy Listing Creator (per-color mockups)](../plans/260506-1458-etsy-listing-creator/plan.md) | **Complete** | 2026-05-06 |
+
+### v0.4.0 Success Metrics
+
+- [x] Per-color base images uploadable (3+ colors per template)
+- [x] `POST /composite/preview-all-colors` renders N composites in parallel (<30s for 5 colors)
+- [x] `POST /listings/from-template` creates Etsy draft with full N×M inventory + N images
+- [x] Idempotent on `(template_id, design_id)` — re-call returns same `etsy_listing_id` without re-creating
+- [x] Image rank: `primary_color` → 1, others by template order
+- [x] Taxonomy property values cached in-process (single fetch per `(taxonomy, property)` pair)
+- [x] Sequential image upload with 200 ms gap (Etsy rate-limit safety)
+- [x] Reference-only designs rejected from creator (IP boundary preserved)
+- [x] 197 tests passing (34 new vs v0.3.0's 163)
+- [x] Extension auto-detects `/your/shops/*/listings/new` → Creator Mode UI
+- [x] Etsy draft only — never auto-publish
 
 ---
 

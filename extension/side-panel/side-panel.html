@@ -33,6 +33,58 @@
       </div>
     </div>
 
+    <!-- Creator mode: shop /listings/new page -->
+    <div id="view-creator" class="view hidden">
+      <div class="creator-section">
+        <p class="ref-label">Shop ID</p>
+        <input id="creator-shop-id" class="config-input" type="text" placeholder="e.g. 12345678" />
+      </div>
+
+      <div class="creator-section">
+        <p class="ref-label">Template</p>
+        <select id="creator-template" class="config-input"></select>
+      </div>
+
+      <div class="creator-section">
+        <p class="ref-label">Design</p>
+        <select id="creator-design" class="config-input"></select>
+      </div>
+
+      <div class="creator-section">
+        <button id="creator-btn-preview" class="btn btn-ghost btn-sm">Preview All Colors</button>
+        <div id="creator-color-grid" class="color-grid"></div>
+      </div>
+
+      <div class="creator-section">
+        <p class="ref-label">Variations Matrix <span class="ref-hint">(uncheck to skip)</span></p>
+        <div id="creator-matrix-wrap" class="variations-matrix-wrap"></div>
+      </div>
+
+      <div class="creator-section">
+        <label for="creator-title" class="ref-label">Title <span class="ref-hint">(≤140 chars)</span></label>
+        <textarea id="creator-title" class="ref-textarea" rows="2" maxlength="140"
+                  placeholder="Listing title..."></textarea>
+      </div>
+
+      <div class="creator-section">
+        <label for="creator-description" class="ref-label">Description</label>
+        <textarea id="creator-description" class="ref-textarea" rows="4"
+                  placeholder="Listing description..."></textarea>
+      </div>
+
+      <div class="creator-section">
+        <label for="creator-tags" class="ref-label">Tags <span class="ref-hint">(comma-separated, max 13)</span></label>
+        <input id="creator-tags" class="config-input" type="text"
+               placeholder="t-shirt, custom, gift" />
+      </div>
+
+      <div class="creator-section">
+        <button id="creator-btn-create" class="btn btn-primary">Create Etsy Draft</button>
+      </div>
+
+      <div id="creator-toast" class="ref-toast hidden"></div>
+    </div>
+
     <!-- Reference mode: public listing page -->
     <div id="view-reference" class="view hidden">
       <div class="ref-section">
@@ -131,6 +183,7 @@
   <script src="../shared/backend-client.js"></script>
   <script src="crop-modal.js"></script>
   <script src="reference-mode.js"></script>
+  <script src="creator-mode.js"></script>
   <script src="side-panel.js"></script>
 </body>
 </html>

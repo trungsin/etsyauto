@@ -26,6 +26,9 @@ class Listing(Base):
     push_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     last_push_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     pushed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Sub-feature C: link back to template/design when listing created via /listings/from-template
+    template_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    design_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.now()
     )
