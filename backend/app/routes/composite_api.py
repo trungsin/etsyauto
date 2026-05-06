@@ -54,3 +54,33 @@ def composite_preview(
         raise HTTPException(status_code=500, detail="Composite generation failed") from exc
 
     return {"composite_url": composite_url, "cached": cached}
+
+
+@router.post("/preview-all-colors")
+def composite_preview_all_colors(
+    body: CompositeRequest,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_admin_token),
+) -> dict:
+    """Render composites for every color in template.variation_options.colors in parallel.
+
+    Returns:
+        200 {"results": [{color, composite_url, cached, error}, ...]}
+        400 if template/design not found, design reference_only, or no colors defined.
+        500 on unexpected failure.
+    """
+    try:
+        results = composite_service.get_or_create_composites_all_colors(
+            session=db,
+            template_id=body.template_id,
+            design_id=body.design_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception(
+            "Composite-all failed for template=%d design=%d", body.template_id, body.design_id
+        )
+        raise HTTPException(status_code=500, detail="Composite generation failed") from exc
+
+    return {"results": results}

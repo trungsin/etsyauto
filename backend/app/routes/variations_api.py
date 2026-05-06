@@ -143,3 +143,27 @@ def update_variation_price(
         raise HTTPException(status_code=404, detail="Variation not found for this template")
 
     return VariationOut.model_validate(row)
+
+
+@router.post(
+    "/{template_id}/expand-variations",
+    status_code=200,
+    dependencies=[Depends(require_admin_token)],
+)
+def expand_variations(template_id: int, db: Session = Depends(get_db)) -> list[VariationOut]:
+    """Auto-build cartesian (size, color) variations from template.variation_options.
+
+    Reads variation_options_json schema and replicates each size's price_cents across
+    all colors. Atomically replaces existing variations.
+
+    Returns:
+        List of newly created VariationOut rows.
+    """
+    _get_template_or_404(db, template_id)
+    try:
+        rows = variation_service.expand_variations(db, template_id)
+    except ValueError as exc:
+        detail = str(exc)
+        status = 422 if "Too many" in detail or "must" in detail else 404
+        raise HTTPException(status_code=status, detail=detail) from exc
+    return [VariationOut.model_validate(r) for r in rows]

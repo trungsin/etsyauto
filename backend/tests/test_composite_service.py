@@ -306,3 +306,186 @@ def test_composite_preview_requires_token(client):
         json={"template_id": 1, "design_id": 1},
     )
     assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Phase 2 (sub-feature C): per-color composite rendering
+# ---------------------------------------------------------------------------
+
+def _seed_apparel_template_with_color_bases(session, colors=("White", "Black")) -> Template:
+    """Helper: template with color_base_images_json populated for each color."""
+    color_bases = {c: f"https://cdn.example.com/templates/{c.lower()}.png" for c in colors}
+    options = {
+        "sizes": [{"name": "S", "price_cents": 1900}],
+        "colors": list(colors),
+        "primary_color": colors[0],
+    }
+    t = Template(
+        name="Comfort Tee",
+        category="apparel",
+        base_image_url="https://cdn.example.com/templates/default.png",
+        composite_anchor_json=json.dumps({"x": 0.2, "y": 0.2, "w": 0.6, "h": 0.6}),
+        default_price_cents=1900,
+        variation_options_json=json.dumps(options),
+        color_base_images_json=json.dumps(color_bases),
+    )
+    session.add(t)
+    session.commit()
+    session.refresh(t)
+    return t
+
+
+def test_per_color_composite_uses_color_specific_base(db_session):
+    """When color is provided, cache key includes color and per-color base URL is downloaded."""
+    from app.services import composite_service
+
+    template = _seed_apparel_template_with_color_bases(db_session, colors=("White", "Black"))
+    design = _seed_design(db_session)
+
+    r2_mock = _make_r2_mock(exists=False)
+    downloaded_urls: list[str] = []
+
+    def fake_urlopen(url):
+        downloaded_urls.append(url)
+        return io.BytesIO(_make_png_rgba(100, 100))
+
+    with _patch_r2(r2_mock), patch("urllib.request.urlopen", side_effect=fake_urlopen):
+        url, cached = composite_service.get_or_create_composite(
+            db_session, template.id, design.id, color="Black",
+        )
+
+    assert not cached
+    # Cache key must include color token
+    expected_suffix = f"-{design.id}-Black.png"
+    assert url.endswith(expected_suffix), f"got {url}"
+    # Per-color base URL was downloaded (not the default base)
+    assert any("black" in u for u in downloaded_urls), f"downloads={downloaded_urls}"
+
+
+def test_per_color_composite_color_none_keeps_v0_2_0_key(db_session):
+    """color=None falls back to template.base_image_url and cache key has no color suffix."""
+    from app.services import composite_service
+
+    template = _seed_apparel_template_with_color_bases(db_session)
+    design = _seed_design(db_session)
+
+    r2_mock = _make_r2_mock(exists=False)
+    with _patch_r2(r2_mock), patch("urllib.request.urlopen",
+                                   side_effect=lambda url: io.BytesIO(_make_png_rgba(80, 80))):
+        url, cached = composite_service.get_or_create_composite(
+            db_session, template.id, design.id, color=None,
+        )
+
+    assert not cached
+    # Old-style key: composites/{tid}-{did}.png
+    expected_key = f"composites/{template.id}-{design.id}.png"
+    assert url.endswith(expected_key)
+
+
+def test_per_color_composite_missing_color_base_raises(db_session):
+    """Requesting a color that has no base image raises ValueError."""
+    from app.services import composite_service
+
+    template = _seed_apparel_template_with_color_bases(db_session, colors=("White",))
+    design = _seed_design(db_session)
+
+    r2_mock = _make_r2_mock(exists=False)
+    with _patch_r2(r2_mock):
+        with pytest.raises(ValueError, match="no color base image"):
+            composite_service.get_or_create_composite(
+                db_session, template.id, design.id, color="Black",
+            )
+
+
+def test_preview_all_colors_renders_each_color(db_session):
+    """get_or_create_composites_all_colors returns one entry per color."""
+    from app.services import composite_service
+
+    template = _seed_apparel_template_with_color_bases(
+        db_session, colors=("White", "Black", "Sand"),
+    )
+    design = _seed_design(db_session)
+
+    r2_mock = _make_r2_mock(exists=False)
+    with _patch_r2(r2_mock), patch("urllib.request.urlopen",
+                                   side_effect=lambda url: io.BytesIO(_make_png_rgba(80, 80))):
+        results = composite_service.get_or_create_composites_all_colors(
+            db_session, template.id, design.id,
+        )
+
+    assert len(results) == 3
+    colors_returned = {r["color"] for r in results}
+    assert colors_returned == {"White", "Black", "Sand"}
+    for r in results:
+        assert r["error"] is None
+        assert r["composite_url"] is not None
+        assert f"-{design.id}-" in r["composite_url"]
+
+
+def test_preview_all_colors_partial_failure_returns_error_field(db_session):
+    """A color missing its base image yields an `error` entry but other colors still render."""
+    from app.services import composite_service
+
+    # Only White has a base; Black is listed in colors but has no base image
+    template = _seed_apparel_template_with_color_bases(db_session, colors=("White",))
+    # Patch options to advertise a 2nd color without a base
+    opts = json.loads(template.variation_options_json)
+    opts["colors"] = ["White", "Black"]
+    template.variation_options_json = json.dumps(opts)
+    db_session.commit()
+
+    design = _seed_design(db_session)
+
+    r2_mock = _make_r2_mock(exists=False)
+    with _patch_r2(r2_mock), patch("urllib.request.urlopen",
+                                   side_effect=lambda url: io.BytesIO(_make_png_rgba(80, 80))):
+        results = composite_service.get_or_create_composites_all_colors(
+            db_session, template.id, design.id,
+        )
+
+    by_color = {r["color"]: r for r in results}
+    assert by_color["White"]["error"] is None
+    assert by_color["Black"]["error"] is not None
+    assert "no color base" in by_color["Black"]["error"].lower()
+
+
+def test_design_delete_invalidates_per_color_composites(db_session):
+    """Per-color cache keys (composites/{tid}-{did}-Color.png) are also deleted on design delete."""
+    from app.services import design_service
+
+    design = _seed_design(db_session)
+    keys = [
+        f"composites/5-{design.id}.png",
+        f"composites/5-{design.id}-White.png",
+        f"composites/5-{design.id}-Black.png",
+    ]
+
+    r2_mock = _make_r2_mock(listed_keys=keys)
+    with _patch_r2(r2_mock):
+        design_service.delete_design(db_session, design.id)
+
+    deleted_calls = [c.args[0] for c in r2_mock.delete_object.call_args_list]
+    for k in keys:
+        assert k in deleted_calls, f"{k} not deleted; got {deleted_calls}"
+
+
+def test_preview_all_colors_endpoint(client, db_session):
+    """End-to-end: POST /composite/preview-all-colors returns N results."""
+    from app.services import composite_service  # noqa: F401
+
+    template = _seed_apparel_template_with_color_bases(db_session, colors=("White", "Black"))
+    design = _seed_design(db_session)
+
+    r2_mock = _make_r2_mock(exists=False)
+    with _patch_r2(r2_mock), patch("urllib.request.urlopen",
+                                   side_effect=lambda url: io.BytesIO(_make_png_rgba(80, 80))):
+        resp = client.post(
+            "/composite/preview-all-colors",
+            headers=VALID_HEADERS,
+            json={"template_id": template.id, "design_id": design.id},
+        )
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert "results" in body
+    assert len(body["results"]) == 2

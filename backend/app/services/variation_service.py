@@ -100,3 +100,58 @@ def clear_variations(session: Session, template_id: int) -> None:
     )
     session.commit()
     logger.info("Cleared all variations for template_id=%d", template_id)
+
+
+def expand_variations(
+    session: Session,
+    template_id: int,
+) -> list[TemplateVariation]:
+    """Auto-build cartesian (size, color) variations from template.variation_options_json.
+
+    Reads sizes (with per-size price_cents) and colors lists; replicates each size's
+    price across all colors. Atomically replaces existing rows.
+
+    Expected variation_options_json shape:
+        {
+            "sizes":  [{"name": "S",  "price_cents": 1900}, ...],
+            "colors": ["White", "Black", ...]
+        }
+
+    Raises:
+        ValueError: If template not found, schema invalid, or N×M > MAX_VARIATIONS.
+    """
+    import json
+    from app.models.template import Template
+
+    template = session.get(Template, template_id)
+    if template is None:
+        raise ValueError(f"Template {template_id} not found")
+
+    try:
+        opts = json.loads(template.variation_options_json or "{}")
+    except (json.JSONDecodeError, TypeError):
+        opts = {}
+
+    sizes = opts.get("sizes", [])
+    colors = opts.get("colors", [])
+    if not sizes or not colors:
+        raise ValueError(
+            f"Template {template_id} variation_options must have non-empty sizes and colors"
+        )
+
+    cartesian: list[dict[str, Any]] = []
+    for s in sizes:
+        if not isinstance(s, dict) or "name" not in s or "price_cents" not in s:
+            raise ValueError(
+                "Each size must be {'name': str, 'price_cents': int}"
+            )
+        for color in colors:
+            cartesian.append(
+                {
+                    "size": s["name"],
+                    "color": color,
+                    "price_cents": int(s["price_cents"]),
+                }
+            )
+
+    return replace_variations(session, template_id, cartesian)

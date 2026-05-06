@@ -37,8 +37,16 @@ class CompositeAnchor(BaseModel):
 
 
 class VariationOptions(BaseModel):
-    sizes: list[str] = []
+    """Loosely-typed convention for template variation options.
+
+    `sizes` accepts either legacy list[str] (v0.2.0) or list[{name, price_cents}] (v0.4.0+).
+    `primary_color` and `etsy_taxonomy_id` are used by the Listing Creator (sub-feature C).
+    """
+
+    sizes: list[Any] = []
     colors: list[str] = []
+    primary_color: str | None = None
+    etsy_taxonomy_id: int | None = None
 
 
 class TemplateOut(BaseModel):
@@ -49,6 +57,7 @@ class TemplateOut(BaseModel):
     composite_anchor: dict[str, float]
     default_price_cents: int
     variation_options: dict[str, Any]
+    color_base_images: dict[str, str] = {}
     variation_count: int = 0
 
     model_config = {"from_attributes": True}
@@ -83,6 +92,10 @@ def _parse_variation_options(raw: str) -> VariationOptions:
 
 
 def _to_template_out(t: Any, db: Session) -> TemplateOut:
+    try:
+        color_bases = json.loads(getattr(t, "color_base_images_json", None) or "{}")
+    except (json.JSONDecodeError, TypeError):
+        color_bases = {}
     return TemplateOut(
         id=t.id,
         name=t.name,
@@ -91,6 +104,7 @@ def _to_template_out(t: Any, db: Session) -> TemplateOut:
         composite_anchor=json.loads(t.composite_anchor_json),
         default_price_cents=t.default_price_cents,
         variation_options=json.loads(t.variation_options_json),
+        color_base_images=color_bases,
         variation_count=template_service.get_variation_count(db, t.id),
     )
 
@@ -183,5 +197,65 @@ def delete_template(template_id: int, db: Session = Depends(get_db)) -> None:
     """Delete a template and cascade its variations; also removes R2 base image."""
     try:
         template_service.delete_template(db, template_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+# ---------------------------------------------------------------------------
+# Per-color base images (sub-feature C)
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/{template_id}/color-bases/{color}",
+    status_code=200,
+    dependencies=[Depends(require_admin_token)],
+)
+async def upload_color_base(
+    template_id: int,
+    color: str,
+    base_image: UploadFile = File(...),
+    db: Session = Depends(get_db),
+) -> TemplateOut:
+    """Upload a per-color base image for a template.
+
+    Validates that *color* is in the template's variation_options.colors list.
+    Replaces existing base for that color (deletes old R2 object best-effort).
+    """
+    image_bytes = await base_image.read()
+    if len(image_bytes) > MAX_IMAGE_BYTES:
+        raise HTTPException(status_code=413, detail="Image exceeds 10 MB limit")
+
+    try:
+        tmpl = template_service.set_color_base(
+            session=db,
+            template_id=template_id,
+            color=color,
+            image_bytes=image_bytes,
+            image_filename=base_image.filename or "color-base.png",
+        )
+    except ValueError as exc:
+        detail = str(exc)
+        status_code = 404 if "not found" in detail.lower() else 400
+        raise HTTPException(status_code=status_code, detail=detail) from exc
+    except Exception as exc:
+        logger.exception("Failed to set color base for template %d color=%s", template_id, color)
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    return _to_template_out(tmpl, db)
+
+
+@router.delete(
+    "/{template_id}/color-bases/{color}",
+    status_code=204,
+    dependencies=[Depends(require_admin_token)],
+)
+def delete_color_base(
+    template_id: int,
+    color: str,
+    db: Session = Depends(get_db),
+) -> None:
+    """Remove a per-color base image. Idempotent (404 only when template missing)."""
+    try:
+        template_service.delete_color_base(db, template_id, color)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
