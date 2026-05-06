@@ -1,0 +1,75 @@
+# Development Roadmap
+
+## MVP Phases (v0.1.0) — All Complete
+
+| Phase | Title | Status | Completed |
+|-------|-------|--------|-----------|
+| 1 | Foundation & Backend Skeleton | Complete | 2026-05-05 |
+| 2 | Etsy API Client + OAuth PKCE | Complete | 2026-05-05 |
+| 3 | Chrome Extension MV3 | Complete | 2026-05-05 |
+| 4 | Title Optimizer Worker (Claude) | Complete | 2026-05-05 |
+| 5 | Mockup Pipeline (remove.bg + Imagen) | Complete | 2026-05-05 |
+| 6 | Notion Review Integration | Complete | 2026-05-05 |
+| 7 | Etsy Uploader + Retry Logic | Complete | 2026-05-05 |
+| 8 | E2E Validation + Documentation | Complete | 2026-05-05 |
+
+### MVP Success Metrics
+
+- [x] 78 unit tests passing, zero skips
+- [x] Cost per listing < $0.50
+- [x] Machine time per listing < 2 minutes (excl. human review)
+- [x] Reproducible setup < 30 minutes from scratch
+- [x] Mandatory human approval gate before any Etsy modification
+- [x] All docs populated with substantive content
+
+---
+
+## Post-MVP (v0.2.0 — Backlog, Unscheduled)
+
+### P1 — High Value
+
+| Feature | Description | Effort |
+|---------|-------------|--------|
+| Analytics dashboard | Per-listing cost tracking, time-to-push metrics, Claude token usage | M |
+| Batch queue UI | Select 10+ listings in extension, queue all at once | M |
+| Multi-image mockups | Generate mockups for all 10 Etsy image slots, not just slot 1 | L |
+| Prompt A/B testing | Track which title variant gets more views after push | L |
+| Cost cap per listing | Hard stop if estimated cost exceeds configurable threshold | S |
+
+### P2 — Nice to Have
+
+| Feature | Description | Effort |
+|---------|-------------|--------|
+| Multi-language titles | Generate titles in DE/FR/ES for international shops | M |
+| Category-specific prompts | Different scene prompts for apparel vs. jewelry vs. print | S |
+| Notion template export | One-click Notion DB template duplication | S |
+| Slack/email notification | Alert when review page ready in Notion | S |
+| Local rembg fallback | Use `rembg` Python library if remove.bg credits exhausted | M |
+
+### P3 — Architecture / Scale
+
+| Feature | Description | Effort |
+|---------|-------------|--------|
+| Postgres migration | Swap SQLite → Postgres for multi-user or cloud deployment | L |
+| Redis task queue | Replace APScheduler with Celery + Redis for scale | L |
+| Multi-shop support | Multiple Etsy shops with separate credential sets | L |
+| SaaS mode | Cloud-hosted backend, per-user isolation, Stripe billing | XL |
+| Firefox extension | Port Chrome MV3 extension to Firefox Manifest V2/V3 | M |
+
+---
+
+## Known Technical Debt
+
+| Item | Impact | Priority |
+|------|--------|----------|
+| PKCE state stored in-memory dict | Lost on server restart; user must re-auth | Low (single-user dev server) |
+| No request-level rate limiting on `/ingest` | Spam possible from malicious extension | Low (localhost only) |
+| Notion `pull_approvals` polls all Approved pages | O(n) Notion API calls as reviews accumulate | Medium (optimize with cursor/filter) |
+| No db WAL backup cron | SQLite could corrupt on hard crash | Medium |
+| Gemini model ID hardcoded | Must manually update when preview model reaches GA | Medium |
+
+---
+
+## Version History
+
+See `docs/project-changelog.md` for detailed change log.

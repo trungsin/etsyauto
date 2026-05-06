@@ -1,0 +1,25 @@
+[project]
+name = "etsyauto-backend"
+version = "0.1.0"
+description = "EtsyAuto listing optimizer backend — FastAPI + SQLite + APScheduler"
+requires-python = ">=3.12"
+dependencies = [
+    "alembic>=1.18.4",
+    "anthropic>=0.98.1",
+    "apscheduler>=3.11.2",
+    "boto3>=1.43.3",
+    "fastapi[standard]>=0.136.1",
+    "google-genai>=1.75.0",
+    "httpx>=0.28.1",
+    "notion-client>=3.0.0",
+    "pillow>=12.2.0",
+    "pydantic-settings>=2.14.0",
+    "python-dotenv>=1.2.2",
+    "sqlalchemy>=2.0.49",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+    "pytest-asyncio>=1.3.0",
+]

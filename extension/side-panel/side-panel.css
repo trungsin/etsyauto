@@ -1,0 +1,116 @@
+/* side-panel.css — EtsyAuto side panel styles */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --color-bg: #fafafa;
+  --color-surface: #ffffff;
+  --color-border: #e5e7eb;
+  --color-primary: #f97316;
+  --color-primary-hover: #ea6c0a;
+  --color-text: #111827;
+  --color-muted: #6b7280;
+  --color-success: #16a34a;
+  --color-error: #dc2626;
+  --color-warning: #d97706;
+  --radius: 8px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+body {
+  font-family: var(--font);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: 13px;
+  min-width: 280px;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* Header */
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+.logo { width: 20px; height: 20px; }
+.title { font-size: 14px; font-weight: 600; flex: 1; }
+
+/* Status dot */
+.status-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.status-dot.status-ok      { background: var(--color-success); }
+.status-dot.status-error   { background: var(--color-error); }
+.status-dot.status-unknown { background: var(--color-warning); }
+
+/* Main content */
+.main { flex: 1; padding: 12px; overflow-y: auto; }
+
+.view { }
+.hidden { display: none !important; }
+
+.hint { color: var(--color-muted); text-align: center; margin-top: 24px; line-height: 1.5; }
+
+/* Listing card */
+.listing-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 10px;
+  margin-bottom: 12px;
+}
+.image-preview {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.image-preview img {
+  width: 48px; height: 48px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid var(--color-border);
+}
+.listing-id { font-size: 11px; color: var(--color-muted); margin-bottom: 4px; }
+.listing-title { font-weight: 500; line-height: 1.4; word-break: break-word; }
+
+/* Actions */
+.action-area { display: flex; flex-direction: column; gap: 8px; }
+.action-msg { font-size: 12px; padding: 6px 8px; border-radius: 4px; }
+.action-msg.msg-success { background: #dcfce7; color: var(--color-success); }
+.action-msg.msg-error   { background: #fee2e2; color: var(--color-error); }
+
+/* Buttons */
+.btn {
+  border: none; cursor: pointer; border-radius: 6px;
+  font-family: var(--font); font-size: 13px; font-weight: 500;
+  transition: background 0.15s;
+}
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary {
+  background: var(--color-primary); color: #fff;
+  padding: 8px 14px; width: 100%;
+}
+.btn-primary:hover:not(:disabled) { background: var(--color-primary-hover); }
+.btn-ghost {
+  background: transparent; color: var(--color-muted);
+  padding: 4px 8px; border: 1px solid var(--color-border);
+}
+.btn-ghost:hover { background: var(--color-border); }
+.btn-sm { font-size: 11px; padding: 3px 7px; }
+
+/* Footer */
+.footer {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+.status-label { font-size: 11px; color: var(--color-muted); }

@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EtsyAuto Optimizer</title>
+  <link rel="stylesheet" href="side-panel.css" />
+</head>
+<body>
+  <header class="header">
+    <img src="../icons/icon-32.png" alt="EtsyAuto" class="logo" />
+    <h1 class="title">EtsyAuto</h1>
+    <span id="status-dot" class="status-dot status-unknown" title="Backend status"></span>
+  </header>
+
+  <main class="main">
+    <!-- No listing detected -->
+    <div id="view-empty" class="view">
+      <p class="hint">Navigate to an Etsy listing edit page to get started.</p>
+    </div>
+
+    <!-- Listing loaded -->
+    <div id="view-listing" class="view hidden">
+      <div class="listing-card">
+        <div id="image-preview" class="image-preview"></div>
+        <p id="listing-id" class="listing-id"></p>
+        <p id="listing-title" class="listing-title"></p>
+      </div>
+
+      <div id="action-area" class="action-area">
+        <button id="btn-send" class="btn btn-primary">Send to Optimizer</button>
+        <p id="action-msg" class="action-msg hidden"></p>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <span id="status-label" class="status-label">Checking connection…</span>
+    <button id="btn-refresh" class="btn btn-ghost btn-sm">Refresh</button>
+  </footer>
+
+  <script src="../shared/backend-client.js"></script>
+  <script src="side-panel.js"></script>
+</body>
+</html>
