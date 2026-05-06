@@ -74,11 +74,11 @@ async function initReferenceMode(payload) {
   const msg = {
     type: 'SCRAPE_REFERENCE',
     payload: {
-      listing_id: payload.listing_id,
+      source_listing_id: String(payload.listing_id),
       source_url: payload.source_url,
-      title: payload.title || null,
-      images: payload.images || [],
-      description: payload.description || null,
+      original_title: payload.title || null,
+      original_images: (payload.images || []).slice(0, 10),
+      original_description: payload.description || null,
     },
   };
 
@@ -89,9 +89,8 @@ async function initReferenceMode(payload) {
       return;
     }
     _referenceId = resp.data.id || resp.data.reference_id || null;
-    // Backend may return enriched images list
-    if (resp.data.images && resp.data.images.length) {
-      _images = resp.data.images.slice(0, 10).map((url) => ({ url, state: 'keep' }));
+    if (Array.isArray(resp.data.original_images) && resp.data.original_images.length) {
+      _images = resp.data.original_images.slice(0, 10).map((url) => ({ url, state: 'keep' }));
       _renderImageGrid();
     }
     _setStatus('scraped');
@@ -162,7 +161,7 @@ async function onRemoveBg() {
         _showToast('Cutout failed: ' + ((resp && resp.error) || ''), 'error');
         return;
       }
-      _cutoutUrl = resp.data.cutout_url || resp.data.result_url || null;
+      _cutoutUrl = resp.data.file_url || resp.data.cutout_url || null;
       if (_cutoutUrl) {
         _dom.cutoutThumb.src = _cutoutUrl;
         _dom.cutoutThumb.classList.remove('hidden');
