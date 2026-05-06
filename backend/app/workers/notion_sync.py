@@ -130,7 +130,8 @@ def _process_approval(session: Session, client: NotionClient, page: dict) -> Non
             logger.debug("pull_approvals: listing %d already approved — skipping", listing_id)
             return
 
-        title_sel = _get_select(props, "Selected Title")
+        # Property names match the live Notion DB exactly (" Selected Title" has a leading space)
+        title_sel = _get_select(props, " Selected Title")
         mockup_sel = _get_select(props, "Selected Mockup")
 
         if not title_sel or not mockup_sel:

@@ -1,8 +1,8 @@
-"""Title optimizer worker — APScheduler job that polls new listings and calls Claude."""
+"""Title optimizer worker — APScheduler job that polls new listings and calls Gemini."""
 import json
 import logging
 
-from app.clients.claude_client import ClaudeClient
+from app.clients.gemini_text_client import GeminiTextClient
 from app.database import SessionLocal
 from app.services import listing_service
 
@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 def run_title_optimizer_job() -> None:
-    """Poll listings with status='new', call Claude for title variants, persist results.
+    """Poll listings with status='new', call Gemini for title variants, persist results.
 
     Each listing is claimed atomically before processing to prevent duplicate work.
     Exceptions per listing are caught so one failure does not abort the whole batch.
@@ -22,7 +22,7 @@ def run_title_optimizer_job() -> None:
             return
 
         logger.info("Title optimizer: found %d pending listing(s)", len(pending))
-        client = ClaudeClient()
+        client = GeminiTextClient()
 
         for listing in pending:
             _process_listing(session, client, listing)
@@ -30,7 +30,7 @@ def run_title_optimizer_job() -> None:
         session.close()
 
 
-def _process_listing(session, client: ClaudeClient, listing) -> None:
+def _process_listing(session, client: GeminiTextClient, listing) -> None:
     """Claim and process one listing; log errors without re-raising."""
     listing_id = listing.id
 

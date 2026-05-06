@@ -1,4 +1,10 @@
-"""Notion API client — wraps notion-client SDK for review page management."""
+"""Notion API client — wraps notion-client SDK for review page management.
+
+Uses the Sept 2025 Notion API "data sources" model:
+- database_id  = top-level container (URL-visible, used only for databases.retrieve)
+- data_source_id = actual table (properties + rows); used for query, schema validation,
+                   and page creation parent
+"""
 import logging
 from datetime import datetime, timezone
 from typing import Any
@@ -27,6 +33,8 @@ class NotionClient:
 
         self._client = Client(auth=settings.notion_api_key)
         self._db_id = settings.notion_database_id
+        # data_source_id is the actual table; fall back to db_id for legacy compat
+        self._ds_id = settings.notion_data_source_id or settings.notion_database_id
 
     # ------------------------------------------------------------------
     # Page creation
@@ -42,23 +50,36 @@ class NotionClient:
 
         Properties set: Listing Title, Etsy ID, Status, SQLite ID,
         Listing URL, Synced At. Children: title callout blocks + mockup image blocks.
+
+        Parent uses data_source_id when configured (new API), otherwise falls
+        back to database_id for backward compatibility.
         """
         etsy_url = f"https://www.etsy.com/listing/{listing.etsy_listing_id}"
         synced_at = datetime.now(timezone.utc).isoformat()
 
         properties = {
             "Listing Title": {"title": [{"text": {"content": listing.original_title[:2000]}}]},
-            "Etsy ID": {"number": _safe_int(listing.etsy_listing_id)},
+            " Etsy ID": {"number": _safe_int(listing.etsy_listing_id)},
             "Status": {"select": {"name": "review"}},
             "SQLite ID": {"number": listing.id},
-            "Listing URL": {"url": etsy_url},
-            "Synced At": {"date": {"start": synced_at}},
+            " Listing URL": {"url": etsy_url},
+            "Synced At ": {"date": {"start": synced_at}},
         }
 
         children = _build_title_blocks(title_variants) + _build_mockup_blocks(mockup_variants)
 
+        # Use data_source_id parent when a distinct data_source_id is configured;
+        # fall back to legacy database_id parent otherwise.
+        if settings.notion_data_source_id:
+            parent: dict[str, Any] = {
+                "type": "data_source_id",
+                "data_source_id": self._ds_id,
+            }
+        else:
+            parent = {"database_id": self._db_id}
+
         response = self._client.pages.create(
-            parent={"database_id": self._db_id},
+            parent=parent,
             properties=properties,
             children=children,
         )
@@ -71,13 +92,16 @@ class NotionClient:
     # ------------------------------------------------------------------
 
     def get_pages_by_status(self, status: str) -> list[dict]:
-        """Return all Notion pages in the database with the given Status select value."""
+        """Return all Notion pages in the data source with the given Status select value.
+
+        Uses data_sources.query when data_source_id is configured (new API),
+        falls back to databases.query for backward compatibility.
+        """
         results: list[dict] = []
         cursor = None
 
         while True:
             kwargs: dict[str, Any] = {
-                "database_id": self._db_id,
                 "filter": {
                     "property": "Status",
                     "select": {"equals": status},
@@ -87,7 +111,13 @@ class NotionClient:
             if cursor:
                 kwargs["start_cursor"] = cursor
 
-            response = self._client.databases.query(**kwargs)
+            if settings.notion_data_source_id:
+                kwargs["data_source_id"] = self._ds_id
+                response = self._client.data_sources.query(**kwargs)
+            else:
+                kwargs["database_id"] = self._db_id
+                response = self._client.databases.query(**kwargs)
+
             results.extend(response.get("results", []))
 
             if not response.get("has_more"):
@@ -119,18 +149,26 @@ class NotionClient:
     # ------------------------------------------------------------------
 
     def validate_database_schema(self) -> bool:
-        """Check that the Notion database has the expected properties.
+        """Check that the Notion data source has the expected properties.
 
+        Uses data_sources.retrieve when data_source_id is configured (new API),
+        falls back to databases.retrieve for backward compatibility.
         Returns True if all required properties exist, False otherwise.
         Logs warnings for each missing property but does NOT raise.
         """
+        # Property names match the live Notion DB exactly (some have leading/trailing spaces)
         required = {
-            "Listing Title", "Etsy ID", "Status", "Selected Title",
-            "Selected Mockup", "Listing URL", "Synced At", "SQLite ID",
+            "Listing Title", " Etsy ID", "Status", " Selected Title",
+            "Selected Mockup", " Listing URL", "Synced At ", "SQLite ID",
         }
         try:
-            db = self._client.databases.retrieve(database_id=self._db_id)
-            existing = set(db.get("properties", {}).keys())
+            if settings.notion_data_source_id:
+                ds = self._client.data_sources.retrieve(data_source_id=self._ds_id)
+                existing = set(ds.get("properties", {}).keys())
+            else:
+                db = self._client.databases.retrieve(database_id=self._db_id)
+                existing = set(db.get("properties", {}).keys())
+
             missing = required - existing
             if missing:
                 logger.warning(

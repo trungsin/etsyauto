@@ -12,7 +12,7 @@ from app.models.title_variant import TitleVariant
 logger = logging.getLogger(__name__)
 
 PROMPT_VERSION = "v1"
-MODEL_ID = "claude-sonnet-4-6"
+MODEL_ID = "gemini-2.5-flash"
 
 
 def get_pending_for_title(session: Session) -> list[Listing]:

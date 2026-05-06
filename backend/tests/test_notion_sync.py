@@ -102,6 +102,24 @@ def _add_mockup_variants(session, listing_id: int, count: int = 3, with_url=True
 
 
 # ---------------------------------------------------------------------------
+# Shared settings patcher helpers
+# ---------------------------------------------------------------------------
+
+def _mock_settings_with_ds(mock_settings):
+    """Configure mock settings with both database_id and data_source_id."""
+    mock_settings.notion_api_key = "secret_test"
+    mock_settings.notion_database_id = "db-uuid-123"
+    mock_settings.notion_data_source_id = "ds-uuid-456"
+
+
+def _mock_settings_legacy(mock_settings):
+    """Configure mock settings with database_id only (legacy — no data_source_id)."""
+    mock_settings.notion_api_key = "secret_test"
+    mock_settings.notion_database_id = "db-uuid-123"
+    mock_settings.notion_data_source_id = ""
+
+
+# ---------------------------------------------------------------------------
 # Test 1: R2 upload — happy path
 # ---------------------------------------------------------------------------
 
@@ -164,8 +182,8 @@ class TestR2Upload:
 # ---------------------------------------------------------------------------
 
 class TestNotionCreateReviewPage:
-    def test_create_review_page_returns_page_id(self, session):
-        """create_review_page calls SDK with correct args and returns page_id."""
+    def test_create_review_page_returns_page_id_with_data_source(self, session):
+        """create_review_page calls SDK with data_source_id parent and returns page_id."""
         listing = _make_listing(session, status="review")
         title_vars = _add_title_variants(session, listing.id)
         mockup_vars = _add_mockup_variants(session, listing.id)
@@ -176,8 +194,7 @@ class TestNotionCreateReviewPage:
         with patch("app.clients.notion_client.settings") as mock_settings, \
              patch("app.clients.notion_client.Client", return_value=mock_sdk):
 
-            mock_settings.notion_api_key = "secret_test"
-            mock_settings.notion_database_id = "db-uuid-123"
+            _mock_settings_with_ds(mock_settings)
 
             from app.clients.notion_client import NotionClient
             client = NotionClient()
@@ -186,13 +203,40 @@ class TestNotionCreateReviewPage:
         assert page_id == "page-abc-123"
         mock_sdk.pages.create.assert_called_once()
         call_kwargs = mock_sdk.pages.create.call_args[1]
-        assert call_kwargs["parent"] == {"database_id": "db-uuid-123"}
+        # New API: parent uses data_source_id
+        assert call_kwargs["parent"] == {
+            "type": "data_source_id",
+            "data_source_id": "ds-uuid-456",
+        }
         # Status must be 'review'
         assert call_kwargs["properties"]["Status"]["select"]["name"] == "review"
         # Children must include title heading and mockup heading
         children_text = str(call_kwargs["children"])
         assert "Title Variants" in children_text
         assert "Mockup Variants" in children_text
+
+    def test_create_review_page_legacy_falls_back_to_database_id(self, session):
+        """create_review_page falls back to database_id parent when no data_source_id."""
+        listing = _make_listing(session, status="review")
+        title_vars = _add_title_variants(session, listing.id)
+        mockup_vars = _add_mockup_variants(session, listing.id)
+
+        mock_sdk = MagicMock()
+        mock_sdk.pages.create.return_value = {"id": "page-legacy-001"}
+
+        with patch("app.clients.notion_client.settings") as mock_settings, \
+             patch("app.clients.notion_client.Client", return_value=mock_sdk):
+
+            _mock_settings_legacy(mock_settings)
+
+            from app.clients.notion_client import NotionClient
+            client = NotionClient()
+            page_id = client.create_review_page(listing, title_vars, mockup_vars)
+
+        assert page_id == "page-legacy-001"
+        call_kwargs = mock_sdk.pages.create.call_args[1]
+        # Legacy path: parent uses database_id
+        assert call_kwargs["parent"] == {"database_id": "db-uuid-123"}
 
     def test_create_review_page_embeds_r2_image_url(self, session):
         """Image blocks use final_image_url (R2 public URL) when available."""
@@ -206,8 +250,7 @@ class TestNotionCreateReviewPage:
         with patch("app.clients.notion_client.settings") as mock_settings, \
              patch("app.clients.notion_client.Client", return_value=mock_sdk):
 
-            mock_settings.notion_api_key = "secret_test"
-            mock_settings.notion_database_id = "db-uuid-123"
+            _mock_settings_with_ds(mock_settings)
 
             from app.clients.notion_client import NotionClient
             client = NotionClient()
@@ -235,8 +278,7 @@ class TestSyncToNotionIdempotent:
              patch("app.clients.notion_client.Client", return_value=mock_sdk), \
              patch("app.workers.notion_sync.SessionLocal", return_value=session):
 
-            mock_settings.notion_api_key = "secret_test"
-            mock_settings.notion_database_id = "db-uuid-123"
+            _mock_settings_with_ds(mock_settings)
 
             from app.workers.notion_sync import sync_to_notion
             sync_to_notion()
@@ -257,8 +299,7 @@ class TestSyncToNotionIdempotent:
              patch("app.clients.notion_client.Client", return_value=mock_sdk), \
              patch("app.workers.notion_sync.SessionLocal", return_value=session):
 
-            mock_settings.notion_api_key = "secret_test"
-            mock_settings.notion_database_id = "db-uuid-123"
+            _mock_settings_with_ds(mock_settings)
 
             from app.workers.notion_sync import sync_to_notion
             sync_to_notion()
@@ -276,8 +317,7 @@ class TestSyncToNotionIdempotent:
              patch("app.clients.notion_client.Client", return_value=mock_sdk), \
              patch("app.workers.notion_sync.SessionLocal", return_value=session):
 
-            mock_settings.notion_api_key = "secret_test"
-            mock_settings.notion_database_id = "db-uuid-123"
+            _mock_settings_with_ds(mock_settings)
 
             from app.workers.notion_sync import sync_to_notion
             sync_to_notion()
@@ -291,12 +331,13 @@ class TestSyncToNotionIdempotent:
 
 class TestPullApprovalsStateTransition:
     def _make_approved_page(self, listing_id: int, title_sel="variant-1", mockup_sel="variant-2") -> dict:
+        # Property names mirror the live Notion DB (" Selected Title" has a leading space)
         return {
             "id": "page-approved-001",
             "properties": {
                 "Status": {"select": {"name": "Approved"}},
                 "SQLite ID": {"number": listing_id},
-                "Selected Title": {"select": {"name": title_sel}},
+                " Selected Title": {"select": {"name": title_sel}},
                 "Selected Mockup": {"select": {"name": mockup_sel}},
             },
         }
@@ -310,14 +351,14 @@ class TestPullApprovalsStateTransition:
 
         page = self._make_approved_page(listing_id, title_sel="variant-2", mockup_sel="variant-3")
         mock_sdk = MagicMock()
-        mock_sdk.databases.query.return_value = {"results": [page], "has_more": False}
+        # New API: data_sources.query
+        mock_sdk.data_sources.query.return_value = {"results": [page], "has_more": False}
 
         with patch("app.clients.notion_client.settings") as mock_settings, \
              patch("app.clients.notion_client.Client", return_value=mock_sdk), \
              patch("app.workers.notion_sync.SessionLocal", return_value=session):
 
-            mock_settings.notion_api_key = "secret_test"
-            mock_settings.notion_database_id = "db-uuid-123"
+            _mock_settings_with_ds(mock_settings)
 
             from app.workers.notion_sync import pull_approvals
             pull_approvals()
@@ -353,14 +394,13 @@ class TestPullApprovalsStateTransition:
 
         page = self._make_approved_page(listing_id)
         mock_sdk = MagicMock()
-        mock_sdk.databases.query.return_value = {"results": [page], "has_more": False}
+        mock_sdk.data_sources.query.return_value = {"results": [page], "has_more": False}
 
         with patch("app.clients.notion_client.settings") as mock_settings, \
              patch("app.clients.notion_client.Client", return_value=mock_sdk), \
              patch("app.workers.notion_sync.SessionLocal", return_value=session):
 
-            mock_settings.notion_api_key = "secret_test"
-            mock_settings.notion_database_id = "db-uuid-123"
+            _mock_settings_with_ds(mock_settings)
 
             from app.workers.notion_sync import pull_approvals
             pull_approvals()
@@ -381,19 +421,18 @@ class TestPullApprovalsStateTransition:
             "properties": {
                 "Status": {"select": {"name": "Approved"}},
                 "SQLite ID": {"number": listing_id},
-                "Selected Title": {"select": None},   # not set
+                " Selected Title": {"select": None},   # not set (leading space matches live DB)
                 "Selected Mockup": {"select": {"name": "variant-1"}},
             },
         }
         mock_sdk = MagicMock()
-        mock_sdk.databases.query.return_value = {"results": [page], "has_more": False}
+        mock_sdk.data_sources.query.return_value = {"results": [page], "has_more": False}
 
         with patch("app.clients.notion_client.settings") as mock_settings, \
              patch("app.clients.notion_client.Client", return_value=mock_sdk), \
              patch("app.workers.notion_sync.SessionLocal", return_value=session):
 
-            mock_settings.notion_api_key = "secret_test"
-            mock_settings.notion_database_id = "db-uuid-123"
+            _mock_settings_with_ds(mock_settings)
 
             from app.workers.notion_sync import pull_approvals
             pull_approvals()
@@ -467,6 +506,7 @@ class TestReviewServiceValidation:
 
             mock_settings.notion_api_key = ""
             mock_settings.notion_database_id = ""
+            mock_settings.notion_data_source_id = ""
 
             from app.workers.notion_sync import sync_to_notion
             # Should not raise

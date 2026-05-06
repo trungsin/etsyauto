@@ -1,10 +1,9 @@
-"""Claude API wrapper — generates SEO title variants via Anthropic SDK."""
-import json
+"""Gemini text client — generates SEO title variants via google-genai SDK."""
 import logging
-import re
 from pathlib import Path
 
-import anthropic
+from google import genai
+from google.genai import types
 
 from app.config import settings
 
@@ -12,21 +11,36 @@ logger = logging.getLogger(__name__)
 
 PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "title_seo_prompt.md"
 PROMPT_VERSION = "v1"
-MODEL_ID = "claude-sonnet-4-6"
-MAX_TOKENS = 2048
+MODEL_ID = "gemini-2.5-flash"
 MAX_TITLE_CHARS = 140
+
+# Structured output schema for Gemini response_schema — enforces JSON shape
+_TITLE_VARIANT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "variants": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string"},
+                    "char_count": {"type": "integer"},
+                    "rationale": {"type": "string"},
+                    "target_keywords": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                },
+                "required": ["text", "char_count", "rationale", "target_keywords"],
+            },
+        }
+    },
+    "required": ["variants"],
+}
 
 
 def _load_prompt_template() -> str:
     return PROMPT_PATH.read_text(encoding="utf-8")
-
-
-def _strip_code_fences(text: str) -> str:
-    """Remove markdown code fences if Claude wraps JSON in them."""
-    text = text.strip()
-    text = re.sub(r"^```(?:json)?\s*", "", text)
-    text = re.sub(r"\s*```$", "", text)
-    return text.strip()
 
 
 def _truncate_to_limit(text: str, limit: int = MAX_TITLE_CHARS) -> str:
@@ -61,15 +75,18 @@ def _validate_variants(raw_variants: list[dict]) -> list[dict]:
     return validated
 
 
-class ClaudeClient:
-    """Thin wrapper around anthropic.Anthropic for title variant generation."""
+class GeminiTextClient:
+    """Wraps google-genai SDK for structured text generation (title variants)."""
 
-    def __init__(self) -> None:
-        self._client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+    def __init__(self, api_key: str | None = None) -> None:
+        key = api_key or settings.gemini_api_key
+        if not key:
+            raise ValueError("GEMINI_API_KEY is not configured")
+        self._client = genai.Client(api_key=key)
         self._prompt_template = _load_prompt_template()
 
     def generate_title_variants(self, listing_data: dict) -> list[dict]:
-        """Call Claude and return validated title variants.
+        """Call Gemini and return validated title variants.
 
         Args:
             listing_data: dict with keys original_title, description, tags, category.
@@ -78,40 +95,43 @@ class ClaudeClient:
             List of variant dicts: {text, char_count, rationale, target_keywords}.
 
         Raises:
-            ValueError: if response cannot be parsed or yields no valid variants.
+            ValueError: if response yields no valid variants.
+            google.genai.errors.APIError: on API-level errors.
         """
-        system_prompt = self._prompt_template.format(
+        prompt = self._prompt_template.format(
             original_title=listing_data.get("original_title", ""),
             description=listing_data.get("description", ""),
             tags=listing_data.get("tags", ""),
             category=listing_data.get("category", ""),
         )
 
-        response = self._client.messages.create(
+        response = self._client.models.generate_content(
             model=MODEL_ID,
-            max_tokens=MAX_TOKENS,
-            messages=[
-                {"role": "user", "content": "Generate the 3 title variants now."},
-            ],
-            system=system_prompt,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=_TITLE_VARIANT_SCHEMA,
+            ),
         )
 
         # Log token usage for cost tracking
-        usage = response.usage
-        logger.info(
-            "Claude token usage — input: %d, output: %d, model: %s",
-            usage.input_tokens,
-            usage.output_tokens,
-            MODEL_ID,
-        )
+        usage = response.usage_metadata
+        if usage:
+            logger.info(
+                "Gemini token usage — input: %s, output: %s, model: %s",
+                getattr(usage, "prompt_token_count", "?"),
+                getattr(usage, "candidates_token_count", "?"),
+                MODEL_ID,
+            )
 
-        raw_text = response.content[0].text
-        clean_text = _strip_code_fences(raw_text)
+        import json  # noqa: PLC0415 — deferred to avoid top-level import ordering noise
 
         try:
-            parsed = json.loads(clean_text)
-        except json.JSONDecodeError as exc:
-            raise ValueError(f"Claude response is not valid JSON: {exc}\n{clean_text}") from exc
+            parsed = json.loads(response.text)
+        except (json.JSONDecodeError, TypeError) as exc:
+            raise ValueError(
+                f"Gemini response is not valid JSON: {exc}\n{response.text!r}"
+            ) from exc
 
         raw_variants = parsed.get("variants")
         if not isinstance(raw_variants, list):

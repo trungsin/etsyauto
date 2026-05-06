@@ -1,6 +1,6 @@
-"""Tests for the Claude title optimizer worker (Phase 4).
+"""Tests for the Gemini title optimizer worker (Phase 4).
 
-All tests mock anthropic.Anthropic so no real API calls are made.
+All tests mock google.genai.Client so no real API calls are made.
 """
 import json
 from unittest.mock import MagicMock, patch
@@ -52,17 +52,14 @@ def _make_listing(session, status: str = "new") -> Listing:
 
 
 def _make_canned_response(variants: list[dict]) -> MagicMock:
-    """Build a mock anthropic response object with given variants."""
-    content_block = MagicMock()
-    content_block.text = json.dumps({"variants": variants})
-
+    """Build a mock google-genai response object with given variants."""
     usage = MagicMock()
-    usage.input_tokens = 300
-    usage.output_tokens = 200
+    usage.prompt_token_count = 300
+    usage.candidates_token_count = 200
 
     response = MagicMock()
-    response.content = [content_block]
-    response.usage = usage
+    response.text = json.dumps({"variants": variants})
+    response.usage_metadata = usage
     return response
 
 
@@ -99,12 +96,11 @@ class TestHappyPath:
 
         canned_resp = _make_canned_response(_CANNED_VARIANTS)
 
-        with patch("app.clients.claude_client.anthropic.Anthropic") as MockAnthropic:
-            MockAnthropic.return_value.messages.create.return_value = canned_resp
+        with patch("app.clients.gemini_text_client.genai.Client") as MockGenai:
+            MockGenai.return_value.models.generate_content.return_value = canned_resp
 
             # Patch SessionLocal to use our test session factory
             with patch("app.workers.title_optimizer.SessionLocal", return_value=session):
-                # Re-open session after patch since worker closes it
                 from app.workers.title_optimizer import run_title_optimizer_job
                 run_title_optimizer_job()
 
@@ -118,7 +114,7 @@ class TestHappyPath:
         for v in variants:
             assert v.char_count == len(v.text)
             assert v.char_count <= 140
-            assert v.model == "claude-sonnet-4-6"
+            assert v.model == "gemini-2.5-flash"
             assert v.prompt_version == "v1"
 
 
@@ -128,7 +124,7 @@ class TestHappyPath:
 
 class TestCharLimitTruncation:
     def test_over_limit_variant_is_truncated(self):
-        from app.clients.claude_client import _validate_variants, _truncate_to_limit
+        from app.clients.gemini_text_client import _validate_variants, _truncate_to_limit
 
         long_text = "A" * 100 + ", " + "B" * 50  # 152 chars
         variants = [{"text": long_text, "char_count": len(long_text), "rationale": "test"}]
@@ -139,7 +135,7 @@ class TestCharLimitTruncation:
         assert result[0]["char_count"] == len(result[0]["text"])
 
     def test_truncate_prefers_last_comma(self):
-        from app.clients.claude_client import _truncate_to_limit
+        from app.clients.gemini_text_client import _truncate_to_limit
 
         text = "Keyword One, Keyword Two, " + "X" * 120  # well over 140
         result = _truncate_to_limit(text)
@@ -148,7 +144,7 @@ class TestCharLimitTruncation:
         assert not result.endswith(",")
 
     def test_exactly_140_chars_passes_unchanged(self):
-        from app.clients.claude_client import _validate_variants
+        from app.clients.gemini_text_client import _validate_variants
 
         text = "A" * 140
         variants = [{"text": text, "char_count": 140, "rationale": "exact"}]
@@ -168,8 +164,8 @@ class TestIdempotency:
 
         canned_resp = _make_canned_response(_CANNED_VARIANTS)
 
-        with patch("app.clients.claude_client.anthropic.Anthropic") as MockAnthropic:
-            MockAnthropic.return_value.messages.create.return_value = canned_resp
+        with patch("app.clients.gemini_text_client.genai.Client") as MockGenai:
+            MockGenai.return_value.models.generate_content.return_value = canned_resp
 
             with patch("app.workers.title_optimizer.SessionLocal", return_value=session):
                 from app.workers.title_optimizer import run_title_optimizer_job
@@ -180,8 +176,8 @@ class TestIdempotency:
         session.commit()
 
         # Run again — variants already exist, idempotency guard should skip insert
-        with patch("app.clients.claude_client.anthropic.Anthropic") as MockAnthropic2:
-            MockAnthropic2.return_value.messages.create.return_value = canned_resp
+        with patch("app.clients.gemini_text_client.genai.Client") as MockGenai2:
+            MockGenai2.return_value.models.generate_content.return_value = canned_resp
 
             with patch("app.workers.title_optimizer.SessionLocal", return_value=session):
                 run_title_optimizer_job()

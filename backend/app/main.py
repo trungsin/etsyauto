@@ -22,7 +22,11 @@ logger = logging.getLogger(__name__)
 
 
 def _validate_notion_schema() -> None:
-    """Best-effort Notion DB schema check on startup — logs warning, never blocks."""
+    """Best-effort Notion DB schema check on startup — logs warning, never blocks.
+
+    Skips validation gracefully when NOTION_DATA_SOURCE_ID is not set (no-op,
+    same behavior as missing API key — sync jobs will warn at runtime).
+    """
     try:
         from app.clients.notion_client import NotionClient
         client = NotionClient()

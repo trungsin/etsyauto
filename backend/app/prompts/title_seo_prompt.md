@@ -15,6 +15,3 @@ Listing:
 - Description: {description}
 - Tags: {tags}
 - Shop section / category: {category}
-
-Output strictly valid JSON (no markdown fences, no extra text):
-{{"variants": [{{"text": "...", "char_count": N, "rationale": "...", "target_keywords": ["..."]}}]}}

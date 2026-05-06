@@ -17,13 +17,13 @@ class Settings(BaseSettings):
     etsy_scope: str = "listings_r listings_w"
 
     # AI providers
-    anthropic_api_key: str = ""
     removebg_api_key: str = ""
     gemini_api_key: str = ""
 
     # Notion integration
     notion_api_key: str = ""
     notion_database_id: str = ""
+    notion_data_source_id: str = ""
 
     # Cloudflare R2
     r2_account_id: str = ""
