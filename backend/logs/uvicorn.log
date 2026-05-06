@@ -1,0 +1,60 @@
+INFO:     Started server process [2775428]
+INFO:     Waiting for application startup.
+2026-05-06 07:38:04,517 [INFO] httpx: HTTP Request: GET https://api.notion.com/v1/data_sources/35856d1ae62b80659be9000b6503f1a2 "HTTP/1.1 200 OK"
+2026-05-06 07:38:04,518 [INFO] app.clients.notion_client: Notion DB schema validated OK
+2026-05-06 07:38:05,504 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-05-06 07:38:05,504 [INFO] app.scheduler: Registered job: title_optimizer (interval=30s)
+2026-05-06 07:38:05,504 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-05-06 07:38:05,504 [INFO] app.scheduler: Registered job: mockup_pipeline (interval=60s)
+2026-05-06 07:38:05,504 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-05-06 07:38:05,504 [INFO] app.scheduler: Registered job: sync_to_notion (interval=30s)
+2026-05-06 07:38:05,504 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-05-06 07:38:05,504 [INFO] app.scheduler: Registered job: pull_approvals (interval=60s)
+2026-05-06 07:38:05,505 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-05-06 07:38:05,505 [INFO] app.scheduler: Registered job: etsy_uploader (interval=600s)
+2026-05-06 07:38:05,505 [INFO] apscheduler.scheduler: Added job "run_title_optimizer_job" to job store "default"
+2026-05-06 07:38:05,505 [INFO] apscheduler.scheduler: Added job "run_mockup_pipeline_job" to job store "default"
+2026-05-06 07:38:05,505 [INFO] apscheduler.scheduler: Added job "sync_to_notion" to job store "default"
+2026-05-06 07:38:05,505 [INFO] apscheduler.scheduler: Added job "pull_approvals" to job store "default"
+2026-05-06 07:38:05,505 [INFO] apscheduler.scheduler: Added job "run_etsy_uploader_job" to job store "default"
+2026-05-06 07:38:05,505 [INFO] apscheduler.scheduler: Scheduler started
+2026-05-06 07:38:05,506 [INFO] app.scheduler: Scheduler started
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8787 (Press CTRL+C to quit)
+2026-05-06 07:38:35,505 [INFO] apscheduler.executors.default: Running job "run_title_optimizer_job (trigger: interval[0:00:30], next run at: 2026-05-06 07:38:35 UTC)" (scheduled at 2026-05-06 07:38:35.503902+00:00)
+2026-05-06 07:38:35,511 [INFO] apscheduler.executors.default: Running job "sync_to_notion (trigger: interval[0:00:30], next run at: 2026-05-06 07:38:35 UTC)" (scheduled at 2026-05-06 07:38:35.504300+00:00)
+2026-05-06 07:38:35,526 [INFO] app.workers.title_optimizer: Title optimizer: found 1 pending listing(s)
+2026-05-06 07:38:35,530 [INFO] apscheduler.executors.default: Job "sync_to_notion (trigger: interval[0:00:30], next run at: 2026-05-06 07:39:05 UTC)" executed successfully
+2026-05-06 07:38:35,632 [INFO] google_genai.models: AFC is enabled with max remote calls: 10.
+2026-05-06 07:38:48,303 [INFO] httpx: HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2026-05-06 07:38:48,307 [INFO] app.clients.gemini_text_client: Gemini token usage — input: 203, output: 396, model: gemini-2.5-flash
+2026-05-06 07:38:48,325 [INFO] app.services.listing_service: Saved 3 title variants for listing 2
+2026-05-06 07:38:48,362 [INFO] app.services.listing_service: Listing 2 title done → status=review
+2026-05-06 07:38:48,362 [INFO] app.workers.title_optimizer: Listing 2 title optimization complete (3 variants)
+2026-05-06 07:38:48,366 [INFO] apscheduler.executors.default: Job "run_title_optimizer_job (trigger: interval[0:00:30], next run at: 2026-05-06 07:39:05 UTC)" executed successfully
+2026-05-06 07:39:05,505 [INFO] apscheduler.executors.default: Running job "run_title_optimizer_job (trigger: interval[0:00:30], next run at: 2026-05-06 07:39:35 UTC)" (scheduled at 2026-05-06 07:39:05.503902+00:00)
+2026-05-06 07:39:05,505 [INFO] apscheduler.executors.default: Running job "run_mockup_pipeline_job (trigger: interval[0:01:00], next run at: 2026-05-06 07:40:05 UTC)" (scheduled at 2026-05-06 07:39:05.504168+00:00)
+2026-05-06 07:39:05,505 [INFO] apscheduler.executors.default: Running job "sync_to_notion (trigger: interval[0:00:30], next run at: 2026-05-06 07:39:35 UTC)" (scheduled at 2026-05-06 07:39:05.504300+00:00)
+2026-05-06 07:39:05,507 [INFO] apscheduler.executors.default: Running job "pull_approvals (trigger: interval[0:01:00], next run at: 2026-05-06 07:40:05 UTC)" (scheduled at 2026-05-06 07:39:05.504413+00:00)
+2026-05-06 07:39:05,508 [INFO] apscheduler.executors.default: Job "run_mockup_pipeline_job (trigger: interval[0:01:00], next run at: 2026-05-06 07:40:05 UTC)" executed successfully
+2026-05-06 07:39:05,512 [INFO] app.workers.notion_sync: sync_to_notion: 1 listing(s) to sync
+2026-05-06 07:39:05,509 [INFO] apscheduler.executors.default: Job "run_title_optimizer_job (trigger: interval[0:00:30], next run at: 2026-05-06 07:39:35 UTC)" executed successfully
+2026-05-06 07:39:06,037 [INFO] httpx: HTTP Request: POST https://api.notion.com/v1/data_sources/35856d1ae62b80659be9000b6503f1a2/query "HTTP/1.1 200 OK"
+2026-05-06 07:39:06,038 [INFO] apscheduler.executors.default: Job "pull_approvals (trigger: interval[0:01:00], next run at: 2026-05-06 07:40:05 UTC)" executed successfully
+2026-05-06 07:39:06,167 [INFO] httpx: HTTP Request: POST https://api.notion.com/v1/pages "HTTP/1.1 200 OK"
+2026-05-06 07:39:06,168 [INFO] app.clients.notion_client: Created Notion review page 35856d1a-e62b-8158-a462-c1b24df28376 for listing 2
+2026-05-06 07:39:06,183 [INFO] app.workers.notion_sync: sync_to_notion: listing 2 → Notion page 35856d1a-e62b-8158-a462-c1b24df28376
+2026-05-06 07:39:06,183 [INFO] apscheduler.executors.default: Job "sync_to_notion (trigger: interval[0:00:30], next run at: 2026-05-06 07:39:35 UTC)" executed successfully
+2026-05-06 07:39:35,505 [INFO] apscheduler.executors.default: Running job "run_title_optimizer_job (trigger: interval[0:00:30], next run at: 2026-05-06 07:40:05 UTC)" (scheduled at 2026-05-06 07:39:35.503902+00:00)
+2026-05-06 07:39:35,506 [INFO] apscheduler.executors.default: Running job "sync_to_notion (trigger: interval[0:00:30], next run at: 2026-05-06 07:40:05 UTC)" (scheduled at 2026-05-06 07:39:35.504300+00:00)
+2026-05-06 07:39:35,508 [INFO] apscheduler.executors.default: Job "run_title_optimizer_job (trigger: interval[0:00:30], next run at: 2026-05-06 07:40:05 UTC)" executed successfully
+2026-05-06 07:39:35,523 [INFO] apscheduler.executors.default: Job "sync_to_notion (trigger: interval[0:00:30], next run at: 2026-05-06 07:40:05 UTC)" executed successfully
+2026-05-06 07:40:05,504 [INFO] apscheduler.executors.default: Running job "run_title_optimizer_job (trigger: interval[0:00:30], next run at: 2026-05-06 07:40:35 UTC)" (scheduled at 2026-05-06 07:40:05.503902+00:00)
+2026-05-06 07:40:05,505 [INFO] apscheduler.executors.default: Running job "run_mockup_pipeline_job (trigger: interval[0:01:00], next run at: 2026-05-06 07:41:05 UTC)" (scheduled at 2026-05-06 07:40:05.504168+00:00)
+2026-05-06 07:40:05,506 [INFO] apscheduler.executors.default: Running job "sync_to_notion (trigger: interval[0:00:30], next run at: 2026-05-06 07:40:35 UTC)" (scheduled at 2026-05-06 07:40:05.504300+00:00)
+2026-05-06 07:40:05,507 [INFO] apscheduler.executors.default: Job "run_title_optimizer_job (trigger: interval[0:00:30], next run at: 2026-05-06 07:40:35 UTC)" executed successfully
+2026-05-06 07:40:05,507 [INFO] apscheduler.executors.default: Job "run_mockup_pipeline_job (trigger: interval[0:01:00], next run at: 2026-05-06 07:41:05 UTC)" executed successfully
+2026-05-06 07:40:05,507 [INFO] apscheduler.executors.default: Running job "pull_approvals (trigger: interval[0:01:00], next run at: 2026-05-06 07:41:05 UTC)" (scheduled at 2026-05-06 07:40:05.504413+00:00)
+2026-05-06 07:40:05,510 [INFO] apscheduler.executors.default: Job "sync_to_notion (trigger: interval[0:00:30], next run at: 2026-05-06 07:40:35 UTC)" executed successfully
+2026-05-06 07:40:05,879 [INFO] httpx: HTTP Request: POST https://api.notion.com/v1/data_sources/35856d1ae62b80659be9000b6503f1a2/query "HTTP/1.1 200 OK"
+2026-05-06 07:40:05,880 [INFO] apscheduler.executors.default: Job "pull_approvals (trigger: interval[0:01:00], next run at: 2026-05-06 07:41:05 UTC)" executed successfully

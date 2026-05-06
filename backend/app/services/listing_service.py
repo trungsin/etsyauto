@@ -5,6 +5,7 @@ import logging
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.models.listing import Listing
 from app.models.mockup_variant import MockupVariant
 from app.models.title_variant import TitleVariant
@@ -66,13 +67,19 @@ def save_title_variants(session: Session, listing_id: int, variants: list[dict])
 
 
 def mark_title_done(session: Session, listing_id: int) -> None:
-    """Transition listing status to 'mockup-pending'."""
+    """Transition listing status after title generation.
+
+    If mockup pipeline is enabled → 'mockup-pending' (next stage).
+    Otherwise → 'review' directly (skip mockup, title-only flow).
+    """
+    next_status = "mockup-pending" if settings.enable_mockup else "review"
     session.execute(
         update(Listing)
         .where(Listing.id == listing_id)
-        .values(status="mockup-pending")
+        .values(status=next_status)
     )
     session.commit()
+    logger.info("Listing %d title done → status=%s", listing_id, next_status)
 
 
 def get_pending_for_mockup(session: Session) -> list[Listing]:
@@ -148,7 +155,8 @@ def try_promote_to_review(session: Session, listing_id: int) -> bool:
         .count()
     )
 
-    if title_count >= 3 and mockup_count >= 3:
+    mockup_required = settings.enable_mockup
+    if title_count >= 3 and (not mockup_required or mockup_count >= 3):
         session.execute(
             update(Listing)
             .where(Listing.id == listing_id)

@@ -90,7 +90,9 @@ _CANNED_VARIANTS = [
 # ---------------------------------------------------------------------------
 
 class TestHappyPath:
-    def test_run_job_saves_variants_and_transitions_status(self, session):
+    def test_run_job_saves_variants_and_transitions_status(self, session, monkeypatch):
+        # Test mockup-enabled flow: status should advance to 'mockup-pending'
+        monkeypatch.setattr("app.services.listing_service.settings.enable_mockup", True)
         listing = _make_listing(session)
         listing_id = listing.id
 

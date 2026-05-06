@@ -1,6 +1,6 @@
-"""Tests for Phase 5: mockup pipeline (remove.bg + Gemini Imagen).
+"""Tests for Phase 5: mockup pipeline (remove.bg + Imagen-4 background + Pillow composite).
 
-All tests mock httpx and google-genai — no real API calls.
+All tests mock httpx, google-genai, and image_composite — no real API calls.
 """
 import io
 import json
@@ -23,6 +23,14 @@ from app.models.title_variant import TitleVariant
 _TEST_DB_URL = "sqlite:///:memory:"
 _engine = create_engine(_TEST_DB_URL, connect_args={"check_same_thread": False})
 _Session = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
+
+
+@pytest.fixture(autouse=True)
+def _enable_mockup(monkeypatch):
+    """Force enable_mockup=True for all mockup pipeline tests (default is False)."""
+    monkeypatch.setattr("app.config.settings.enable_mockup", True)
+    monkeypatch.setattr("app.services.listing_service.settings.enable_mockup", True)
+    monkeypatch.setattr("app.workers.mockup_pipeline.settings.enable_mockup", True)
 
 
 @pytest.fixture(autouse=True)
@@ -99,22 +107,13 @@ def _mock_download_response(png_bytes: bytes) -> MagicMock:
     return resp
 
 
-def _mock_gemini_response(png_bytes: bytes) -> MagicMock:
-    """Build a fake google-genai GenerateContentResponse with one image part."""
-    import base64
-    part = MagicMock()
-    part.inline_data = MagicMock()
-    part.inline_data.data = base64.b64encode(png_bytes).decode()
-    part.text = None
-
-    content = MagicMock()
-    content.parts = [part]
-
-    candidate = MagicMock()
-    candidate.content = content
+def _mock_imagen_response(png_bytes: bytes) -> MagicMock:
+    """Build a fake google-genai GenerateImagesResponse with one generated image."""
+    generated_image = MagicMock()
+    generated_image.image.image_bytes = png_bytes
 
     response = MagicMock()
-    response.candidates = [candidate]
+    response.generated_images = [generated_image]
     return response
 
 
@@ -124,7 +123,7 @@ def _mock_gemini_response(png_bytes: bytes) -> MagicMock:
 
 class TestHappyPath:
     def test_three_variants_saved_and_promoted_to_review(self, session, tmp_path):
-        """Full pipeline: download → remove.bg → 3 Gemini scenes → 3 mockup_variants + review."""
+        """Full pipeline: download → remove.bg → 3 Imagen backgrounds → composite → 3 mockup_variants + review."""
         listing = _make_listing(session)
         listing_id = listing.id
         _add_title_variants(session, listing_id, count=3)
@@ -133,14 +132,15 @@ class TestHappyPath:
 
         with patch("app.services.image_service.settings") as mock_settings, \
              patch("app.clients.removebg_client.settings") as mock_rb_settings, \
-             patch("app.clients.gemini_imagen_client.settings") as mock_gem_settings, \
+             patch("app.clients.imagen_client.settings") as mock_img_settings, \
              patch("httpx.Client") as MockHttpxClient, \
-             patch("google.genai.Client") as MockGenaiClient:
+             patch("google.genai.Client") as MockGenaiClient, \
+             patch("app.workers.mockup_pipeline.composite_cutout_on_background", return_value=png):
 
             # Configure settings
             mock_settings.static_dir = str(tmp_path)
             mock_rb_settings.removebg_api_key = "test-rb-key"
-            mock_gem_settings.gemini_api_key = "test-gem-key"
+            mock_img_settings.gemini_api_key = "test-img-key"
 
             # httpx client used for both download and remove.bg
             mock_http_instance = MagicMock()
@@ -150,10 +150,10 @@ class TestHappyPath:
             mock_http_instance.post.return_value = _mock_removebg_response(png)
             MockHttpxClient.return_value = mock_http_instance
 
-            # Gemini client
+            # Imagen client: mock generate_images
             mock_genai_instance = MagicMock()
             MockGenaiClient.return_value = mock_genai_instance
-            mock_genai_instance.models.generate_content.return_value = _mock_gemini_response(png)
+            mock_genai_instance.models.generate_images.return_value = _mock_imagen_response(png)
 
             with patch("app.workers.mockup_pipeline.SessionLocal", return_value=session):
                 from app.workers.mockup_pipeline import run_mockup_pipeline_job
@@ -330,13 +330,13 @@ class TestDownloadFailure:
 
         with patch("app.services.image_service.settings") as mock_settings, \
              patch("app.clients.removebg_client.settings") as mock_rb_settings, \
-             patch("app.clients.gemini_imagen_client.settings") as mock_gem_settings, \
+             patch("app.clients.imagen_client.settings") as mock_img_settings, \
              patch("httpx.Client") as MockHttpxClient, \
              patch("google.genai.Client"):
 
             mock_settings.static_dir = str(tmp_path)
             mock_rb_settings.removebg_api_key = "test-rb-key"
-            mock_gem_settings.gemini_api_key = "test-gem-key"
+            mock_img_settings.gemini_api_key = "test-img-key"
 
             mock_http_instance = MagicMock()
             mock_http_instance.__enter__ = MagicMock(return_value=mock_http_instance)

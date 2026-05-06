@@ -1,22 +1,22 @@
 {
   "default": [
-    "On rustic wooden table, soft morning light, lifestyle photo, shallow depth of field",
-    "Studio shot on white marble, soft shadow, e-commerce product photography",
-    "Cozy living room background, warm lighting, scandinavian style"
+    "Empty rustic wooden table with soft morning light, photorealistic background, shallow depth of field, no objects on the surface",
+    "White marble studio backdrop with soft directional shadow, e-commerce product photography background, empty composition",
+    "Cozy scandinavian living room background, warm lighting, empty foreground, blurred bookshelf"
   ],
   "apparel": [
-    "On model in urban street, candid lifestyle, golden hour",
-    "Flat lay on linen fabric with accessories, editorial",
-    "Minimal studio with pastel backdrop"
+    "Urban street background, candid lifestyle setting, golden hour lighting, empty foreground",
+    "Flat linen fabric surface with scattered dried flowers, editorial photography background",
+    "Minimal studio with soft pastel backdrop, empty composition"
   ],
   "jewelry": [
-    "On velvet display surface, dramatic side lighting, luxury product photography",
-    "Flat lay on marble with dried flowers, soft natural light, editorial",
-    "Worn on hand or neck, lifestyle close-up, warm skin tones"
+    "Dark velvet display surface, dramatic side lighting, luxury product photography background, empty",
+    "White marble surface with dried flowers and soft natural light, editorial background, no objects",
+    "Warm lifestyle background with soft skin-tone bokeh, close-up depth of field"
   ],
   "print": [
-    "Framed on a white gallery wall, minimalist interior, natural light",
-    "Flat lay on wooden desk with stationery props, overhead shot",
-    "Mockup in cozy reading nook, warm lamp light, lifestyle setting"
+    "White gallery wall in minimalist interior, natural light, empty frame area",
+    "Wooden desk with stationery props, overhead flat lay background, empty center",
+    "Cozy reading nook with warm lamp light, lifestyle setting, empty foreground"
   ]
 }

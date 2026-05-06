@@ -60,5 +60,16 @@ def _process_listing(session, client: GeminiTextClient, listing) -> None:
         logger.info("Listing %d title optimization complete (%d variants)", listing_id, len(variants))
 
     except Exception as exc:  # noqa: BLE001 — per-listing isolation, must not crash job
-        logger.exception("Title optimization failed for listing %d: %s", listing_id, exc)
-        listing_service.mark_title_failed(session, listing_id, str(exc))
+        # Gemini 503/429 are transient — revert to 'new' for retry next tick.
+        # Only mark failed for non-retriable errors (validation, auth, etc.).
+        msg = str(exc)
+        is_transient = any(s in msg for s in ("503", "UNAVAILABLE", "429", "RESOURCE_EXHAUSTED"))
+        if is_transient:
+            logger.warning("Listing %d transient error — reverting to 'new' for retry: %s", listing_id, msg[:200])
+            from sqlalchemy import update as _update  # noqa: PLC0415
+            from app.models.listing import Listing as _Listing  # noqa: PLC0415
+            session.execute(_update(_Listing).where(_Listing.id == listing_id).values(status="new"))
+            session.commit()
+        else:
+            logger.exception("Title optimization failed for listing %d: %s", listing_id, exc)
+            listing_service.mark_title_failed(session, listing_id, msg)

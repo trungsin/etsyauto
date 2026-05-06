@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     static_dir: str = "./static"
     # Admin API protection — set in .env to enable /admin/* endpoints
     admin_token: str = ""
+    # Feature flag — disable mockup pipeline (Imagen/Nano Banana require paid billing).
+    # When False, listings skip mockup stage and go straight from title-done → review.
+    enable_mockup: bool = False
 
 
 # Singleton — import this throughout the app

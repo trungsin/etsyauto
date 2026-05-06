@@ -9,7 +9,7 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-_MODEL_ID = "gemini-2.5-flash-preview-05-20"
+_MODEL_ID = "gemini-2.5-flash-image"
 _SCENE_INSTRUCTION = (
     "Place this product in the following scene: {scene}. "
     "Photorealistic, soft shadow, keep the product proportions intact. "

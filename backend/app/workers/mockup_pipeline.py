@@ -1,18 +1,20 @@
-"""Mockup pipeline worker — APScheduler job: remove.bg + Gemini scene replacement."""
+"""Mockup pipeline worker — APScheduler job: remove.bg + Imagen-4 background + Pillow composite."""
 import json
 import logging
 from pathlib import Path
 
-from app.clients.gemini_imagen_client import GeminiImagenClient
+from app.clients.imagen_client import ImagenClient
 from app.clients.removebg_client import RemoveBgClient
+from app.config import settings
 from app.database import SessionLocal
 from app.services import listing_service
+from app.services.image_composite import composite_cutout_on_background
 from app.services.image_service import download_image, resize_if_needed, save_to_static, upload_to_r2
 
 logger = logging.getLogger(__name__)
 
 _PROMPTS_PATH = Path(__file__).parent.parent / "prompts" / "scene_prompts.json"
-_GEMINI_MODEL = "gemini-2.5-flash-preview-05-20"
+_IMAGEN_MODEL = "imagen-4.0-fast"
 
 
 def _load_scene_prompts(category: str = "default") -> list[str]:
@@ -26,7 +28,12 @@ def run_mockup_pipeline_job() -> None:
 
     Each listing is claimed atomically. Errors per listing are caught so one
     failure does not abort the whole batch.
+
+    Disabled when settings.enable_mockup is False (paid Imagen/Nano Banana
+    not enabled — title-only flow).
     """
+    if not settings.enable_mockup:
+        return
     session = SessionLocal()
     try:
         pending = listing_service.get_pending_for_mockup(session)
@@ -36,16 +43,16 @@ def run_mockup_pipeline_job() -> None:
         logger.info("Mockup pipeline: found %d pending listing(s)", len(pending))
 
         removebg = RemoveBgClient()
-        gemini = GeminiImagenClient()
+        imagen = ImagenClient()
         scene_prompts = _load_scene_prompts("default")
 
         for listing in pending:
-            _process_listing(session, removebg, gemini, scene_prompts, listing)
+            _process_listing(session, removebg, imagen, scene_prompts, listing)
     finally:
         session.close()
 
 
-def _process_listing(session, removebg: RemoveBgClient, gemini: GeminiImagenClient,
+def _process_listing(session, removebg: RemoveBgClient, imagen: ImagenClient,
                      scene_prompts: list[str], listing) -> None:
     """Claim and process one listing; log errors without re-raising."""
     listing_id = listing.id
@@ -74,11 +81,12 @@ def _process_listing(session, removebg: RemoveBgClient, gemini: GeminiImagenClie
         cutout_bytes = removebg.remove_bg(raw_bytes)
         cutout_path = save_to_static(cutout_bytes, ext="png")
 
-        # Step 2: generate 3 scene variants
+        # Step 2: generate 3 scene variants via Imagen-4 background + Pillow composite
         variants: list[dict] = []
         for scene_prompt in scene_prompts:
-            logger.info("Listing %d: generating scene %r", listing_id, scene_prompt[:50])
-            scene_bytes = gemini.generate_scene(cutout_bytes, scene_prompt)
+            logger.info("Listing %d: generating background %r", listing_id, scene_prompt[:50])
+            bg_bytes = imagen.generate_background(scene_prompt)
+            scene_bytes = composite_cutout_on_background(cutout_bytes, bg_bytes)
             scene_bytes = resize_if_needed(scene_bytes, max_mb=4)
             final_path = save_to_static(scene_bytes, ext="png")
 
@@ -95,7 +103,7 @@ def _process_listing(session, removebg: RemoveBgClient, gemini: GeminiImagenClie
                 "final_image_path": final_path,
                 "final_image_url": final_url,
                 "scene_prompt": scene_prompt,
-                "model": _GEMINI_MODEL,
+                "model": _IMAGEN_MODEL,
             })
 
         listing_service.save_mockup_variants(session, listing_id, variants)
