@@ -112,6 +112,78 @@ sequenceDiagram
     EU->>DB: UPDATE status='pushed', pushed_at=now()
 ```
 
+## Template System Flow (Sub-feature B)
+
+```mermaid
+sequenceDiagram
+    participant Admin as Admin (curl / Browser UI)
+    participant API as FastAPI :8787
+    participant DB as SQLite
+    participant Pillow as Pillow Service
+    participant R2 as Cloudflare R2
+
+    Note over Admin,R2: 1. Upload product blank template
+
+    Admin->>API: POST /templates (multipart: name, category, anchor, base_image)
+    API->>API: Validate anchor values in [0,1]
+    API->>R2: PUT templates/{uuid}.png
+    R2-->>API: public URL
+    API->>DB: INSERT templates (name, category, base_image_url, composite_anchor_json)
+    API-->>Admin: 201 {id, name, base_image_url, composite_anchor}
+
+    Note over Admin,R2: 2. Add variations matrix (3 sizes × 2 colors = 6 rows)
+
+    Admin->>API: POST /templates/{id}/variations {variations: [{size,color,price_cents}×6]}
+    API->>API: Validate count ≤ 30, unique (size,color) pairs
+    API->>DB: DELETE old variations WHERE template_id={id}
+    API->>DB: INSERT new variations (×6)
+    API-->>Admin: 200 {template_id, variations: [...×6]}
+
+    Note over Admin,R2: 3. Upload design artwork (RGBA PNG)
+
+    Admin->>API: POST /designs (multipart: name, source_type, file)
+    API->>API: Validate PNG + alpha channel, size ≤ 10MB
+    API->>R2: PUT designs/{uuid}.png
+    R2-->>API: public URL
+    API->>DB: INSERT designs (name, source_type, file_url, width, height)
+    API-->>Admin: 201 {id, name, source_type, file_url, width, height}
+
+    Note over Admin,R2: 4. Generate composite preview (Pillow alpha-paste)
+
+    Admin->>API: POST /composite/preview {template_id, design_id}
+    API->>DB: SELECT template WHERE id={template_id}
+    API->>DB: SELECT design WHERE id={design_id}
+    API->>API: Reject if design.source_type == reference_only
+    API->>R2: HEAD composites/{template_id}-{design_id}.png (cache check)
+    alt Cache HIT
+        R2-->>API: Object exists → return public URL
+        API-->>Admin: 200 {composite_url, cached: true}
+    else Cache MISS
+        API->>R2: GET base_image_url (download template PNG)
+        R2-->>API: template bytes
+        API->>R2: GET design.file_url (download design PNG)
+        R2-->>API: design bytes
+        API->>Pillow: composite_with_anchor(base, design, anchor)
+        Pillow->>Pillow: Resize design to anchor region (LANCZOS)
+        Pillow->>Pillow: Image.alpha_composite(base, design_layer)
+        Pillow-->>API: composite PNG bytes
+        API->>R2: PUT composites/{template_id}-{design_id}.png
+        R2-->>API: public URL
+        API-->>Admin: 200 {composite_url, cached: false}
+    end
+
+    Note over Admin,R2: 5. Cache invalidation on template update
+
+    Admin->>API: PUT /templates/{id} {default_price_cents: 3000}
+    API->>DB: UPDATE templates SET default_price_cents=3000
+    API->>R2: LIST composites/{id}-*.png
+    R2-->>API: [{key: "composites/{id}-{design_id}.png"}]
+    loop for each cached composite key
+        API->>R2: DELETE composites/{id}-{design_id}.png
+    end
+    API-->>Admin: 200 {id, default_price_cents: 3000, ...}
+```
+
 ## Status State Machine
 
 ```mermaid

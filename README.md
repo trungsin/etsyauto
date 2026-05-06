@@ -112,6 +112,7 @@ FastAPI · SQLite · APScheduler · Anthropic Claude Sonnet 4.6 · remove.bg · 
 |-----|-------------|
 | [Project Overview (PDR)](docs/project-overview-pdr.md) | Problem statement, decisions, cost breakdown |
 | [System Architecture](docs/system-architecture.md) | Diagrams: components, sequence, state machine, DB schema |
+| [Template System Guide](docs/template-system-guide.md) | Setup, admin UI walkthrough, API reference, anchor convention, troubleshooting |
 | [Deployment Guide](docs/deployment-guide.md) | Full setup from scratch, API key registration |
 | [Notion DB Setup](docs/notion-db-setup.md) | Notion database creation and review workflow |
 | [Troubleshooting](docs/troubleshooting.md) | 9 common errors with diagnosis and fixes |
@@ -126,7 +127,7 @@ FastAPI · SQLite · APScheduler · Anthropic Claude Sonnet 4.6 · remove.bg · 
 
 ```bash
 cd backend && uv run pytest -v
-# 78 tests, < 10 seconds
+# 125 tests, < 35 seconds
 ```
 
 ---

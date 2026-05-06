@@ -1,0 +1,67 @@
+/* EtsyAuto Admin — minimal styling */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body { font-family: system-ui, sans-serif; background: #f5f5f5; color: #222; }
+
+/* Nav */
+.nav { background: #1a1a2e; color: #fff; padding: 0 1.5rem; display: flex;
+       align-items: center; gap: 1.5rem; height: 52px; }
+.nav-brand { color: #fff; font-weight: 700; font-size: 1.1rem; text-decoration: none; }
+.nav-links { list-style: none; display: flex; gap: 1rem; }
+.nav-links a { color: #ccc; text-decoration: none; font-size: 0.9rem; }
+.nav-links a:hover { color: #fff; }
+
+/* Layout */
+.container { max-width: 1000px; margin: 2rem auto; padding: 0 1rem; }
+
+/* Page header */
+.page-header { display: flex; justify-content: space-between; align-items: center;
+               margin-bottom: 1.5rem; }
+.page-header h1 { font-size: 1.6rem; }
+
+/* Buttons */
+.btn { display: inline-block; padding: 0.45rem 1rem; border-radius: 6px; font-size: 0.875rem;
+       font-weight: 500; border: none; cursor: pointer; text-decoration: none; }
+.btn-primary  { background: #4f46e5; color: #fff; }
+.btn-primary:hover  { background: #4338ca; }
+.btn-secondary { background: #e5e7eb; color: #374151; }
+.btn-secondary:hover { background: #d1d5db; }
+.btn-danger   { background: #ef4444; color: #fff; }
+.btn-danger:hover   { background: #dc2626; }
+.btn-sm { padding: 0.3rem 0.7rem; font-size: 0.8rem; }
+
+/* Table */
+.table { width: 100%; border-collapse: collapse; background: #fff;
+         border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+.table th { background: #f9fafb; text-align: left; padding: 0.75rem 1rem;
+            font-size: 0.8rem; text-transform: uppercase; color: #6b7280; }
+.table td { padding: 0.75rem 1rem; border-top: 1px solid #f0f0f0; vertical-align: middle; }
+.table tr:hover td { background: #fafafa; }
+.thumb { width: 64px; height: 64px; object-fit: cover; border-radius: 4px; }
+.badge { background: #e0e7ff; color: #3730a3; padding: 0.2rem 0.6rem;
+         border-radius: 99px; font-size: 0.78rem; font-weight: 500; }
+
+/* Empty state */
+.empty-state { padding: 3rem; text-align: center; color: #6b7280; background: #fff;
+               border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+
+/* Alert */
+.alert { padding: 0.75rem 1rem; border-radius: 6px; margin-bottom: 1rem; font-size: 0.9rem; }
+.alert-error { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
+
+/* Form card */
+.form-card { background: #fff; border-radius: 8px; padding: 2rem;
+             box-shadow: 0 1px 3px rgba(0,0,0,.1); max-width: 640px; }
+.form-group { margin-bottom: 1.2rem; display: flex; flex-direction: column; gap: 0.3rem; }
+.form-group label { font-size: 0.875rem; font-weight: 500; color: #374151; }
+.form-group input, .form-group select, .form-group textarea {
+  padding: 0.5rem 0.75rem; border: 1px solid #d1d5db; border-radius: 6px;
+  font-size: 0.9rem; background: #fff; }
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+  outline: none; border-color: #4f46e5; box-shadow: 0 0 0 2px #e0e7ff; }
+.form-group small { color: #6b7280; font-size: 0.78rem; }
+.form-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.75rem; }
+.fieldset { border: 1px solid #e5e7eb; border-radius: 6px; padding: 1rem; margin-bottom: 1.2rem; }
+.fieldset legend { font-size: 0.85rem; font-weight: 600; color: #374151; padding: 0 0.5rem; }
+.form-actions { display: flex; gap: 0.75rem; margin-top: 1.5rem; }
+.required { color: #ef4444; }

@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Templates — EtsyAuto Admin{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Templates</h1>
+  <a href="/admin/templates/new" class="btn btn-primary">+ Upload Template</a>
+</div>
+
+{% if templates %}
+<table class="table" id="templates-table">
+  <thead>
+    <tr>
+      <th>Preview</th>
+      <th>Name</th>
+      <th>Category</th>
+      <th>Price (cents)</th>
+      <th>Variations</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for t in templates %}
+    <tr id="template-row-{{ t.id }}">
+      <td>
+        <img src="{{ t.base_image_url }}" alt="{{ t.name }}" class="thumb">
+      </td>
+      <td>{{ t.name }}</td>
+      <td><span class="badge">{{ t.category }}</span></td>
+      <td>{{ t.default_price_cents }}</td>
+      <td>{{ t.variation_count }}</td>
+      <td>
+        <form method="post" action="/admin/templates/{{ t.id }}/delete"
+              onsubmit="return confirm('Delete template {{ t.name }}?')">
+          <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty-state">No templates yet. <a href="/admin/templates/new">Upload the first one.</a></p>
+{% endif %}
+{% endblock %}

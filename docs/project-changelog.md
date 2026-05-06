@@ -4,6 +4,75 @@ All notable changes to EtsyAuto. Format: [Keep a Changelog](https://keepachangel
 
 ---
 
+## [0.2.0] — 2026-05-06
+
+Template System & Mockup Composer (Sub-feature B). POD-style template management with Pillow alpha-composite preview, variations matrix, design library, and Jinja2+HTMX admin UI.
+
+### Added
+
+#### Database Models
+- `Template` — product blank image with composite anchor (x/y/w/h fractions), variation_options JSON, default price, R2 URL
+- `TemplateVariation` — size/color/price_cents/sku row; max 30 per template (Etsy hard limit); unique (size, color) constraint
+- `Design` — uploaded artwork PNG; `source_type` ∈ {upload, ai_generated, reference_only}; `reference_only` excluded from composite
+
+#### Alembic Migration
+- `240d6e765e57_template_design_tables` — creates `templates`, `template_variations`, `designs` tables
+
+#### Routes — JSON API
+- `GET/POST /templates` — list all templates, create new template (multipart form + base image upload)
+- `GET/PUT/DELETE /templates/{id}` — fetch, update, or delete template; update invalidates composite cache
+- `GET/POST /templates/{id}/variations` — list or bulk-replace variations (atomic: delete-all + insert)
+- `PUT /templates/{id}/variations/{vid}` — update single variation price/SKU
+- `DELETE /templates/{id}/variations` — clear all variations for a template
+- `GET/POST /designs` — list designs (with source_type filter), upload RGBA PNG design
+- `GET/DELETE /designs/{id}` — fetch or delete design (cascades composite cache invalidation)
+- `POST /composite/preview` — trigger Pillow composite; returns `{composite_url, cached}` where `cached=true` means R2 hit
+
+#### Routes — Admin UI (Jinja2 + HTMX)
+- `GET /admin/templates` — template list page with HTMX delete confirmation
+- `GET /admin/templates/new` — new template upload form
+- `GET /admin/templates/{id}` — template detail: image preview, anchor display, variations matrix, composite preview
+- `GET /admin/templates/{id}/edit` — edit template metadata form
+- `POST /admin/templates/{id}/delete` — delete with HTMX swap
+- `GET /admin/templates/{id}/composite` — composite preview page (select design, show result inline)
+
+#### Services
+- `image_composite.py` — `composite_with_anchor(base_bytes, design_bytes, anchor)`: resize design to anchor region (LANCZOS), alpha_composite onto base; clamps out-of-range anchor values
+- `template_service.py` — template CRUD with R2 cleanup on delete, composite cache invalidation (list + delete R2 keys) on update
+- `variation_service.py` — bulk_replace (atomic), list, update_variation, clear_variations; enforces max-30 and unique (size, color)
+- `design_service.py` — upload with PNG+alpha validation, list+filter, delete with R2 cleanup + composite cache cascade
+- `composite_service.py` — `get_or_create_composite`: R2 cache check → download template+design → Pillow composite → R2 upload; rejects `reference_only` designs
+
+#### Tests
+- `test_templates_api.py` (~10 tests) — CRUD, auth guards, anchor validation, admin UI list endpoint
+- `test_variations_api.py` (~10 tests) — bulk replace, max-30 enforcement, duplicate (size,color) rejection, clear, single update
+- `test_designs_api.py` (~10 tests) — RGBA upload, JPEG rejection, RGB-only rejection, size limit, list+filter, delete
+- `test_composite_service.py` (~11 tests) — pure function unit tests, cache miss/hit, reference_only rejection, invalidation on update/delete, API endpoint tests
+- `test_e2e_template_workflow.py` (4 tests) — full integration: create→6 variations→design→composite miss→hit→invalidate; auth guards; limit enforcement; reference_only rejection
+
+**Total: 125 tests passing** (up from 78 in v0.1.0)
+
+#### Documentation
+- `docs/template-system-guide.md` — full user guide: setup env vars, admin UI walkthrough, API reference table, composite anchor ASCII diagram, 5 troubleshooting entries, manual UI checklist
+- `docs/system-architecture.md` — added template system Mermaid sequence diagram (template upload → variations → design upload → composite with cache miss/hit/invalidation)
+- `docs/codebase-summary.md` — added all new modules with LOC counts
+- `docs/development-roadmap.md` — v0.2.0 section with sub-feature B marked complete; A and C listed as next
+- `README.md` — added template-system-guide.md link in documentation table, updated test count
+
+### Architecture Decisions
+- **Pillow alpha_composite** (not AI/ML): deterministic, free, <5s latency — KISS
+- **Manual anchor** (x/y/w/h fractions, 0–1): MVP. Drag-drop anchor UI deferred to future plan
+- **R2 cache key** = `composites/{template_id}-{design_id}.png`: simple, invalidated by template/design update via list+delete
+- **reference_only source_type**: extension cutouts viewable in design library but excluded from composite (IP risk mitigation)
+- **Jinja2 + HTMX admin UI**: zero JS framework, server-rendered, sellers get CRUD without curl
+
+### Known Limitations
+- Composite anchor placement is manual — no drag-drop UI yet (future plan)
+- Composite is 1 design per template only — multi-layer compositing deferred
+- Admin UI requires `X-Admin-Token` in request header — no session cookie auth yet
+
+---
+
 ## [0.1.0] — 2026-05-05
 
 Initial MVP release. Full pipeline from Chrome extension ingest to Etsy listing update with mandatory Notion approval gate.

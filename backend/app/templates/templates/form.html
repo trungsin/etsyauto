@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}New Template — EtsyAuto Admin{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Upload Template</h1>
+  <a href="/admin/templates" class="btn btn-secondary">← Back</a>
+</div>
+
+{% if error %}
+<div class="alert alert-error">{{ error }}</div>
+{% endif %}
+
+<form method="post" action="/admin/templates" enctype="multipart/form-data" class="form-card">
+  <div class="form-group">
+    <label for="name">Name <span class="required">*</span></label>
+    <input type="text" id="name" name="name" required placeholder="e.g. Cotton T-Shirt">
+  </div>
+
+  <div class="form-group">
+    <label for="category">Category <span class="required">*</span></label>
+    <select id="category" name="category" required>
+      <option value="">— select —</option>
+      <option value="apparel">Apparel</option>
+      <option value="drinkware">Drinkware</option>
+      <option value="print">Print</option>
+      <option value="accessories">Accessories</option>
+      <option value="other">Other</option>
+    </select>
+  </div>
+
+  <div class="form-group">
+    <label for="base_image">Base Image <span class="required">*</span></label>
+    <input type="file" id="base_image" name="base_image" accept="image/*" required>
+    <small>Max 10 MB. PNG or JPG recommended.</small>
+  </div>
+
+  <fieldset class="fieldset">
+    <legend>Composite Anchor (0 – 1 fractions of image dimensions)</legend>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="composite_anchor_x">X (left edge)</label>
+        <input type="number" id="composite_anchor_x" name="composite_anchor_x"
+               step="0.01" min="0" max="1" value="0.2" required>
+      </div>
+      <div class="form-group">
+        <label for="composite_anchor_y">Y (top edge)</label>
+        <input type="number" id="composite_anchor_y" name="composite_anchor_y"
+               step="0.01" min="0" max="1" value="0.25" required>
+      </div>
+      <div class="form-group">
+        <label for="composite_anchor_w">W (width)</label>
+        <input type="number" id="composite_anchor_w" name="composite_anchor_w"
+               step="0.01" min="0" max="1" value="0.6" required>
+      </div>
+      <div class="form-group">
+        <label for="composite_anchor_h">H (height)</label>
+        <input type="number" id="composite_anchor_h" name="composite_anchor_h"
+               step="0.01" min="0" max="1" value="0.5" required>
+      </div>
+    </div>
+  </fieldset>
+
+  <div class="form-group">
+    <label for="default_price_cents">Default Price (cents)</label>
+    <input type="number" id="default_price_cents" name="default_price_cents"
+           min="0" value="2500">
+  </div>
+
+  <div class="form-group">
+    <label for="variation_options_json">Variation Options (JSON)</label>
+    <textarea id="variation_options_json" name="variation_options_json"
+              rows="4" placeholder='{"sizes": ["S", "M", "L"], "colors": ["white", "black"]}'>{"sizes": [], "colors": []}</textarea>
+    <small>Optional. Must be valid JSON with "sizes" and "colors" arrays.</small>
+  </div>
+
+  <div class="form-actions">
+    <button type="submit" class="btn btn-primary">Upload Template</button>
+    <a href="/admin/templates" class="btn btn-secondary">Cancel</a>
+  </div>
+</form>
+{% endblock %}

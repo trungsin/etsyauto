@@ -1,6 +1,10 @@
-"""Image compositing service — alpha-composite product cutout onto generated background."""
+"""Image compositing service — alpha-composite product cutout onto generated background.
+
+Also exports `composite_with_anchor` for template-based mockup preview.
+"""
 import io
 import logging
+from io import BytesIO
 
 from PIL import Image, ImageFilter
 
@@ -10,6 +14,81 @@ _CANVAS_SIZE = 1024  # px — must match Imagen output size
 _CUTOUT_SCALE = 0.70  # cutout occupies 70% of canvas width
 _BOTTOM_BIAS = 0.55  # vertical center offset: >0.5 shifts product slightly downward
 _SHADOW_BLUR_RADIUS = 8  # pixels for drop shadow blur
+
+_MAX_OUTPUT_BYTES = 2 * 1024 * 1024  # 2 MB composite output limit
+
+
+def composite_with_anchor(
+    base_bytes: bytes,
+    design_bytes: bytes,
+    anchor: dict,
+) -> bytes:
+    """Composite a design PNG onto a template base image using normalized anchor coords.
+
+    The design is aspect-ratio fitted within the anchor box, centred inside it.
+
+    Args:
+        base_bytes: Template base image bytes (any format, converted to RGBA).
+        design_bytes: Design PNG bytes with alpha channel.
+        anchor: Dict {x, y, w, h} — all 0-1 floats, relative to base image dimensions.
+
+    Returns:
+        PNG bytes of the composited image (≤2 MB, resized if necessary).
+    """
+    base = Image.open(BytesIO(base_bytes)).convert("RGBA")
+    design = Image.open(BytesIO(design_bytes)).convert("RGBA")
+
+    # Clamp anchor values to valid range
+    ax = max(0.0, min(1.0, anchor.get("x", 0.0)))
+    ay = max(0.0, min(1.0, anchor.get("y", 0.0)))
+    aw = max(0.001, min(1.0, anchor.get("w", 1.0)))
+    ah = max(0.001, min(1.0, anchor.get("h", 1.0)))
+
+    target_w = int(base.width * aw)
+    target_h = int(base.height * ah)
+
+    # Maintain design aspect ratio — fit within target box
+    design_aspect = design.width / design.height if design.height > 0 else 1.0
+    box_aspect = target_w / target_h if target_h > 0 else 1.0
+    if design_aspect > box_aspect:
+        new_w = target_w
+        new_h = max(1, int(target_w / design_aspect))
+    else:
+        new_h = target_h
+        new_w = max(1, int(target_h * design_aspect))
+
+    design_resized = design.resize((new_w, new_h), Image.LANCZOS)
+
+    # Centre within target box
+    pos_x = int(base.width * ax) + (target_w - new_w) // 2
+    pos_y = int(base.height * ay) + (target_h - new_h) // 2
+
+    # Composite onto transparent overlay then alpha_composite onto base
+    overlay = Image.new("RGBA", base.size, (0, 0, 0, 0))
+    overlay.paste(design_resized, (pos_x, pos_y))
+    result = Image.alpha_composite(base, overlay)
+
+    buf = BytesIO()
+    result.save(buf, format="PNG", optimize=True)
+    output = buf.getvalue()
+
+    # Resize down if output exceeds 2 MB
+    if len(output) > _MAX_OUTPUT_BYTES:
+        scale = (_MAX_OUTPUT_BYTES / len(output)) ** 0.5
+        new_base_w = max(1, int(result.width * scale))
+        new_base_h = max(1, int(result.height * scale))
+        result = result.resize((new_base_w, new_base_h), Image.LANCZOS)
+        buf = BytesIO()
+        result.save(buf, format="PNG", optimize=True)
+        output = buf.getvalue()
+
+    logger.info(
+        "composite_with_anchor: base=%dx%d anchor=(%.2f,%.2f,%.2f,%.2f) "
+        "design_placed=%dx%d at (%d,%d) → %d bytes",
+        base.width, base.height, ax, ay, aw, ah,
+        new_w, new_h, pos_x, pos_y, len(output),
+    )
+    return output
 
 
 def composite_cutout_on_background(cutout_png: bytes, background_png: bytes) -> bytes:

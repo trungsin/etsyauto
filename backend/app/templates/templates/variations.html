@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Variations — {{ template.name }} — EtsyAuto Admin{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Variations: {{ template.name }}</h1>
+  <a href="/admin/templates" class="btn">← Back to Templates</a>
+</div>
+
+<div style="display:flex;gap:1.5rem;align-items:flex-start;margin-bottom:1.5rem;">
+  <img src="{{ template.base_image_url }}" alt="{{ template.name }}"
+       style="width:120px;height:120px;object-fit:cover;border-radius:6px;border:1px solid #ddd;">
+  <div>
+    <p><strong>Category:</strong> {{ template.category }}</p>
+    <p><strong>Default price:</strong> {{ template.default_price_cents }} cents</p>
+    <p><strong>Variation count:</strong> <span id="var-count">{{ variations|length }}</span> / 30</p>
+  </div>
+</div>
+
+{% if error %}
+<div class="alert alert-danger" style="margin-bottom:1rem;">{{ error }}</div>
+{% endif %}
+
+{% if success %}
+<div class="alert alert-success" style="margin-bottom:1rem;">{{ success }}</div>
+{% endif %}
+
+{% if sizes and colors %}
+<form method="post" action="/admin/templates/{{ template.id }}/variations">
+  <p style="margin-bottom:0.5rem;color:#666;">
+    Rows = sizes, columns = colors. Each cell: price (cents) and optional SKU.
+  </p>
+
+  <div style="overflow-x:auto;">
+    <table class="table" style="font-size:0.85rem;">
+      <thead>
+        <tr>
+          <th>Size \ Color</th>
+          {% for color in colors %}
+          <th>{{ color }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for size in sizes %}
+        <tr>
+          <td><strong>{{ size }}</strong></td>
+          {% for color in colors %}
+          {% set key = size ~ "||" ~ color %}
+          {% set existing = matrix.get(key, {}) %}
+          <td style="min-width:140px;">
+            <input type="hidden" name="size_{{ loop.index0 }}_{{ loop.revindex0 }}" value="{{ size }}">
+            <input type="hidden" name="color_{{ loop.index0 }}_{{ loop.revindex0 }}" value="{{ color }}">
+            <input
+              type="number"
+              name="price_{{ loop.index0 }}_{{ loop.revindex0 }}"
+              value="{{ existing.get('price_cents', template.default_price_cents) }}"
+              min="0"
+              placeholder="cents"
+              style="width:90px;"
+              title="Price in cents for {{ size }} / {{ color }}"
+            >
+            <input
+              type="text"
+              name="sku_{{ loop.index0 }}_{{ loop.revindex0 }}"
+              value="{{ existing.get('sku', '') }}"
+              placeholder="SKU (opt)"
+              style="width:100px;"
+              title="SKU for {{ size }} / {{ color }}"
+            >
+          </td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div style="margin-top:1rem;display:flex;gap:0.75rem;align-items:center;">
+    <button type="submit" class="btn btn-primary">Save Matrix</button>
+    <span style="color:#666;font-size:0.875rem;">
+      {{ sizes|length }} sizes × {{ colors|length }} colors =
+      {{ sizes|length * colors|length }} rows
+      {% if sizes|length * colors|length > 30 %}
+      <strong style="color:#e53e3e;">(exceeds 30 limit — reduce sizes or colors)</strong>
+      {% endif %}
+    </span>
+  </div>
+</form>
+
+{% else %}
+<div class="empty-state">
+  <p>No variation options defined for this template.</p>
+  <p>Add <code>sizes</code> and <code>colors</code> in the template's
+     <code>variation_options_json</code> field first.</p>
+</div>
+{% endif %}
+
+{% if variations %}
+<details style="margin-top:2rem;">
+  <summary style="cursor:pointer;font-weight:600;">Current saved variations ({{ variations|length }})</summary>
+  <table class="table" style="margin-top:0.5rem;font-size:0.85rem;">
+    <thead>
+      <tr><th>ID</th><th>Size</th><th>Color</th><th>Price (cents)</th><th>SKU</th></tr>
+    </thead>
+    <tbody>
+      {% for v in variations %}
+      <tr>
+        <td>{{ v.id }}</td>
+        <td>{{ v.size }}</td>
+        <td>{{ v.color }}</td>
+        <td>{{ v.price_cents }}</td>
+        <td>{{ v.sku or "—" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</details>
+{% endif %}
+{% endblock %}

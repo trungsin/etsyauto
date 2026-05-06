@@ -33,6 +33,11 @@ build/
 
 # Static uploads (generated at runtime)
 static/uploads/
+static/*.png
+
+# Runtime logs
+logs/
+*.log
 
 # Alembic compiled
 alembic/__pycache__/

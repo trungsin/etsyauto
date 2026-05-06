@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Designs — EtsyAuto Admin{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Design Library</h1>
+</div>
+
+{% if error %}
+<div class="alert alert-error">{{ error }}</div>
+{% endif %}
+
+<div class="card" style="margin-bottom:1.5rem;">
+  <h2 style="margin-top:0;">Upload PNG Design</h2>
+  <p style="font-size:0.85rem;color:#888;">Only use designs you have rights to. PNG with alpha channel required.</p>
+  <form method="post" action="/admin/designs" enctype="multipart/form-data">
+    <div class="form-group">
+      <label for="name">Name</label>
+      <input type="text" id="name" name="name" required class="form-control" placeholder="My design">
+    </div>
+    <div class="form-group">
+      <label for="source_type">Source type</label>
+      <select id="source_type" name="source_type" class="form-control">
+        <option value="upload">upload</option>
+        <option value="ai_generated">ai_generated</option>
+        <option value="reference_only">reference_only</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="file">PNG file (with alpha)</label>
+      <input type="file" id="file" name="file" accept="image/png" required class="form-control">
+    </div>
+    <button type="submit" class="btn btn-primary">Upload</button>
+  </form>
+</div>
+
+<div class="page-header" style="margin-top:0;">
+  <h2>Library</h2>
+  <form method="get" action="/admin/designs" style="display:flex;gap:0.5rem;align-items:center;">
+    <select name="source_type" class="form-control" style="width:auto;">
+      <option value="" {% if not source_type_filter %}selected{% endif %}>All types</option>
+      <option value="upload" {% if source_type_filter == 'upload' %}selected{% endif %}>upload</option>
+      <option value="ai_generated" {% if source_type_filter == 'ai_generated' %}selected{% endif %}>ai_generated</option>
+      <option value="reference_only" {% if source_type_filter == 'reference_only' %}selected{% endif %}>reference_only</option>
+    </select>
+    <button type="submit" class="btn">Filter</button>
+  </form>
+</div>
+
+{% if designs %}
+<table class="table">
+  <thead>
+    <tr>
+      <th>Preview</th>
+      <th>Name</th>
+      <th>Source type</th>
+      <th>Dimensions</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for d in designs %}
+    <tr>
+      <td>
+        <img src="{{ d.file_url }}" alt="{{ d.name }}" class="thumb" style="max-width:80px;max-height:80px;">
+      </td>
+      <td>{{ d.name }}</td>
+      <td><span class="badge">{{ d.source_type }}</span></td>
+      <td>{{ d.width }}×{{ d.height }}</td>
+      <td>
+        <form method="post" action="/admin/designs/{{ d.id }}/delete"
+              onsubmit="return confirm('Delete design {{ d.name }}?')">
+          <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty-state">No designs found. Upload your first PNG above.</p>
+{% endif %}
+{% endblock %}

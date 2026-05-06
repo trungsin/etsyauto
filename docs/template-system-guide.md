@@ -1,0 +1,438 @@
+# Template System Guide
+
+User guide for the EtsyAuto **Template System & Mockup Composer** (Sub-feature B).
+Covers setup, admin UI walkthrough, API reference, composite anchor conventions, troubleshooting, and the manual QA checklist.
+
+---
+
+## Table of Contents
+
+1. [Overview](#overview)
+2. [Setup — Required Environment Variables](#setup--required-environment-variables)
+3. [Admin UI Walkthrough](#admin-ui-walkthrough)
+4. [API Reference](#api-reference)
+5. [Composite Anchor Convention](#composite-anchor-convention)
+6. [Troubleshooting](#troubleshooting)
+7. [Manual UI Checklist](#manual-ui-checklist)
+
+---
+
+## Overview
+
+The Template System allows you to upload product blank images (t-shirts, mugs, posters, etc.), define where a design should be placed (the "anchor"), and generate composite preview images by pasting your design onto the template. This is the foundation for automated Etsy listing creation with POD (Print on Demand) variations.
+
+**Flow:**
+
+```
+Upload Template (blank product image)
+         │
+         ▼
+Define Composite Anchor (where design goes on the blank)
+         │
+         ▼
+Add Variations Matrix (sizes × colors, up to 30 rows)
+         │
+         ▼
+Upload Design (transparent PNG artwork)
+         │
+         ▼
+POST /composite/preview → Pillow alpha-pastes design onto template
+         │
+         ▼
+Composite PNG cached in Cloudflare R2
+```
+
+---
+
+## Setup — Required Environment Variables
+
+All variables are set in `backend/.env`. See `deployment-guide.md` for full setup.
+
+### Template System Specific
+
+| Variable | Required | Example | Purpose |
+|----------|----------|---------|---------|
+| `ADMIN_TOKEN` | Yes | `my-secret-token-abc` | Authenticates all `/templates`, `/designs`, `/composite`, and `/admin/*` endpoints |
+| `R2_ACCOUNT_ID` | Yes | `abc123def456` | Cloudflare R2 account ID |
+| `R2_ACCESS_KEY_ID` | Yes | `key_abc123` | R2 API token key ID |
+| `R2_SECRET_ACCESS_KEY` | Yes | `secret_xyz789` | R2 API token secret |
+| `R2_BUCKET_NAME` | Yes | `etsyauto-assets` | R2 bucket for templates, designs, and composite previews |
+| `R2_PUBLIC_URL` | Yes | `https://pub-abc123.r2.dev` | Public base URL for your R2 bucket |
+
+### R2 Bucket Structure
+
+The template system writes to these R2 prefixes:
+
+```
+{R2_BUCKET_NAME}/
+├── templates/        ← base blank images (uploaded via POST /templates)
+├── designs/          ← design artwork PNGs (uploaded via POST /designs)
+└── composites/       ← generated previews, key = {template_id}-{design_id}.png
+```
+
+Composite previews are cached — identical `(template_id, design_id)` pairs return the cached R2 URL until the template or design is updated/deleted.
+
+---
+
+## Admin UI Walkthrough
+
+Access the admin UI at `http://localhost:8787/admin/templates` after starting the backend.
+All pages require the `X-Admin-Token` header — the browser sends this automatically if you set a cookie or use the URL with the token in the request (the Jinja2 UI reads it from a session cookie set on first auth).
+
+> Note: The admin UI is server-rendered Jinja2 + HTMX. No JavaScript framework. Actions submit forms and the page re-renders inline via HTMX swaps.
+
+### Page: Template List (`/admin/templates`)
+
+Displays all templates in a table with columns: ID, name, category, price, # variations, created date, actions (Edit, Delete).
+
+- Click **"New Template"** button to open the upload form.
+- Click **"Edit"** on any row to open the template detail/edit page.
+- Click **"Delete"** to remove the template and all its variations (cascade). R2 image and any cached composites are also deleted.
+
+### Page: New Template Form
+
+Fields:
+
+| Field | Type | Notes |
+|-------|------|-------|
+| Name | Text | e.g. "Classic Unisex T-Shirt" |
+| Category | Select | apparel, drinkware, print, accessories, other |
+| Base Image | File upload | PNG or JPEG, ≤20MB. The blank product mockup. |
+| Composite Anchor | JSON | `{"x": 0.2, "y": 0.3, "w": 0.6, "h": 0.4}` — see Anchor Convention below |
+| Default Price (cents) | Integer | e.g. `2500` = $25.00 |
+| Variation Options | JSON | `{"sizes": ["S","M","L"], "colors": ["white","black"]}` — metadata only |
+
+After submit, the image uploads to R2 and the template record is created. You land on the template detail page.
+
+### Page: Template Detail / Edit
+
+Shows the template image, anchor overlay diagram, and the variations matrix. You can:
+
+- **Edit metadata** — change name, price, anchor, category via an inline form. Saving a template update invalidates all composite previews for that template in R2.
+- **Manage Variations** — the matrix shows all size/color combinations. Use **"Replace All Variations"** to submit a complete new matrix (old rows are atomically replaced). Maximum 30 rows enforced.
+
+### Page: Design Library (`/admin/templates` → Designs section)
+
+Accessible as a tab or separate section. Lists all uploaded designs with source type, dimensions, and upload date.
+
+- Click **"Upload Design"** to open the design upload form.
+- Source types: `upload` (user-provided PNG), `ai_generated` (future), `reference_only` (extension cutout — excluded from composite).
+- Only `upload` and `ai_generated` source types can be composited.
+
+### Page: Composite Preview
+
+From the template detail page, select a design from the dropdown and click **"Generate Preview"**. The page calls `POST /composite/preview` via HTMX and displays the result inline.
+
+- First call generates the composite and caches it in R2 (shows "Generated fresh").
+- Subsequent calls with the same template + design return the cached URL instantly (shows "Cached").
+- After editing the template or deleting the design, the cache is automatically invalidated.
+
+---
+
+## API Reference
+
+All endpoints require `X-Admin-Token: {your_token}` header.
+Base URL: `http://localhost:8787`
+
+### Templates
+
+| Method | Path | Body / Params | Status | Response |
+|--------|------|---------------|--------|----------|
+| `GET` | `/templates` | — | 200 | `[{id, name, category, base_image_url, composite_anchor, default_price_cents, variation_options, created_at}]` |
+| `POST` | `/templates` | multipart: `name`, `category`, `composite_anchor` (JSON str), `default_price_cents`, `variation_options` (JSON str), `base_image` (file) | 201 | Template object |
+| `GET` | `/templates/{id}` | — | 200 / 404 | Template object |
+| `PUT` | `/templates/{id}` | JSON: any subset of `{name, category, composite_anchor, default_price_cents, variation_options}` | 200 | Updated template; invalidates composite cache |
+| `DELETE` | `/templates/{id}` | — | 204 / 404 | Deletes template + variations + R2 images + composite cache |
+
+**POST /templates example:**
+
+```bash
+curl -X POST http://localhost:8787/templates \
+  -H "X-Admin-Token: $ADMIN_TOKEN" \
+  -F "name=Classic T-Shirt" \
+  -F "category=apparel" \
+  -F 'composite_anchor={"x":0.2,"y":0.25,"w":0.6,"h":0.5}' \
+  -F "default_price_cents=2500" \
+  -F 'variation_options={"sizes":["S","M","L"],"colors":["white","black"]}' \
+  -F "base_image=@/path/to/tshirt-blank.png"
+```
+
+**PUT /templates/{id} example:**
+
+```bash
+curl -X PUT http://localhost:8787/templates/1 \
+  -H "X-Admin-Token: $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"default_price_cents": 2800}'
+```
+
+---
+
+### Variations
+
+| Method | Path | Body | Status | Response |
+|--------|------|------|--------|----------|
+| `GET` | `/templates/{id}/variations` | — | 200 / 404 | `{template_id, variations: [{id, size, color, price_cents, sku}]}` |
+| `POST` | `/templates/{id}/variations` | JSON: `{variations: [{size, color, price_cents, sku?}]}` | 200 / 400 / 404 / 409 | `{template_id, variations: [...]}` — atomically replaces all |
+| `PUT` | `/templates/{id}/variations/{vid}` | JSON: `{price_cents?, sku?}` | 200 / 404 | Updated variation |
+| `DELETE` | `/templates/{id}/variations` | — | 204 | Clears all variations for template |
+
+**Constraints:**
+- Maximum 30 variations per template (Etsy hard limit)
+- `(size, color)` must be unique within a template — duplicate returns 409
+
+**POST /templates/{id}/variations example (6 rows, 3×2):**
+
+```bash
+curl -X POST http://localhost:8787/templates/1/variations \
+  -H "X-Admin-Token: $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "variations": [
+      {"size": "S",  "color": "white", "price_cents": 2500, "sku": "TS-S-WHT"},
+      {"size": "S",  "color": "black", "price_cents": 2500, "sku": "TS-S-BLK"},
+      {"size": "M",  "color": "white", "price_cents": 2600, "sku": "TS-M-WHT"},
+      {"size": "M",  "color": "black", "price_cents": 2600, "sku": "TS-M-BLK"},
+      {"size": "L",  "color": "white", "price_cents": 2700, "sku": "TS-L-WHT"},
+      {"size": "L",  "color": "black", "price_cents": 2700, "sku": "TS-L-BLK"}
+    ]
+  }'
+```
+
+---
+
+### Designs
+
+| Method | Path | Body / Params | Status | Response |
+|--------|------|---------------|--------|----------|
+| `GET` | `/designs` | `?source_type=upload\|ai_generated\|reference_only&limit=50&offset=0` | 200 | `{designs: [...], total, limit, offset}` |
+| `POST` | `/designs` | multipart: `name`, `source_type`, `file` (PNG with alpha) | 201 / 400 | Design object |
+| `GET` | `/designs/{id}` | — | 200 / 404 | Design object |
+| `DELETE` | `/designs/{id}` | — | 204 / 404 | Deletes design + R2 file + composite cache entries |
+
+**Design constraints:**
+- File must be PNG with alpha channel (RGBA) — JPEG or RGB-only PNG returns 400
+- Max file size: 10 MB
+- `source_type=reference_only` designs cannot be composited (returns 400 on composite attempt)
+
+**POST /designs example:**
+
+```bash
+curl -X POST http://localhost:8787/designs \
+  -H "X-Admin-Token: $ADMIN_TOKEN" \
+  -F "name=Star Logo" \
+  -F "source_type=upload" \
+  -F "file=@/path/to/star-logo.png"
+```
+
+---
+
+### Composite Preview
+
+| Method | Path | Body | Status | Response |
+|--------|------|------|--------|----------|
+| `POST` | `/composite/preview` | JSON: `{template_id, design_id}` | 200 / 400 | `{composite_url, template_id, design_id, cached}` |
+
+- `cached: false` — composite was generated fresh and uploaded to R2
+- `cached: true` — composite already existed in R2 for this `(template_id, design_id)` pair
+- Cache key: `composites/{template_id}-{design_id}.png`
+- Cache is invalidated (R2 key deleted) when template or design is updated/deleted
+
+**POST /composite/preview example:**
+
+```bash
+curl -X POST http://localhost:8787/composite/preview \
+  -H "X-Admin-Token: $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"template_id": 1, "design_id": 1}'
+# → {"composite_url": "https://pub-abc.r2.dev/composites/1-1.png", "cached": false}
+```
+
+---
+
+### Admin UI Endpoints (HTML)
+
+| Method | Path | Notes |
+|--------|------|-------|
+| `GET` | `/admin/templates` | Template list page (Jinja2 HTML) |
+| `GET` | `/admin/templates/new` | New template form |
+| `GET` | `/admin/templates/{id}` | Template detail + variations matrix |
+| `GET` | `/admin/templates/{id}/edit` | Edit template form |
+| `POST` | `/admin/templates/{id}/delete` | Delete with HTMX confirmation |
+| `GET` | `/admin/templates/{id}/composite` | Composite preview page |
+
+---
+
+## Composite Anchor Convention
+
+The anchor defines the rectangular region of the template where the design is pasted.
+All values are **fractions of the template image dimensions** (0.0 to 1.0).
+
+```
+┌─────────────────────────────────────┐
+│           Template Image            │
+│  (0,0)                    (1,0)     │
+│   ┌───────────────────────────────┐ │
+│   │                               │ │
+│   │   x=0.2, y=0.25              │ │
+│   │   ┌─────────────────┐        │ │
+│   │   │                 │        │ │
+│   │   │   Design goes   │ h=0.5  │ │
+│   │   │     here        │        │ │
+│   │   │                 │        │ │
+│   │   └─────────────────┘        │ │
+│   │        w=0.6                 │ │
+│   └───────────────────────────────┘ │
+│  (0,1)                    (1,1)     │
+└─────────────────────────────────────┘
+
+Anchor: {"x": 0.2, "y": 0.25, "w": 0.6, "h": 0.5}
+
+  x — left edge of design region, as fraction of template width
+  y — top edge of design region, as fraction of template height
+  w — width of design region, as fraction of template width
+  h — height of design region, as fraction of template height
+
+Pixel coordinates (computed internally):
+  left   = x * template_width
+  top    = y * template_height
+  right  = (x + w) * template_width
+  bottom = (y + h) * template_height
+```
+
+**Design is scaled** (maintaining aspect ratio) to fill the anchor region using Pillow `Image.LANCZOS` resampling, then alpha-composited onto the template.
+
+**Typical anchor values by product type:**
+
+| Product | Typical Anchor |
+|---------|----------------|
+| T-shirt (front chest) | `{"x": 0.30, "y": 0.22, "w": 0.40, "h": 0.38}` |
+| Mug (center wrap) | `{"x": 0.15, "y": 0.25, "w": 0.70, "h": 0.50}` |
+| Poster (full bleed, margin) | `{"x": 0.05, "y": 0.05, "w": 0.90, "h": 0.90}` |
+| Phone case (back panel) | `{"x": 0.10, "y": 0.15, "w": 0.80, "h": 0.65}` |
+
+Values outside `[0, 1]` are clamped at the image boundary.
+
+---
+
+## Troubleshooting
+
+### 1. `401 Unauthorized` on all endpoints
+
+**Symptom:** Every API call returns `{"detail": "Unauthorized"}`.
+
+**Cause:** `ADMIN_TOKEN` env var not set, or the header name is wrong.
+
+**Fix:**
+- Verify `backend/.env` contains `ADMIN_TOKEN=your-token-here`
+- Restart the backend after editing `.env`
+- Confirm the request header is `X-Admin-Token`, not `Authorization` or `Admin-Token`
+- Test: `curl -H "X-Admin-Token: your-token" http://localhost:8787/templates`
+
+---
+
+### 2. `400 Bad Request: File must be a PNG with an alpha channel`
+
+**Symptom:** Design upload fails with alpha channel error.
+
+**Cause:** The uploaded PNG is in RGB mode (no transparency layer), or the file is JPEG.
+
+**Fix:**
+- Open the image in Photoshop/GIMP and verify the mode is RGBA (Image → Mode → RGB Color + layer with transparency)
+- Export as PNG — not "PNG-8" (indexed) or JPEG
+- Quick check in Python: `from PIL import Image; img = Image.open("file.png"); print(img.mode)` — must print `RGBA`
+
+---
+
+### 3. Composite preview is blank / design not visible
+
+**Symptom:** `POST /composite/preview` returns 200 with a URL, but the composite image shows only the blank template with no design.
+
+**Causes and fixes:**
+- **Anchor region too small:** `w` or `h` close to 0. Check your anchor values — minimum useful size is ~0.1.
+- **Design alpha is zero everywhere:** The PNG file may have a fully transparent alpha channel. Re-export with visible content.
+- **Wrong anchor position:** The anchor `x + w > 1.0` or `y + h > 1.0` shifts the region out of bounds — it gets clamped to the image edge. Recalculate anchor to keep the region within bounds.
+
+---
+
+### 4. `R2 upload failed` or `ConnectionError` on composite preview
+
+**Symptom:** `POST /composite/preview` returns 500 or 502 with an R2-related error.
+
+**Causes:**
+- R2 credentials missing or incorrect in `.env`
+- Bucket name wrong or bucket not created in Cloudflare dashboard
+- `R2_PUBLIC_URL` missing trailing slash or pointing to wrong bucket
+
+**Fix:**
+- Check `backend/.env` for all 5 R2 vars: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `R2_PUBLIC_URL`
+- Verify the R2 token has `Object Read & Write` permissions on the target bucket
+- Test connectivity: `uv run python -c "from app.clients.r2_storage_client import R2StorageClient; r2 = R2StorageClient(); r2.upload_image(b'test', 'smoke/test.txt'); print('OK')"`
+
+---
+
+### 5. Variations POST returns `409 Conflict`
+
+**Symptom:** `POST /templates/{id}/variations` returns `{"detail": "Duplicate (size, color) pair: ..."}`.
+
+**Cause:** The submitted variations list contains two or more rows with the same `(size, color)` combination.
+
+**Fix:**
+- Review your variations list for duplicate rows — Etsy treats each `(size, color)` as a unique SKU, so duplicates are not allowed.
+- If you intended different prices for the same size/color, consider renaming sizes (e.g., "S-premium", "S-standard") or use SKU field to differentiate, but keep `(size, color)` unique.
+- Note: `POST /templates/{id}/variations` does a full atomic **replace** — it is safe to call multiple times. Previously saved variations are deleted before inserting the new batch.
+
+---
+
+## Manual UI Checklist
+
+Use this checklist to verify the admin UI is working end-to-end after deployment or after a code change.
+
+### Setup Verification
+
+- [ ] Backend starts without errors: `cd backend && uv run uvicorn app.main:app --host 127.0.0.1 --port 8787 --reload`
+- [ ] `/health` returns 200: `curl http://localhost:8787/health`
+- [ ] `ADMIN_TOKEN` is set in `backend/.env`
+
+### Template CRUD
+
+- [ ] **Browse** `/admin/templates` — page loads, shows "No templates yet" if empty
+- [ ] **Create** template via form — upload a PNG blank, fill all fields, submit → row appears in list
+- [ ] **View** template detail page — base image displayed, anchor values shown, variations table visible
+- [ ] **Edit** template metadata — change default price, save → price updates in list view
+- [ ] **Verify** that editing a template does not break existing template list
+
+### Variations Matrix
+
+- [ ] **Add variations** — enter 6 rows (3 sizes × 2 colors: S/M/L × white/black), submit → all 6 appear in table
+- [ ] **Replace variations** — submit a new batch of 3 different rows → old 6 replaced by 3
+- [ ] **Duplicate rejection** — submit two rows with identical size+color → form shows error, no partial save
+- [ ] **Over-limit rejection** — attempt 31 rows → form shows "maximum 30 variations" error
+- [ ] **Clear all** — delete button for all variations → table shows empty state
+
+### Design Upload
+
+- [ ] **Upload design** — select a PNG file with transparency (RGBA), give it a name, submit → appears in design library
+- [ ] **JPEG rejection** — attempt to upload a .jpg file → clear error message about PNG required
+- [ ] **RGB rejection** — attempt to upload a PNG without alpha channel → error about alpha required
+- [ ] **Oversized rejection** — attempt to upload a file >10MB → error about size limit
+
+### Composite Preview
+
+- [ ] **Generate preview** — select a template and a design, click preview button → composite image appears
+- [ ] **Verify design placement** — the design is visible on the template at the anchor region
+- [ ] **Cache indicator** — first preview shows "Generated fresh" (or `cached: false` in API)
+- [ ] **Second preview** — same template + design shows "Cached" (`cached: true`)
+- [ ] **Cache invalidation** — edit the template (change price) → generate preview again → shows fresh (not cached)
+- [ ] **reference_only rejection** — upload a design with `source_type=reference_only`, attempt composite → error returned
+
+### Cleanup
+
+- [ ] **Delete design** — deletes from library, R2 file removed, composite cache for that design cleared
+- [ ] **Delete template** — cascades: all variations deleted, R2 image removed, composite cache cleared
+- [ ] **Verify R2 cleanup** — after deleting template, check R2 bucket that `templates/` and `composites/` keys are gone
+
+---
+
+*Template System — Sub-feature B of EtsyAuto v0.2.0*
+*Related plans: extension-reference-upgrade (Sub-feature A), etsy-listing-creator (Sub-feature C)*

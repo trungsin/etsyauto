@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Composite Preview — EtsyAuto Admin{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Composite Preview</h1>
+</div>
+
+{% if error %}
+<div class="alert alert-error">{{ error }}</div>
+{% endif %}
+
+<div class="card" style="margin-bottom:1.5rem;">
+  <form method="post" action="/composite/preview" id="composite-form"
+        onsubmit="handlePreview(event)">
+    <div class="form-group">
+      <label for="template_id">Template</label>
+      <select id="template_id" name="template_id" class="form-control" required>
+        <option value="">— select template —</option>
+        {% for t in templates %}
+        <option value="{{ t.id }}">{{ t.name }} ({{ t.category }})</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="design_id">Design</label>
+      <select id="design_id" name="design_id" class="form-control" required>
+        <option value="">— select design —</option>
+        {% for d in designs %}
+        <option value="{{ d.id }}">{{ d.name }} ({{ d.source_type }})</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button type="submit" class="btn btn-primary" id="preview-btn">Preview</button>
+    <span id="preview-status" style="margin-left:1rem;font-size:0.9rem;color:#666;"></span>
+  </form>
+</div>
+
+<div id="result-area" style="display:none;">
+  <div class="card">
+    <h2 style="margin-top:0;">Result</h2>
+    <p id="cache-badge" style="font-size:0.85rem;"></p>
+    <img id="composite-img" src="" alt="Composite preview"
+         style="max-width:100%;border:1px solid #ddd;border-radius:4px;">
+  </div>
+</div>
+
+<script>
+async function handlePreview(e) {
+  e.preventDefault();
+  const templateId = parseInt(document.getElementById('template_id').value);
+  const designId = parseInt(document.getElementById('design_id').value);
+  if (!templateId || !designId) return;
+
+  const btn = document.getElementById('preview-btn');
+  const status = document.getElementById('preview-status');
+  btn.disabled = true;
+  status.textContent = 'Generating…';
+
+  const token = document.cookie.match(/admin_token=([^;]+)/)?.[1] || '';
+  try {
+    const resp = await fetch('/composite/preview', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Admin-Token': token,
+      },
+      body: JSON.stringify({ template_id: templateId, design_id: designId }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json();
+      status.textContent = 'Error: ' + (err.detail || resp.statusText);
+      btn.disabled = false;
+      return;
+    }
+    const data = await resp.json();
+    document.getElementById('composite-img').src = data.composite_url;
+    document.getElementById('cache-badge').textContent =
+      data.cached ? 'Served from cache' : 'Freshly composited';
+    document.getElementById('result-area').style.display = 'block';
+    status.textContent = '';
+  } catch (err) {
+    status.textContent = 'Network error: ' + err.message;
+  }
+  btn.disabled = false;
+}
+</script>
+{% endblock %}

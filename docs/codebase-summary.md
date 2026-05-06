@@ -1,6 +1,6 @@
 # Codebase Summary
 
-Module-by-module index with line counts. Updated: 2026-05-05.
+Module-by-module index with line counts. Updated: 2026-05-06.
 
 ## Backend (`backend/`)
 
@@ -21,6 +21,11 @@ Module-by-module index with line counts. Updated: 2026-05-05.
 | `routes/ingest.py` | 95 | `POST /ingest` — idempotent listing ingestion from extension |
 | `routes/etsy_auth.py` | 89 | `GET /auth/etsy/start|callback|status` — PKCE OAuth flow |
 | `routes/admin.py` | 35 | `POST /admin/run-uploader` — manual job trigger, X-Admin-Token protected |
+| `routes/templates_api.py` | 187 | `GET/POST /templates`, `GET/PUT/DELETE /templates/{id}` — template CRUD, X-Admin-Token protected |
+| `routes/variations_api.py` | 145 | `GET/POST /templates/{id}/variations`, `PUT/DELETE` variations — bulk replace + single update |
+| `routes/designs_api.py` | 104 | `GET/POST /designs`, `GET/DELETE /designs/{id}` — design upload/list/delete, RGBA PNG validation |
+| `routes/composite_api.py` | 56 | `POST /composite/preview` — trigger Pillow alpha-composite, return cached R2 URL |
+| `routes/templates_admin.py` | 407 | Jinja2 + HTMX admin UI — `/admin/templates` CRUD pages, composite preview UI |
 
 ### Models (`app/models/`)
 
@@ -31,6 +36,9 @@ Module-by-module index with line counts. Updated: 2026-05-05.
 | `models/mockup_variant.py` | 22 | `MockupVariant` — 3 Imagen-generated variants with R2 URLs |
 | `models/job.py` | 21 | `Job` — async task execution tracking |
 | `models/api_credential.py` | 17 | `ApiCredential` — Etsy OAuth tokens (access + refresh) |
+| `models/template.py` | 32 | `Template` — product blank image, composite anchor JSON, variation_options JSON, R2 URL |
+| `models/template_variation.py` | 24 | `TemplateVariation` — size/color/price_cents/sku row; max 30 per template (Etsy limit) |
+| `models/design.py` | 25 | `Design` — uploaded artwork PNG; source_type ∈ {upload, ai_generated, reference_only} |
 
 ### Workers (`app/workers/`)
 
@@ -45,10 +53,15 @@ Module-by-module index with line counts. Updated: 2026-05-05.
 
 | File | LOC | Purpose |
 |------|-----|---------|
-| `services/listing_service.py` | 199 | DB query helpers — fetch listings by status, update status, get variants |
+| `services/listing_service.py` | 207 | DB query helpers — fetch listings by status, update status, get variants |
 | `services/image_service.py` | 127 | PIL utilities — resize, composite, format conversion for mockup pipeline |
 | `services/review_service.py` | 107 | Notion review logic — build page blocks, parse approval response |
 | `services/retry_policy.py` | 25 | Exponential backoff decorator + `should_retry(attempts)` helper |
+| `services/image_composite.py` | 183 | `composite_with_anchor(base, design, anchor)` — Pillow RGBA alpha-paste with bounds clamping |
+| `services/template_service.py` | 154 | Template CRUD helpers — create/update/delete with R2 cleanup + composite cache invalidation |
+| `services/variation_service.py` | 102 | Bulk replace, list, update, clear variations; enforces max-30 and unique (size, color) |
+| `services/design_service.py` | 156 | Design upload/list/delete with PNG+alpha validation, R2 upload, composite cache cascade |
+| `services/composite_service.py` | 134 | `get_or_create_composite` — cache-check → Pillow composite → R2 upload; rejects reference_only |
 
 ### Clients (`app/clients/`)
 
@@ -75,6 +88,7 @@ Module-by-module index with line counts. Updated: 2026-05-05.
 | `0001_initial.py` | Base schema — listings, title_variants, mockup_variants, jobs, api_credentials |
 | `aa88c2baf005_*.py` | Add `push_attempts`, `last_push_error` columns to listings |
 | `e7d4a402ca7b_*.py` | Add `notion_page_id`, `final_image_url` columns to listings |
+| `240d6e765e57_*.py` | Add template system — `templates`, `template_variations`, `designs` tables |
 
 ### Tests (`tests/`)
 
@@ -86,8 +100,13 @@ Module-by-module index with line counts. Updated: 2026-05-05.
 | `test_notion_sync.py` | ~14 | Page creation, approval polling, schema validation |
 | `test_etsy_api_client.py` | ~12 | Listing fetch, title update, image upload |
 | `test_etsy_uploader.py` | ~12 | Uploader job, retry logic, push_attempts increment |
+| `test_templates_api.py` | ~10 | Template CRUD, auth guards, anchor validation, admin UI list |
+| `test_variations_api.py` | ~10 | Bulk replace, max-30 limit, duplicate rejection, clear, price update |
+| `test_designs_api.py` | ~10 | Upload RGBA PNG, reject JPEG/RGB/oversized, list+filter, delete |
+| `test_composite_service.py` | ~11 | Cache miss/hit, reference_only rejection, cache invalidation on update/delete |
+| `test_e2e_template_workflow.py` | 4 | Full workflow: create→variations→design→composite with cache miss/hit/invalidation |
 
-**Total: 78 tests passing**
+**Total: 125 tests passing**
 
 ---
 

@@ -24,7 +24,32 @@
 
 ---
 
-## Post-MVP (v0.2.0 — Backlog, Unscheduled)
+## v0.2.0 — Template System & Mockup Composer
+
+### Sub-features
+
+| Sub-feature | Title | Status | Completed |
+|-------------|-------|--------|-----------|
+| B | [Template System & Mockup Composer](../plans/260506-0803-template-system-mockup-composer/plan.md) | **Complete** | 2026-05-06 |
+| A | Extension Reference Mode Upgrade | Planned | — |
+| C | Etsy Listing Creator (with Variations) | Planned | — |
+
+### v0.2.0 Success Metrics
+
+- [x] Upload product blank template + define composite anchor
+- [x] Add variations matrix (up to 30 rows, 3×2 typical)
+- [x] Upload RGBA PNG design artwork
+- [x] Generate Pillow alpha-composite preview in <5s
+- [x] Composite output cached in R2; cache invalidated on template/design update
+- [x] All endpoints protected by X-Admin-Token
+- [x] Jinja2 + HTMX admin UI for full template/design/composite CRUD
+- [x] 125 tests passing (121 unit + 4 E2E integration)
+- [ ] Sub-feature A: extension sends reference cutout → designs table (next plan)
+- [ ] Sub-feature C: Etsy listing creation reads templates + designs (next plan)
+
+---
+
+## Post-MVP Backlog (Unscheduled)
 
 ### P1 — High Value
 

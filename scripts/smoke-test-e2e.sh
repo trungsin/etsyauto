@@ -99,7 +99,7 @@ else
   fail "/health returned HTTP $HTTP_STATUS (expected 200 or 503)"
 fi
 
-# Stop server
+# Stop server (from step 4)
 kill "$SERVER_PID" 2>/dev/null || true
 SERVER_PID=""
 sleep 1
@@ -107,7 +107,64 @@ sleep 1
 # Clean up smoke test db
 rm -f "$BACKEND_DIR/etsyauto_smoke.db"
 
-# ── 6. Extension manifest validation ─────────────────────────────────────────
+# ── 6. Admin template API smoke check ────────────────────────────────────────
+# Start a fresh server with a migrated DB to verify /admin/templates auth guard.
+info "Running migrations for admin template smoke DB..."
+SMOKE_ADMIN_TOKEN="smoke-admin-token-$$"
+SMOKE_DB="$BACKEND_DIR/etsyauto_smoke_admin.db"
+rm -f "$SMOKE_DB"
+
+# Run alembic against the admin smoke DB
+DATABASE_URL="sqlite:///$SMOKE_DB" \
+uv run alembic upgrade head 2>&1 | grep -v "^$" || true
+
+info "Starting server for /admin/templates check (pid=...)..."
+ANTHROPIC_API_KEY="" \
+ETSY_API_KEY="" \
+ETSY_SHARED_SECRET="" \
+REMOVEBG_API_KEY="" \
+GEMINI_API_KEY="" \
+NOTION_API_KEY="" \
+NOTION_DATABASE_ID="" \
+R2_ACCOUNT_ID="" \
+R2_ACCESS_KEY_ID="" \
+R2_SECRET_ACCESS_KEY="" \
+R2_BUCKET_NAME="" \
+R2_PUBLIC_URL="" \
+ADMIN_TOKEN="$SMOKE_ADMIN_TOKEN" \
+DATABASE_URL="sqlite:///$SMOKE_DB" \
+uv run uvicorn app.main:app --host 127.0.0.1 --port "$PORT" --log-level warning &
+SERVER_PID=$!
+info "Waiting 4s for server (pid=$SERVER_PID)..."
+sleep 4
+
+# Check auth guard — no token → 401
+UNAUTH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+  "http://127.0.0.1:$PORT/admin/templates" 2>/dev/null || echo "000")
+
+if [[ "$UNAUTH_STATUS" == "401" ]]; then
+  ok "/admin/templates GET 401 without token (auth guard working)"
+else
+  fail "/admin/templates without token returned HTTP $UNAUTH_STATUS (expected 401)"
+fi
+
+# Check valid token → 200
+ADMIN_STATUS=$(curl -s -o /tmp/admin_templates.json -w "%{http_code}" \
+  -H "X-Admin-Token: $SMOKE_ADMIN_TOKEN" \
+  "http://127.0.0.1:$PORT/admin/templates" 2>/dev/null || echo "000")
+
+if [[ "$ADMIN_STATUS" == "200" ]]; then
+  ok "/admin/templates GET 200 with valid admin token"
+else
+  fail "/admin/templates returned HTTP $ADMIN_STATUS (expected 200)"
+fi
+
+kill "$SERVER_PID" 2>/dev/null || true
+SERVER_PID=""
+sleep 1
+rm -f "$SMOKE_DB"
+
+# ── 7. Extension manifest validation ─────────────────────────────────────────
 info "Validating extension manifest.json..."
 if [[ -f "$EXTENSION_DIR/manifest.json" ]]; then
   MV=$(python3 -c "import json,sys; d=json.load(open('$EXTENSION_DIR/manifest.json')); print(d.get('manifest_version',0))" 2>/dev/null || echo "0")
@@ -120,7 +177,7 @@ else
   fail "manifest.json not found at $EXTENSION_DIR/manifest.json"
 fi
 
-# ── 7. Check key extension files exist ───────────────────────────────────────
+# ── 8. Check key extension files exist ───────────────────────────────────────
 info "Checking extension files..."
 EXT_FILES=(
   "background/service-worker.js"

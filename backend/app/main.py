@@ -6,6 +6,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 
 from app import scheduler as sched
 from app.config import settings
@@ -13,6 +14,19 @@ from app.routes.admin import router as admin_router
 from app.routes.etsy_auth import router as etsy_auth_router
 from app.routes.health import router as health_router
 from app.routes.ingest import router as ingest_router
+from app.routes.templates_api import router as templates_api_router
+from app.routes.composite_api import router as composite_api_router
+from app.routes.designs_api import router as designs_api_router
+from app.routes.templates_admin import (
+    composite_router as composite_admin_router,
+    designs_router as designs_admin_router,
+    router as templates_admin_router,
+)
+from app.routes.variations_api import router as variations_api_router
+
+# Jinja2 templates — shared instance; imported by templates_admin.py lazily
+_templates_dir = Path(__file__).parent / "templates"
+jinja_templates = Jinja2Templates(directory=str(_templates_dir))
 
 logging.basicConfig(
     level=logging.INFO,
@@ -74,8 +88,20 @@ static_path = Path(settings.static_dir)
 static_path.mkdir(parents=True, exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
 
+# Mount admin static files (CSS, JS for admin UI)
+admin_static_path = Path(__file__).parent / "static"
+admin_static_path.mkdir(parents=True, exist_ok=True)
+app.mount("/admin/static", StaticFiles(directory=str(admin_static_path)), name="admin-static")
+
 # Routers
 app.include_router(health_router)
 app.include_router(etsy_auth_router)
 app.include_router(ingest_router)
 app.include_router(admin_router)
+app.include_router(templates_api_router)
+app.include_router(variations_api_router)
+app.include_router(designs_api_router)
+app.include_router(composite_api_router)
+app.include_router(templates_admin_router)
+app.include_router(designs_admin_router)
+app.include_router(composite_admin_router)
