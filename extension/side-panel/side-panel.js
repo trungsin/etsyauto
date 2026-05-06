@@ -150,6 +150,37 @@ btnRefresh.addEventListener('click', async () => {
 });
 
 // ---------------------------------------------------------------------------
+// Config panel (backend URL)
+// ---------------------------------------------------------------------------
+
+const btnConfig       = document.getElementById('btn-config');
+const configPanel     = document.getElementById('config-panel');
+const inputBackendUrl = document.getElementById('input-backend-url');
+const btnConfigSave   = document.getElementById('btn-config-save');
+const btnConfigCancel = document.getElementById('btn-config-cancel');
+
+btnConfig.addEventListener('click', async () => {
+  const current = await getBackendUrl();
+  inputBackendUrl.value = current;
+  configPanel.classList.toggle('hidden');
+});
+
+btnConfigSave.addEventListener('click', async () => {
+  const url = inputBackendUrl.value.trim().replace(/\/+$/, '');
+  if (!/^https?:\/\//.test(url)) {
+    alert('URL must start with http:// or https://');
+    return;
+  }
+  await chrome.storage.local.set({ backendUrl: url });
+  configPanel.classList.add('hidden');
+  await checkHealth();
+});
+
+btnConfigCancel.addEventListener('click', () => {
+  configPanel.classList.add('hidden');
+});
+
+// ---------------------------------------------------------------------------
 // Boot
 // ---------------------------------------------------------------------------
 

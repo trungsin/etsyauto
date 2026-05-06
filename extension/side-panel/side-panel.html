@@ -37,7 +37,18 @@
   <footer class="footer">
     <span id="status-label" class="status-label">Checking connection…</span>
     <button id="btn-refresh" class="btn btn-ghost btn-sm">Refresh</button>
+    <button id="btn-config" class="btn btn-ghost btn-sm" title="Backend URL">⚙</button>
   </footer>
+
+  <div id="config-panel" class="config-panel hidden">
+    <label for="input-backend-url" class="config-label">Backend URL</label>
+    <input id="input-backend-url" type="text" class="config-input"
+           placeholder="http://172.16.10.168:8787" />
+    <div class="config-actions">
+      <button id="btn-config-save" class="btn btn-primary btn-sm">Save</button>
+      <button id="btn-config-cancel" class="btn btn-ghost btn-sm">Cancel</button>
+    </div>
+  </div>
 
   <script src="../shared/backend-client.js"></script>
   <script src="side-panel.js"></script>

@@ -7,7 +7,8 @@
   "permissions": ["activeTab", "sidePanel", "storage"],
   "host_permissions": [
     "https://www.etsy.com/*",
-    "http://localhost:8787/*"
+    "http://localhost:8787/*",
+    "http://172.16.10.168:8787/*"
   ],
 
   "icons": {

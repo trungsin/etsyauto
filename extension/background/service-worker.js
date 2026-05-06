@@ -70,7 +70,7 @@ async function handleGetListing(sendResponse) {
 async function handleSendToOptimizer(payload, sendResponse) {
   try {
     const result = await chrome.storage.local.get(['backendUrl']);
-    const base = result.backendUrl || 'http://localhost:8787';
+    const base = result.backendUrl || 'http://172.16.10.168:8787';
 
     const body = {
       listing_id: parseInt(payload.listing_id, 10),

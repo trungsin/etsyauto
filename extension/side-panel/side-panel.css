@@ -114,3 +114,33 @@ body {
   background: var(--color-surface);
 }
 .status-label { font-size: 11px; color: var(--color-muted); }
+
+/* Config panel */
+.config-panel {
+  padding: 12px;
+  background: #f7f7f8;
+  border-top: 1px solid #e5e5e8;
+}
+.config-panel.hidden { display: none; }
+.config-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: #4a4a4f;
+}
+.config-input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #d0d0d4;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: monospace;
+  box-sizing: border-box;
+}
+.config-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  justify-content: flex-end;
+}

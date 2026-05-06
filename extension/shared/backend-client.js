@@ -1,10 +1,11 @@
 /**
  * backend-client.js
- * Fetch wrapper for the local EtsyAuto backend at localhost:8787.
- * Used by the side panel (and optionally the service worker).
+ * Fetch wrapper for the EtsyAuto backend.
+ * Backend may be on the same machine (localhost) or another LAN host.
+ * URL configurable via side panel; persisted in chrome.storage.local.
  */
 
-const DEFAULT_BACKEND_URL = 'http://localhost:8787';
+const DEFAULT_BACKEND_URL = 'http://172.16.10.168:8787';
 
 /**
  * Resolve backend base URL from chrome.storage.local (fallback: default).
