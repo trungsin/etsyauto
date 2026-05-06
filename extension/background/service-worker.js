@@ -45,10 +45,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       handleApiCall('POST', `/references/${message.referenceId}/suggest-title`, null, null, sendResponse);
       return true;
 
-    case 'CUTOUT_IMAGE':
+    case 'CUTOUT_IMAGE': {
+      const cutoutBody = { image_url: message.imageUrl };
+      if (Array.isArray(message.cropBox) && message.cropBox.length === 4) {
+        cutoutBody.crop_box = message.cropBox;
+      }
       handleApiCall('POST', `/references/${message.referenceId}/cutout`,
-        { image_url: message.imageUrl }, null, sendResponse);
+        cutoutBody, null, sendResponse);
       return true;
+    }
 
     case 'UPDATE_REFERENCE':
       handleApiCall('PUT', `/references/${message.referenceId}`, message.body, null, sendResponse);

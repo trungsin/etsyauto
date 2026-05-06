@@ -312,3 +312,71 @@ def test_cutout_idempotent_replaces_old_design(client):
     # Reference now points to the surviving design
     ref_resp = client.get(f"/references/{ref_id}", headers=VALID_HEADERS)
     assert ref_resp.json()["cutout_design_id"] == second_design_id
+
+
+# ---------------------------------------------------------------------------
+# cutout — crop_box validation
+# ---------------------------------------------------------------------------
+
+def test_cutout_rejects_invalid_crop_box(client):
+    ref_id = _create_ref(client)
+    bad_cases = [
+        [0, 0, 1.5, 0.5],         # x+w > 1
+        [0, 0, 0.5],              # wrong arity
+        [-0.1, 0, 0.5, 0.5],      # negative
+        [0, 0, 0, 0.5],           # zero width
+    ]
+    for crop in bad_cases:
+        resp = client.post(
+            f"/references/{ref_id}/cutout",
+            headers=VALID_HEADERS,
+            json={"image_url": "https://img.example.com/a.jpg", "crop_box": crop},
+        )
+        assert resp.status_code == 422, (crop, resp.text)
+
+
+# ---------------------------------------------------------------------------
+# cutout — crop_box honored: PIL crop applied before remove.bg
+# ---------------------------------------------------------------------------
+
+def test_cutout_with_crop_box_applies_pil_crop(client):
+    """When crop_box is provided, the bytes sent to remove.bg should be the cropped sub-region."""
+    ref_id = _create_ref(client)
+
+    # Build a 100x100 image so we can detect that a crop happened by output size.
+    big_buf = io.BytesIO()
+    _PILImage.new("RGBA", (100, 100), (10, 200, 30, 255)).save(big_buf, format="PNG")
+    big_png = big_buf.getvalue()
+
+    received_bytes = {}
+
+    def capture_remove_bg(image_bytes):
+        received_bytes["bytes"] = image_bytes
+        return _FAKE_PNG_BYTES
+
+    with (
+        patch("app.services.reference_service.RemoveBgClient") as mock_rbg_cls,
+        patch("app.clients.r2_storage_client.R2StorageClient") as mock_r2_cls,
+        patch("httpx.Client") as mock_http_cls,
+    ):
+        mock_http = MagicMock()
+        mock_http.__enter__ = MagicMock(return_value=mock_http)
+        mock_http.__exit__ = MagicMock(return_value=False)
+        mock_http.get.return_value = MagicMock(content=big_png, raise_for_status=MagicMock())
+        mock_http_cls.return_value = mock_http
+
+        mock_rbg_cls.return_value.remove_bg.side_effect = capture_remove_bg
+        mock_r2_cls.return_value.upload_image.return_value = "https://r2.example.com/designs/c.png"
+
+        resp = client.post(
+            f"/references/{ref_id}/cutout",
+            headers=VALID_HEADERS,
+            json={
+                "image_url": "https://img.example.com/a.jpg",
+                "crop_box": [0.25, 0.25, 0.5, 0.5],  # center 50x50 crop
+            },
+        )
+
+    assert resp.status_code == 200, resp.text
+    cropped = _PILImage.open(io.BytesIO(received_bytes["bytes"]))
+    assert cropped.size == (50, 50), f"Expected 50x50 crop, got {cropped.size}"

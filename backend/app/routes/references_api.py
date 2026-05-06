@@ -205,6 +205,27 @@ class CutoutBody(BaseModel):
     """Request body for POST /references/{id}/cutout."""
 
     image_url: str = Field(..., max_length=2000)
+    crop_box: list[float] | None = Field(
+        default=None,
+        description="Optional [x, y, w, h] in 0-1 fractions of source image dims",
+    )
+
+    @field_validator("crop_box")
+    @classmethod
+    def validate_crop_box(cls, v: list[float] | None) -> list[float] | None:
+        if v is None:
+            return v
+        if len(v) != 4:
+            raise ValueError("crop_box must have 4 elements: [x, y, w, h]")
+        x, y, w, h = v
+        for name, val in zip(("x", "y", "w", "h"), v):
+            if not 0 <= val <= 1:
+                raise ValueError(f"crop_box.{name}={val} must be a 0-1 fraction")
+        if w <= 0 or h <= 0:
+            raise ValueError("crop_box width and height must be > 0")
+        if x + w > 1.001 or y + h > 1.001:
+            raise ValueError("crop_box extends beyond image bounds")
+        return v
 
 
 def _is_transient_gemini_error(exc: Exception) -> bool:
@@ -262,7 +283,9 @@ def create_cutout(
         404 if reference not found.
     """
     try:
-        design = reference_service.create_cutout(db, reference_id, body.image_url)
+        design = reference_service.create_cutout(
+            db, reference_id, body.image_url, crop_box=body.crop_box
+        )
     except ValueError as exc:
         detail = str(exc)
         status_code = 404 if "not found" in detail else 400

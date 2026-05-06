@@ -199,13 +199,19 @@ def generate_title_variants(session: Session, reference_id: int) -> list[dict]:
     return variants
 
 
-def create_cutout(session: Session, reference_id: int, image_url: str):
-    """Download image, strip background via remove.bg, store as Design, link to reference.
+def create_cutout(
+    session: Session,
+    reference_id: int,
+    image_url: str,
+    crop_box: list[float] | None = None,
+):
+    """Download image, optionally crop to a sub-region, strip background, store as Design.
 
     Args:
         session: Active SQLAlchemy session.
         reference_id: ID of the reference.
         image_url: Must be one of reference.original_images.
+        crop_box: Optional [x, y, w, h] in 0-1 fractions; PIL crop applied before remove.bg.
 
     Returns:
         New Design instance with source_type='reference_only'.
@@ -245,6 +251,24 @@ def create_cutout(session: Session, reference_id: int, image_url: str):
         dl_resp = http.get(image_url)
         dl_resp.raise_for_status()
     image_bytes = dl_resp.content
+
+    # Optional crop before remove.bg — caller selects design region inside a mockup.
+    if crop_box is not None:
+        from io import BytesIO
+        from PIL import Image
+        with Image.open(BytesIO(image_bytes)) as img:
+            w_px, h_px = img.size
+            fx, fy, fw, fh = crop_box
+            left, top = int(fx * w_px), int(fy * h_px)
+            right, bottom = int((fx + fw) * w_px), int((fy + fh) * h_px)
+            cropped = img.crop((left, top, right, bottom))
+            buf = BytesIO()
+            cropped.save(buf, format="PNG")
+            image_bytes = buf.getvalue()
+        logger.info(
+            "Cropped reference image to %dx%d (from %dx%d) for reference %d",
+            right - left, bottom - top, w_px, h_px, reference_id,
+        )
 
     # Strip background
     rbg_client = RemoveBgClient()

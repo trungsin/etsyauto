@@ -149,26 +149,34 @@ async function onRemoveBg() {
   const picked = _images.find((img) => img.state === 'pick');
   if (!picked || !_referenceId) return;
 
+  // Open crop modal first; user can draw a rect, skip, or cancel.
+  window.__cropModal.open(picked.url, (cropBox) => {
+    if (cropBox === null) return; // user cancelled
+    _runCutout(picked.url, cropBox);
+  });
+}
+
+function _runCutout(imageUrl, cropBox) {
   _dom.btnRemoveBg.disabled = true;
   _dom.btnRemoveBg.textContent = 'Processing…';
 
-  chrome.runtime.sendMessage(
-    { type: 'CUTOUT_IMAGE', referenceId: _referenceId, imageUrl: picked.url },
-    (resp) => {
-      _dom.btnRemoveBg.disabled = false;
-      _dom.btnRemoveBg.textContent = 'Remove BG';
-      if (chrome.runtime.lastError || !resp.ok) {
-        _showToast('Cutout failed: ' + ((resp && resp.error) || ''), 'error');
-        return;
-      }
-      _cutoutUrl = resp.data.file_url || resp.data.cutout_url || null;
-      if (_cutoutUrl) {
-        _dom.cutoutThumb.src = _cutoutUrl;
-        _dom.cutoutThumb.classList.remove('hidden');
-      }
-      _setStatus('enriched');
+  const msg = { type: 'CUTOUT_IMAGE', referenceId: _referenceId, imageUrl };
+  if (cropBox) msg.cropBox = cropBox;
+
+  chrome.runtime.sendMessage(msg, (resp) => {
+    _dom.btnRemoveBg.disabled = false;
+    _dom.btnRemoveBg.textContent = 'Remove BG';
+    if (chrome.runtime.lastError || !resp.ok) {
+      _showToast('Cutout failed: ' + ((resp && resp.error) || ''), 'error');
+      return;
     }
-  );
+    _cutoutUrl = resp.data.file_url || resp.data.cutout_url || null;
+    if (_cutoutUrl) {
+      _dom.cutoutThumb.src = _cutoutUrl;
+      _dom.cutoutThumb.classList.remove('hidden');
+    }
+    _setStatus('enriched');
+  });
 }
 
 async function onSaveReference() {
