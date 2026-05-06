@@ -10,6 +10,8 @@
 (function detectListing() {
   'use strict';
 
+  console.info('[EtsyAuto] content script loaded on:', window.location.href);
+
   const ext = window.__etsyExtractor;
   if (!ext) {
     console.warn('[EtsyAuto] etsy-dom-extractor.js not loaded — aborting detection.');
@@ -18,9 +20,10 @@
 
   const listingId = ext.getListingIdFromUrl();
   if (!listingId) {
-    // Not a listing edit page with a recognisable ID — silently exit.
+    console.info('[EtsyAuto] No listing ID found in URL — exiting silently.');
     return;
   }
+  console.info('[EtsyAuto] Detected listing ID:', listingId);
 
   const payload = {
     listing_id: listingId,

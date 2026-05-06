@@ -25,7 +25,11 @@
 
   "content_scripts": [
     {
-      "matches": ["https://www.etsy.com/your/shops/*/tools/listings/*"],
+      "matches": [
+        "https://www.etsy.com/your/shops/*",
+        "https://www.etsy.com/listing/*",
+        "https://www.etsy.com/*/listing/*"
+      ],
       "js": ["shared/etsy-dom-extractor.js", "content-scripts/listing-detector.js"],
       "css": ["content-scripts/listing-detector.css"],
       "run_at": "document_idle"
