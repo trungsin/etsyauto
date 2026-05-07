@@ -664,7 +664,11 @@ async def creator_submit(
 # ---------------------------------------------------------------------------
 
 # Cookie lifetime: 30 days. samesite=lax keeps it for cross-tab nav while
-# blocking 3rd-party POSTs. Path=/admin scopes the cookie tightly.
+# blocking 3rd-party POSTs. Path=/ so admin-page JS can call non-/admin
+# endpoints (eg /composite/preview) with the cookie attached. NOT HttpOnly:
+# admin-page JS reads document.cookie to send X-Admin-Token explicitly to
+# those endpoints. Acceptable for local-first single-user; revisit if exposing
+# the admin UI on the public internet.
 _COOKIE_NAME = "admin_token"
 _COOKIE_MAX_AGE = 60 * 60 * 24 * 30
 
@@ -710,9 +714,9 @@ def login_submit(
         key=_COOKIE_NAME,
         value=token,
         max_age=_COOKIE_MAX_AGE,
-        path="/admin",
+        path="/",
         samesite="lax",
-        httponly=True,
+        httponly=False,  # admin-page JS reads it for non-/admin endpoints
     )
     return resp
 
@@ -721,5 +725,5 @@ def login_submit(
 def logout(request: Request) -> Response:
     """Clear cookie, redirect to login."""
     resp = RedirectResponse(url="/admin/login", status_code=303)
-    resp.delete_cookie(_COOKIE_NAME, path="/admin")
+    resp.delete_cookie(_COOKIE_NAME, path="/")
     return resp

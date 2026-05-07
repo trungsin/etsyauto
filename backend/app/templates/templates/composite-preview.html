@@ -23,12 +23,21 @@
     </div>
     <div class="form-group">
       <label for="design_id">Design</label>
-      <select id="design_id" name="design_id" class="form-control" required>
-        <option value="">— select design —</option>
-        {% for d in designs %}
-        <option value="{{ d.id }}">{{ d.name }} ({{ d.source_type }})</option>
-        {% endfor %}
-      </select>
+      {% if designs %}
+        <select id="design_id" name="design_id" class="form-control" required>
+          <option value="">— select design —</option>
+          {% for d in designs %}
+          <option value="{{ d.id }}">{{ d.name }} ({{ d.source_type }})</option>
+          {% endfor %}
+        </select>
+      {% else %}
+        <p class="hint" style="background:#fef3c7; border:1px solid #fde68a; padding:0.5rem; border-radius:4px;">
+          ⚠ No usable designs yet. Reference cutouts (<code>source_type=reference_only</code>)
+          are intentionally excluded from composite preview (IP boundary).
+          Upload an artwork PNG at <a href="/admin/designs">/admin/designs</a> first.
+        </p>
+        <select id="design_id" name="design_id" class="form-control" required disabled></select>
+      {% endif %}
     </div>
     <button type="submit" class="btn btn-primary" id="preview-btn">Preview</button>
     <span id="preview-status" style="margin-left:1rem;font-size:0.9rem;color:#666;"></span>
