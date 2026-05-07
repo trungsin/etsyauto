@@ -207,6 +207,47 @@ def test_cutout_invalid_image_url_rejected(client):
     assert resp.status_code == 400
 
 
+def test_cutout_accepts_etsy_url_at_different_size(client):
+    """Stored URL is il_794xN; request comes in upgraded to il_fullxfull → still matches."""
+    payload = {
+        "source_url": "https://www.etsy.com/listing/22222/sample",
+        "source_listing_id": "22222",
+        "original_title": "Mug",
+        "original_description": "desc",
+        "original_images": [
+            "https://i.etsystatic.com/12345/r/il/abc/999/il_794xN.999_xyz.jpg",
+        ],
+    }
+    resp = client.post("/references/scrape", headers=VALID_HEADERS, json=payload)
+    assert resp.status_code == 201, resp.text
+    ref_id = resp.json()["id"]
+
+    upgraded_url = "https://i.etsystatic.com/12345/r/il/abc/999/il_fullxfull.999_xyz.jpg"
+
+    with (
+        patch("app.services.reference_service.RemoveBgClient") as mock_rbg_cls,
+        patch("app.clients.r2_storage_client.R2StorageClient") as mock_r2_cls,
+        patch("httpx.Client") as mock_http_cls,
+    ):
+        mock_http = MagicMock()
+        mock_http.__enter__ = MagicMock(return_value=mock_http)
+        mock_http.__exit__ = MagicMock(return_value=False)
+        mock_http.get.return_value = MagicMock(content=_FAKE_PNG_BYTES, raise_for_status=MagicMock())
+        mock_http_cls.return_value = mock_http
+        mock_rbg_cls.return_value.remove_bg.return_value = _FAKE_PNG_BYTES
+        mock_r2_cls.return_value.upload_image.return_value = "https://r2.example.com/designs/fake.png"
+
+        cutout_resp = client.post(
+            f"/references/{ref_id}/cutout",
+            headers=VALID_HEADERS,
+            json={"image_url": upgraded_url},
+        )
+
+    assert cutout_resp.status_code == 200, cutout_resp.text
+    # Backend downloaded the upgraded (larger) URL — that's the whole point of the upgrade
+    mock_http.get.assert_called_once_with(upgraded_url)
+
+
 # ---------------------------------------------------------------------------
 # cutout — 404 on missing reference
 # ---------------------------------------------------------------------------

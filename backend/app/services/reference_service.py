@@ -1,6 +1,7 @@
 """Reference service — CRUD for Reference rows with idempotent scrape and cascade cleanup."""
 import json
 import logging
+import re
 from pathlib import Path
 
 import httpx
@@ -16,6 +17,18 @@ logger = logging.getLogger(__name__)
 _VALID_TAGS = {"style", "color", "layout", "season", "niche"}
 _VALID_STATUSES = {"scraped", "enriched", "saved"}
 _PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
+
+# Etsy CDN serves the same image at il_75x75 / il_794xN / il_fullxfull / etc.
+# Strip the size segment so URLs from older scrapes (smaller sizes) compare
+# equal to the upgraded URLs the extension now sends.
+_ETSY_SIZE_RE = re.compile(r"/il_[^./]+\.")
+
+
+def _canonical_etsy_url(url: str) -> str:
+    """Normalize an Etsy CDN URL by collapsing the size segment to `il_X`."""
+    if not url or "i.etsystatic.com" not in url:
+        return url
+    return _ETSY_SIZE_RE.sub("/il_X.", url)
 
 
 def create_or_get_reference(
@@ -230,7 +243,12 @@ def create_cutout(
     except (json.JSONDecodeError, TypeError):
         pass
 
-    if image_url not in original_images:
+    # Compare canonically: an Etsy URL at any size matches a stored URL at any
+    # other size of the same underlying image (extension upgrades to fullxfull
+    # but DB rows from earlier scrapes hold smaller sizes).
+    canonical_request = _canonical_etsy_url(image_url)
+    canonical_stored = {_canonical_etsy_url(u) for u in original_images}
+    if canonical_request not in canonical_stored:
         raise ValueError(
             f"image_url not in original_images for reference {reference_id}"
         )
