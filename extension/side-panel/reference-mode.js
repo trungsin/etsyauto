@@ -93,6 +93,13 @@ async function initReferenceMode(payload) {
       _images = resp.data.original_images.slice(0, 10).map((url) => ({ url, state: 'keep' }));
       _renderImageGrid();
     }
+    // Restore existing AI variants on idempotent re-scrape
+    if (Array.isArray(resp.data.ai_title_variants) && resp.data.ai_title_variants.length) {
+      const variants = resp.data.ai_title_variants.map(
+        (v) => (typeof v === 'string' ? v : (v && (v.text || v.title)) || '')
+      );
+      _renderVariants(variants);
+    }
     _setStatus('scraped');
   });
 
@@ -118,7 +125,8 @@ async function onSuggestTitle() {
       _showToast('Suggest failed: ' + ((resp && resp.error) || ''), 'error');
       return;
     }
-    const variants = resp.data.variants || resp.data.titles || [];
+    const raw = resp.data.variants || resp.data.titles || [];
+    const variants = raw.map((v) => (typeof v === 'string' ? v : (v && (v.text || v.title)) || ''));
     _renderVariants(variants);
     if (variants.length > 0) {
       _dom.editedTitle.value = variants[0];
