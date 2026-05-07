@@ -56,8 +56,30 @@ function extractTitle() {
 }
 
 /**
+ * Upgrade an Etsy image URL to the highest available resolution.
+ *
+ * Etsy serves the same image at multiple sizes via filename prefix:
+ *   il_75x75 / il_170x135 / il_340x270 / il_570xN / il_794xN / il_1140xN / il_fullxfull
+ * The DOM gallery typically uses 794xN or smaller, which is too low-res for
+ * remove.bg cutouts and listing mockups. Replacing the size segment with
+ * `il_fullxfull` returns the original upload (often 2000+ px) when it exists,
+ * and Etsy gracefully degrades to the next-largest cached size otherwise.
+ *
+ * @param {string} url
+ * @returns {string}
+ */
+function upgradeEtsyImageUrl(url) {
+  if (!url || typeof url !== 'string') return url;
+  if (!/i\.etsystatic\.com/.test(url)) return url;
+  // Match `il_<size>.` where size is e.g. 75x75 or 794xN
+  return url.replace(/\/il_[^./]+\./, '/il_fullxfull.');
+}
+
+/**
  * Extract up to 10 image URLs from the listing gallery.
  * Covers admin edit page and public listing page selectors.
+ * URLs are upgraded to `il_fullxfull` so downstream consumers (BG removal,
+ * mockup composite) get full-resolution sources.
  * @returns {string[]}
  */
 function extractImages() {
@@ -77,17 +99,18 @@ function extractImages() {
 
   for (const sel of selectors) {
     document.querySelectorAll(sel).forEach((img) => {
-      const src = img.src || img.getAttribute('data-src') || '';
+      const raw = img.src || img.getAttribute('data-src') || '';
       // Exclude tracker pixels, transparent placeholders, and non-http sources
       if (
-        src &&
-        src.startsWith('http') &&
-        !seen.has(src) &&
-        !src.includes('transparent') &&
-        !src.includes('track')
-      ) {
-        seen.add(src);
-        urls.push(src);
+        !raw ||
+        !raw.startsWith('http') ||
+        raw.includes('transparent') ||
+        raw.includes('track')
+      ) return;
+      const upgraded = upgradeEtsyImageUrl(raw);
+      if (!seen.has(upgraded)) {
+        seen.add(upgraded);
+        urls.push(upgraded);
       }
     });
   }
@@ -127,4 +150,10 @@ function extractDescription() {
 }
 
 // Expose on window so listing-detector.js (non-module) can access these
-window.__etsyExtractor = { getListingIdFromUrl, extractTitle, extractImages, extractDescription };
+window.__etsyExtractor = {
+  getListingIdFromUrl,
+  extractTitle,
+  extractImages,
+  extractDescription,
+  upgradeEtsyImageUrl,
+};

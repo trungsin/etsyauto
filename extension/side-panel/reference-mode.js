@@ -21,6 +21,17 @@
 const STATE_CYCLE = ['keep', 'skip', 'pick'];
 const TAG_KEYS = ['style', 'color', 'layout', 'season', 'niche'];
 
+/**
+ * Upgrade an Etsy CDN URL to fullxfull (largest size) for higher-resolution
+ * cutouts. Mirrors etsy-dom-extractor.js#upgradeEtsyImageUrl; duplicated here
+ * because the extractor is only loaded in the content-script context.
+ */
+function _upgradeEtsyUrl(url) {
+  if (!url || typeof url !== 'string') return url;
+  if (!/i\.etsystatic\.com/.test(url)) return url;
+  return url.replace(/\/il_[^./]+\./, '/il_fullxfull.');
+}
+
 let _referenceId = null;
 let _images = [];      // [{url, state}]
 let _activeTags = new Set();
@@ -90,7 +101,9 @@ async function initReferenceMode(payload) {
     }
     _referenceId = resp.data.id || resp.data.reference_id || null;
     if (Array.isArray(resp.data.original_images) && resp.data.original_images.length) {
-      _images = resp.data.original_images.slice(0, 10).map((url) => ({ url, state: 'keep' }));
+      _images = resp.data.original_images
+        .slice(0, 10)
+        .map((url) => ({ url: _upgradeEtsyUrl(url), state: 'keep' }));
       _renderImageGrid();
     }
     // Restore existing AI variants on idempotent re-scrape
