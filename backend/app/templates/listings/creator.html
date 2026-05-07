@@ -23,7 +23,7 @@
             hx-target="#template-info-panel"
             hx-trigger="change"
             hx-include="this"
-            hx-headers='{"X-Admin-Token": ""}'>
+            hx-headers='{}'>
       <option value="">— select template —</option>
       {% for t in templates %}
         <option value="{{ t.id }}">{{ t.name }} (#{{ t.id }})</option>
@@ -51,7 +51,7 @@
             hx-indicator="#preview-spinner"
             hx-disabled-elt="this"
             hx-request='{"timeout": 60000}'
-            hx-headers='{"X-Admin-Token": ""}'>
+            hx-headers='{}'>
       Preview All Colors
     </button>
     <span id="preview-spinner" class="htmx-indicator"> ⏳ rendering…</span>
@@ -84,7 +84,7 @@
             hx-indicator="#submit-spinner"
             hx-disabled-elt="this"
             hx-request='{"timeout": 90000}'
-            hx-headers='{"X-Admin-Token": ""}'>
+            hx-headers='{}'>
       Create Etsy Draft
     </button>
     <span id="submit-spinner" class="htmx-indicator"> ⏳ creating…</span>
@@ -107,30 +107,9 @@
     });
   })();
 
-  // Token capture for HTMX requests + sticky cookie so future page nav doesn't 401.
-  // Priority: ?token= URL param (first visit) → localStorage → prompt.
-  (function injectAdminToken() {
-    const params = new URLSearchParams(window.location.search);
-    const fromUrl = params.get('token');
-    let token = fromUrl || localStorage.getItem('admin_token') || '';
-    if (!token) {
-      token = prompt('Enter ADMIN_TOKEN to use the Listing Creator:') || '';
-    }
-    if (token) {
-      localStorage.setItem('admin_token', token);
-      // Cookie is read by FastAPI _check_token so /admin/listings/creator
-      // works on a fresh navigation without a header.
-      document.cookie = `admin_token=${encodeURIComponent(token)}; path=/admin; samesite=lax; max-age=2592000`;
-      // Clean the URL so the token isn't kept in history if it came from ?token=
-      if (fromUrl) {
-        params.delete('token');
-        const qs = params.toString();
-        history.replaceState({}, '', window.location.pathname + (qs ? '?' + qs : ''));
-      }
-    }
-    document.body.addEventListener('htmx:configRequest', (evt) => {
-      evt.detail.headers['X-Admin-Token'] = token;
-    });
-  })();
+  // Auth: the cookie set by /admin/login is HttpOnly + path=/admin, so the
+  // browser auto-sends it on every /admin/* request (including HTMX XHRs).
+  // FastAPI middleware promotes it into X-Admin-Token before route handlers
+  // see it — JS doesn't need to know the token at all.
 </script>
 {% endblock %}

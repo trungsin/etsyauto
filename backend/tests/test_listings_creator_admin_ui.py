@@ -117,6 +117,70 @@ def test_creator_page_requires_token(client):
     assert resp.status_code == 401
 
 
+# ---------------------------------------------------------------------------
+# Admin login (cookie-based session for browser nav)
+# ---------------------------------------------------------------------------
+
+def test_login_page_renders_without_auth(client):
+    resp = client.get("/admin/login")
+    assert resp.status_code == 200
+    assert "Admin Login" in resp.text
+    assert 'name="token"' in resp.text
+
+
+def test_login_post_with_valid_token_sets_cookie_and_redirects(client):
+    resp = client.post(
+        "/admin/login",
+        data={"token": ADMIN_TOKEN, "next": "/admin/templates"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/admin/templates"
+    assert "admin_token" in resp.cookies
+    assert resp.cookies["admin_token"] == ADMIN_TOKEN
+
+
+def test_login_post_with_invalid_token_renders_error(client):
+    resp = client.post(
+        "/admin/login",
+        data={"token": "wrong", "next": "/admin/templates"},
+    )
+    assert resp.status_code == 401
+    assert "Invalid token" in resp.text
+    assert "admin_token" not in resp.cookies
+
+
+def test_login_rejects_open_redirect(client):
+    """`next=` must stay within /admin/* to prevent open-redirect."""
+    resp = client.post(
+        "/admin/login",
+        data={"token": ADMIN_TOKEN, "next": "https://evil.example.com"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/admin/templates"
+
+
+def test_logout_clears_cookie_and_redirects_to_login(client):
+    # Establish cookie first
+    client.post("/admin/login", data={"token": ADMIN_TOKEN}, follow_redirects=False)
+    resp = client.get("/admin/logout", follow_redirects=False)
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/admin/login"
+
+
+def test_admin_pages_accept_cookie_via_middleware(client, db_session):
+    """After login, plain GET to any /admin/* page should pass via cookie promotion."""
+    _seed_template(db_session)
+    _seed_design(db_session)
+    # Set cookie via login
+    client.post("/admin/login", data={"token": ADMIN_TOKEN}, follow_redirects=False)
+    # Now plain GET (no header) should work
+    resp = client.get("/admin/listings/creator")
+    assert resp.status_code == 200
+    assert "Listing Creator" in resp.text
+
+
 def test_creator_page_renders_with_dropdowns(client, db_session):
     _seed_template(db_session)
     _seed_design(db_session)

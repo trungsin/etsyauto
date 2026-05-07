@@ -24,6 +24,7 @@ router = APIRouter(prefix="/admin/templates", tags=["admin-templates"])
 designs_router = APIRouter(prefix="/admin/designs", tags=["admin-designs"])
 composite_router = APIRouter(prefix="/admin/composite", tags=["admin-composite"])
 creator_router = APIRouter(prefix="/admin/listings", tags=["admin-listings-creator"])
+auth_router = APIRouter(prefix="/admin", tags=["admin-auth"])
 
 # Templates dir resolved by main.py when it mounts Jinja2Templates; we import the
 # shared instance via a lazy attribute so circular imports are avoided.
@@ -656,3 +657,69 @@ async def creator_submit(
             "etsy_listing_id": result.get("etsy_listing_id"),
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# Admin login / logout (cookie-based session for browser nav)
+# ---------------------------------------------------------------------------
+
+# Cookie lifetime: 30 days. samesite=lax keeps it for cross-tab nav while
+# blocking 3rd-party POSTs. Path=/admin scopes the cookie tightly.
+_COOKIE_NAME = "admin_token"
+_COOKIE_MAX_AGE = 60 * 60 * 24 * 30
+
+
+@auth_router.get("/login", response_class=HTMLResponse)
+def login_page(
+    request: Request,
+    next: str = "/admin/templates",
+    error: str | None = None,
+) -> HTMLResponse:
+    """Render the admin login form. Open route — no token required."""
+    if not settings.admin_token:
+        raise HTTPException(status_code=503, detail="Admin token not configured")
+    return get_jinja().TemplateResponse(
+        request,
+        "admin/login.html",
+        {"next": next, "error": error},
+    )
+
+
+@auth_router.post("/login", response_class=HTMLResponse)
+def login_submit(
+    request: Request,
+    token: str = Form(...),
+    next: str = Form("/admin/templates"),
+) -> Response:
+    """Validate token, set cookie, redirect to `next`. On miss, re-render with error."""
+    if not settings.admin_token:
+        raise HTTPException(status_code=503, detail="Admin token not configured")
+
+    if token != settings.admin_token:
+        return get_jinja().TemplateResponse(
+            request,
+            "admin/login.html",
+            {"next": next, "error": "Invalid token"},
+            status_code=401,
+        )
+
+    # Constrain `next` to /admin/* to prevent open redirect.
+    safe_next = next if next.startswith("/admin") else "/admin/templates"
+    resp = RedirectResponse(url=safe_next, status_code=303)
+    resp.set_cookie(
+        key=_COOKIE_NAME,
+        value=token,
+        max_age=_COOKIE_MAX_AGE,
+        path="/admin",
+        samesite="lax",
+        httponly=True,
+    )
+    return resp
+
+
+@auth_router.get("/logout")
+def logout(request: Request) -> Response:
+    """Clear cookie, redirect to login."""
+    resp = RedirectResponse(url="/admin/login", status_code=303)
+    resp.delete_cookie(_COOKIE_NAME, path="/admin")
+    return resp

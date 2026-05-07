@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Login — EtsyAuto Admin{% endblock %}
+
+{% block content %}
+<div class="login-wrap">
+  <h1>Admin Login</h1>
+  <p class="hint">Enter your <code>ADMIN_TOKEN</code> from <code>backend/.env</code>.</p>
+
+  <form method="post" action="/admin/login" class="login-form">
+    <input type="hidden" name="next" value="{{ next }}">
+
+    <label for="token">Admin Token</label>
+    <input id="token" name="token" type="password" required autofocus
+           autocomplete="current-password"
+           placeholder="479327069a10959e2bf69362e2d71eaba…" />
+
+    {% if error %}
+      <p class="login-error">⚠ {{ error }}</p>
+    {% endif %}
+
+    <button type="submit" class="btn btn-primary">Sign in</button>
+  </form>
+
+  <p class="hint">
+    Cookie lasts 30 days, scoped to <code>/admin</code>. To log out, visit
+    <a href="/admin/logout">/admin/logout</a>.
+  </p>
+</div>
+{% endblock %}

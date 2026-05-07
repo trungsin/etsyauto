@@ -94,3 +94,9 @@ body { font-family: system-ui, sans-serif; background: #f5f5f5; color: #222; }
 .htmx-indicator { display: none; color: #6b7280; font-size: 0.85rem; margin-left: 0.5rem; }
 .htmx-request .htmx-indicator,
 .htmx-request.htmx-indicator { display: inline; }
+
+/* ---- Login (v0.5.1) ---- */
+.login-wrap { max-width: 440px; margin: 3rem auto; }
+.login-form { display: flex; flex-direction: column; gap: 0.75rem; margin: 1.25rem 0; }
+.login-form input[type=password] { padding: 0.6rem; border: 1px solid #e5e7eb; border-radius: 4px; font: inherit; }
+.login-error { color: #991b1b; background: #fef2f2; border: 1px solid #fecaca; padding: 0.5rem 0.75rem; border-radius: 4px; margin: 0; }
