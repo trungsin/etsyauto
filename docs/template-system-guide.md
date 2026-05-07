@@ -577,10 +577,28 @@ curl -X POST http://localhost:8787/listings/from-template \
 
 ### What's not in v0.6.0
 
-- Visual 4-point editor in admin UI (manual JSON edit only)
 - Auto-anchor detection (deferred to C2)
 - PSD smart-object pipeline (deferred to C3)
 - Fabric displacement maps (deferred to C4)
+
+---
+
+### Visual Anchor Editor (v0.7.1)
+
+For non-dev sellers, edit a template's quad zone visually:
+
+1. Open `/admin/templates` → click "Edit anchor" on a row
+2. The page renders the base image with 4 draggable corner handles
+3. Drag any corner; the polygon outline + saved coords update live
+4. Click **Save** — backend writes v2 schema with single `quad` zone
+
+Pre-population:
+- v1 rect → corners (TL, TR, BR, BL)
+- v2 first zone → its 4 corners (rect auto-converted to quad on first edit)
+- Empty/new template → centered 0.2-0.8 box
+
+Limits: MVP supports 1 zone only. Multi-zone editing requires editing
+`composite_anchor_json` directly (or wait for v0.8 multi-zone editor).
 
 ---
 

@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Anchor Editor — {{ template.name }}{% endblock %}
+{% block extra_head %}
+<link rel="stylesheet" href="/admin/static/anchor-editor.css">
+{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Anchor Editor — {{ template.name }}</h1>
+  <a href="/admin/templates/{{ template.id }}" class="btn">← Back to Template</a>
+</div>
+
+<div id="anchor-canvas-wrap" style="position:relative; display:inline-block;">
+  <img id="anchor-base" src="{{ template.base_image_url }}" alt="base"
+       style="display:block; max-width:800px;" />
+  <svg id="anchor-overlay"
+       style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none;"></svg>
+</div>
+
+<div style="margin-top:1rem;">
+  <button id="anchor-save" type="button" class="btn btn-primary">Save</button>
+  <p id="anchor-status"></p>
+</div>
+
+<script>
+  window.__anchorInitial = {{ initial_points | tojson }};
+  window.__templateId = {{ template.id }};
+</script>
+<script src="/admin/static/anchor-editor.js" defer></script>
+{% endblock %}

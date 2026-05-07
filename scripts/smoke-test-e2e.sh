@@ -221,6 +221,18 @@ else
   fail "/admin/listings/creator with token returned HTTP $ADMIN_UI_AUTH (expected 200)"
 fi
 
+# ── 6b-2. Anchor editor page reachable (v0.7.1) ─────────────────────────────
+# Anchor editor page reachable (v0.7.1)
+info "Anchor editor page reachable..."
+ANCHOR_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+  -H "X-Admin-Token: $SMOKE_ADMIN_TOKEN" \
+  "http://127.0.0.1:$PORT/admin/templates/1/anchor" 2>/dev/null || echo "000")
+if [[ "$ANCHOR_STATUS" =~ ^(200|404)$ ]]; then
+  ok "/admin/templates/1/anchor returns $ANCHOR_STATUS (route exists)"
+else
+  fail "/admin/templates/1/anchor returned HTTP $ANCHOR_STATUS (expected 200 or 404)"
+fi
+
 # ── 6c. Health endpoint exposes dry-run flags (v0.7.0) ───────────────────────
 info "Verifying /health exposes dry-run flags..."
 HEALTH_BODY=$(curl -s "http://127.0.0.1:$PORT/health" 2>/dev/null || echo "{}")

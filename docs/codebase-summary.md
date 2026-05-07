@@ -73,6 +73,9 @@ Module-by-module index with line counts. Updated: 2026-05-06 (v0.4.0).
 | `services/listing_pre_check.py` | 90 | Etsy hard-cap validation (title/tags/combos/composite) before Etsy call (v0.7.0) |
 | `clients/etsy_dry_run_fixtures.py` | 130 | Canned Etsy v3 responses for ETSY_DRY_RUN — 5 scenarios (v0.7.0) |
 | `middleware/correlation_id.py` | 45 | Per-request X-Request-ID via ContextVar (v0.7.0) |
+| `app/static/anchor-editor.js` | ~130 | Vanilla JS controller for the visual editor (v0.7.1) |
+| `app/static/anchor-editor.css` | ~32 | SVG handle + polygon styles |
+| `app/templates/templates/anchor-editor.html` | ~30 | Editor page skeleton |
 
 ### Clients (`app/clients/`)
 
@@ -136,8 +139,9 @@ Module-by-module index with line counts. Updated: 2026-05-06 (v0.4.0).
 | `test_listing_pre_check.py` | 7 | Title/tags/combos/composite caps, exception payload (v0.7.0) |
 | `test_correlation_id_middleware.py` | 3 | X-Request-ID echo, inbound preservation, distinct IDs (v0.7.0) |
 | `test_e2e_dry_run_listing.py` | 2 | Full pipeline happy + auth_fail through admin UI under dry-run (v0.7.0) |
+| `test_anchor_editor.py` | 9 | Page render, v1/v2 pre-pop, save round-trip, 422 (3 points / out-of-bounds), 404 GET/POST, auth-required (v0.7.1) |
 
-**Total: 255+ tests passing**
+**Total: 274 tests passing**
 
 ---
 

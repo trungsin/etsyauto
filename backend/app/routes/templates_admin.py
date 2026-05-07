@@ -10,7 +10,10 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
+from pydantic import BaseModel, field_validator
+
 from app.services import (
+    anchor_schema,
     composite_service,
     design_service,
     listing_creator_service,
@@ -330,6 +333,98 @@ async def save_variations_ui(
     return RedirectResponse(
         url=f"/admin/templates/{template_id}/variations", status_code=303
     )
+
+
+# ---------------------------------------------------------------------------
+# Anchor Editor UI (v0.7.1)
+# ---------------------------------------------------------------------------
+
+class AnchorSavePoints(BaseModel):
+    points: list[list[float]]
+
+    @field_validator("points")
+    @classmethod
+    def _exactly_4(cls, v: list[list[float]]) -> list[list[float]]:
+        if len(v) != 4:
+            raise ValueError("expected 4 points")
+        for p in v:
+            if len(p) != 2:
+                raise ValueError("each point must be [x, y]")
+            x, y = p
+            if not (0.0 <= x <= 1.0 and 0.0 <= y <= 1.0):
+                raise ValueError("points must be in [0,1]")
+        return v
+
+
+def _derive_initial_quad_points(template) -> list[list[float]]:
+    """Return 4 clockwise [[x,y], ...] points from the template's anchor JSON.
+
+    Priority:
+      1. First zone is quad  → use as-is.
+      2. First zone is rect  → convert corners (TL, TR, BR, BL).
+      3. No zones / parse error → default centered 0.2–0.8 box.
+    """
+    zones = anchor_schema.parse_anchor(template.composite_anchor_json)
+    if zones:
+        z = zones[0]
+        if z["kind"] == "quad":
+            return z["points"]
+        # rect → 4 corners clockwise from top-left
+        x, y, w, h = z["x"], z["y"], z["w"], z["h"]
+        return [[x, y], [x + w, y], [x + w, y + h], [x, y + h]]
+    # default centered box
+    return [[0.2, 0.2], [0.8, 0.2], [0.8, 0.8], [0.2, 0.8]]
+
+
+@router.get("/{template_id}/anchor", response_class=HTMLResponse)
+def anchor_editor_page(
+    template_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    x_admin_token: str | None = Header(default=None),
+    admin_token: str | None = Cookie(default=None),
+) -> HTMLResponse:
+    """Render the visual anchor editor for a template."""
+    _check_token(x_admin_token, request, admin_token)
+    tmpl = template_service.get_template(db, template_id)
+    if tmpl is None:
+        raise HTTPException(status_code=404, detail="Template not found")
+    points = _derive_initial_quad_points(tmpl)
+    return get_jinja().TemplateResponse(
+        request,
+        "templates/anchor-editor.html",
+        {"template": tmpl, "initial_points": points},
+    )
+
+
+@router.post("/{template_id}/anchor")
+def anchor_editor_save(
+    template_id: int,
+    body: AnchorSavePoints,
+    request: Request,
+    db: Session = Depends(get_db),
+    x_admin_token: str | None = Header(default=None),
+    admin_token: str | None = Cookie(default=None),
+) -> dict:
+    """Persist updated quad anchor points and invalidate composite cache."""
+    _check_token(x_admin_token, request, admin_token)
+    tmpl = template_service.get_template(db, template_id)
+    if tmpl is None:
+        raise HTTPException(status_code=404, detail="Template not found")
+    new_anchor = {
+        "version": 2,
+        "zones": [
+            {
+                "name": "main",
+                "kind": "quad",
+                "points": [[float(p[0]), float(p[1])] for p in body.points],
+            }
+        ],
+    }
+    tmpl.composite_anchor_json = json.dumps(new_anchor)
+    db.commit()
+    composite_service.invalidate_composites_for_template(template_id)
+    return {"ok": True}
 
 
 # ---------------------------------------------------------------------------

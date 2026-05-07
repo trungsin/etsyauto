@@ -76,6 +76,32 @@
 
 ---
 
+## v0.7.1 — Visual Anchor Editor
+
+### Scope
+
+| Sub-feature | Title | Status | Completed |
+|-------------|-------|--------|-----------|
+| — | [Visual 4-Point Anchor Editor (MVP)](../plans/260507-1147-visual-anchor-editor/plan.md) | **Complete** | 2026-05-07 |
+
+### v0.7.1 Success Metrics
+
+- [x] `/admin/templates/{id}/anchor` renders base image with 4 SVG drag handles
+- [x] Pre-populates from v1 rect / v2 quad / default centered box
+- [x] Save writes v2 schema with single quad zone; cache invalidated
+- [x] 9 new tests; total 274
+- [x] Smoke 22/22
+
+### Deferred (post-v0.7.1)
+
+- Multi-zone editing UI (add/remove/rename zones)
+- rect ↔ quad kind switching in editor
+- JSON paste/copy import/export
+- Grid snap, alignment guides, undo/redo
+- Live composite preview at current zone
+
+---
+
 ## v0.6.0 — Template Engine C1 (Quad Zones + Multi-Zone)
 
 ### Scope
@@ -99,7 +125,6 @@
 - **C2** — auto-anchor detection (CTDave001 inspired)
 - **C3** — PSD smart-object pipeline (psd-tools)
 - **C4** — fabric displacement maps (cv2.remap)
-- Visual 4-point editor in admin UI
 
 ---
 

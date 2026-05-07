@@ -1,0 +1,40 @@
+/* Anchor Editor — drag-to-place quad handle UI (v0.7.1) */
+
+#anchor-canvas-wrap {
+  user-select: none;
+  touch-action: none;
+}
+
+#anchor-overlay {
+  pointer-events: none;
+}
+
+#anchor-poly {
+  fill: rgba(79, 70, 229, 0.15);
+  stroke: #4f46e5;
+  stroke-width: 2;
+  pointer-events: none;
+}
+
+.handle {
+  fill: #4f46e5;
+  stroke: #fff;
+  stroke-width: 2;
+  cursor: grab;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.handle:active {
+  cursor: grabbing;
+}
+
+#anchor-status {
+  min-height: 1.2em;
+  margin-top: 0.5em;
+}
+
+#anchor-save {
+  margin-top: 1em;
+  padding: 0.5em 1.5em;
+}

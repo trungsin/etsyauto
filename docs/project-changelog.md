@@ -4,6 +4,41 @@ All notable changes to EtsyAuto. Format: [Keep a Changelog](https://keepachangel
 
 ---
 
+## [0.7.1] — 2026-05-07
+
+Visual 4-Point Anchor Editor — admin UI for non-dev sellers to drag quad zone corners visually instead of hand-editing JSON.
+
+### Added
+
+#### Backend
+- `GET /admin/templates/{id}/anchor` — renders editor page; pre-populates 4 corner points from v1 rect / v2 quad / default
+- `POST /admin/templates/{id}/anchor` — JSON `{points: [[x,y]×4]}` → writes v2 schema with single `quad` zone; invalidates composite cache
+- `_derive_initial_quad_points` helper — uniform conversion v1 rect → 4 corners (TL, TR, BR, BL)
+- `AnchorSavePoints` Pydantic model — validates exactly 4 points, all in [0, 1]
+
+#### Frontend
+- `backend/app/templates/templates/anchor-editor.html` — page skeleton with `<img>` base + `<svg>` overlay
+- `backend/app/static/anchor-editor.js` — vanilla JS, no libs; pointer events for mouse + touch; clamp [0,1]; cookie-token POST
+- `backend/app/static/anchor-editor.css` — handle + polygon styling
+
+#### UI
+- "Edit anchor" link in `/admin/templates` list rows
+
+#### Tests (9 new, total 274)
+- `test_anchor_editor.py` — page render, v1/v2 pre-pop, save round-trip, 422 (3 points / out-of-bounds), 404 GET/POST, auth-required
+
+#### Smoke (21 → 22)
+- Anchor editor page reachable check
+
+### Out of Scope (deferred)
+- Multi-zone editing
+- rect ↔ quad kind switching
+- JSON paste/copy import-export
+- Grid snap, alignment guides, undo/redo
+- Live composite preview at current zone
+
+---
+
 ## [0.7.0] — 2026-05-07
 
 Real-Etsy E2E + Error UX hardening. ETSY_DRY_RUN mode + 5 scenarios for safe end-to-end testing without quota burn. Friendly error mapping for every Etsy 4xx/5xx. Per-request correlation IDs. Pre-flight validation against Etsy hard caps.
