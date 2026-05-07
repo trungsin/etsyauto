@@ -2,7 +2,7 @@
 import json
 import logging
 
-from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Cookie, Depends, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.exc import IntegrityError
@@ -41,11 +41,24 @@ def get_jinja() -> Jinja2Templates:
 MAX_IMAGE_BYTES = 10 * 1024 * 1024  # 10 MB
 
 
-def _check_token(x_admin_token: str | None) -> None:
-    """Raise 401 HTML-friendly if token missing/wrong."""
+def _check_token(
+    x_admin_token: str | None,
+    request: Request | None = None,
+    admin_token_cookie: str | None = None,
+) -> None:
+    """Raise 401 HTML-friendly if token missing/wrong.
+
+    Accepts the token from any of (in priority order):
+      1. `X-Admin-Token` header (HTMX/curl/extension)
+      2. `?token=` query string (first-visit browser navigation)
+      3. `admin_token` cookie (sticky across browser nav after first auth)
+    """
     if not settings.admin_token:
         raise HTTPException(status_code=503, detail="Admin token not configured")
-    if x_admin_token != settings.admin_token:
+    candidates = [x_admin_token, admin_token_cookie]
+    if request is not None:
+        candidates.append(request.query_params.get("token"))
+    if not any(c == settings.admin_token for c in candidates if c):
         raise HTTPException(status_code=401, detail="Invalid or missing X-Admin-Token")
 
 
@@ -477,9 +490,10 @@ def creator_page(
     request: Request,
     db: Session = Depends(get_db),
     x_admin_token: str | None = Header(default=None),
+    admin_token: str | None = Cookie(default=None),
 ) -> HTMLResponse:
     """Render the Listing Creator form (template + design pickers + matrix + meta)."""
-    _check_token(x_admin_token)
+    _check_token(x_admin_token, request, admin_token)
     all_templates = template_service.list_templates(db)
     templates = [t for t in all_templates if _template_has_colors(t)]
     # Designs eligible: anything not reference_only
@@ -500,9 +514,10 @@ def creator_template_info(
     template_id: int,
     db: Session = Depends(get_db),
     x_admin_token: str | None = Header(default=None),
+    admin_token: str | None = Cookie(default=None),
 ) -> HTMLResponse:
     """HTMX partial: variations matrix + color list when template selection changes."""
-    _check_token(x_admin_token)
+    _check_token(x_admin_token, request, admin_token)
     tmpl = template_service.get_template(db, template_id)
     if tmpl is None:
         raise HTTPException(status_code=404, detail="Template not found")
@@ -518,9 +533,10 @@ def creator_preview(
     design_id: int = Form(...),
     db: Session = Depends(get_db),
     x_admin_token: str | None = Header(default=None),
+    admin_token: str | None = Cookie(default=None),
 ) -> HTMLResponse:
     """HTMX partial: render composite previews for every color in the template."""
-    _check_token(x_admin_token)
+    _check_token(x_admin_token, request, admin_token)
     jinja = get_jinja()
     try:
         results = composite_service.get_or_create_composites_all_colors(
@@ -554,9 +570,10 @@ async def creator_submit(
     request: Request,
     db: Session = Depends(get_db),
     x_admin_token: str | None = Header(default=None),
+    admin_token: str | None = Cookie(default=None),
 ) -> HTMLResponse:
     """HTMX partial: call listing_creator_service, render success/idempotent/error toast."""
-    _check_token(x_admin_token)
+    _check_token(x_admin_token, request, admin_token)
     jinja = get_jinja()
 
     form = await request.form()

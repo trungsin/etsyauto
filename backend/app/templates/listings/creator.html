@@ -107,13 +107,26 @@
     });
   })();
 
-  // HTMX requires X-Admin-Token. Read from localStorage (set via prompt below)
-  // or fall back to prompting once per session.
+  // Token capture for HTMX requests + sticky cookie so future page nav doesn't 401.
+  // Priority: ?token= URL param (first visit) → localStorage → prompt.
   (function injectAdminToken() {
-    let token = localStorage.getItem('admin_token');
+    const params = new URLSearchParams(window.location.search);
+    const fromUrl = params.get('token');
+    let token = fromUrl || localStorage.getItem('admin_token') || '';
     if (!token) {
       token = prompt('Enter ADMIN_TOKEN to use the Listing Creator:') || '';
-      if (token) localStorage.setItem('admin_token', token);
+    }
+    if (token) {
+      localStorage.setItem('admin_token', token);
+      // Cookie is read by FastAPI _check_token so /admin/listings/creator
+      // works on a fresh navigation without a header.
+      document.cookie = `admin_token=${encodeURIComponent(token)}; path=/admin; samesite=lax; max-age=2592000`;
+      // Clean the URL so the token isn't kept in history if it came from ?token=
+      if (fromUrl) {
+        params.delete('token');
+        const qs = params.toString();
+        history.replaceState({}, '', window.location.pathname + (qs ? '?' + qs : ''));
+      }
     }
     document.body.addEventListener('htmx:configRequest', (evt) => {
       evt.detail.headers['X-Admin-Token'] = token;
