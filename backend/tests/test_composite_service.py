@@ -382,18 +382,49 @@ def test_per_color_composite_color_none_keeps_v0_2_0_key(db_session):
     assert url.endswith(expected_key)
 
 
-def test_per_color_composite_missing_color_base_raises(db_session):
-    """Requesting a color that has no base image raises ValueError."""
+def test_per_color_composite_falls_back_to_default_base(db_session):
+    """When a color has no specific base, fall back to template.base_image_url
+    (single-blank templates work in the multi-color creator without per-color uploads)."""
     from app.services import composite_service
 
     template = _seed_apparel_template_with_color_bases(db_session, colors=("White",))
     design = _seed_design(db_session)
 
     r2_mock = _make_r2_mock(exists=False)
+    with _patch_r2(r2_mock), patch("urllib.request.urlopen",
+                                   side_effect=lambda url: io.BytesIO(_make_png_rgba(80, 80))):
+        url, cached = composite_service.get_or_create_composite(
+            db_session, template.id, design.id, color="Black",
+        )
+    assert url is not None
+    # Cache key still includes the color so per-color caching works
+    assert "-Black.png" in url
+
+
+def test_per_color_composite_raises_when_no_base_at_all(db_session):
+    """If template has neither a color base nor a default base_image_url, raise."""
+    from app.services import composite_service
+    from app.models.template import Template
+
+    t = Template(
+        name="No Bases",
+        category="apparel",
+        base_image_url="",  # explicitly empty
+        composite_anchor_json=json.dumps({"x": 0, "y": 0, "w": 1, "h": 1}),
+        default_price_cents=1900,
+        variation_options_json=json.dumps({"sizes": ["S"], "colors": ["White"]}),
+        color_base_images_json=json.dumps({}),
+    )
+    db_session.add(t)
+    db_session.commit()
+    db_session.refresh(t)
+
+    design = _seed_design(db_session)
+    r2_mock = _make_r2_mock(exists=False)
     with _patch_r2(r2_mock):
-        with pytest.raises(ValueError, match="no color base image"):
+        with pytest.raises(ValueError, match="neither a color base"):
             composite_service.get_or_create_composite(
-                db_session, template.id, design.id, color="Black",
+                db_session, t.id, design.id, color="Black",
             )
 
 
@@ -422,13 +453,13 @@ def test_preview_all_colors_renders_each_color(db_session):
         assert f"-{design.id}-" in r["composite_url"]
 
 
-def test_preview_all_colors_partial_failure_returns_error_field(db_session):
-    """A color missing its base image yields an `error` entry but other colors still render."""
+def test_preview_all_colors_uses_default_base_when_color_missing(db_session):
+    """When a color advertised in variation_options has no per-color base, fall
+    back to the template default — both colors should render successfully."""
     from app.services import composite_service
 
-    # Only White has a base; Black is listed in colors but has no base image
+    # Only White has a per-color base; Black falls back to template.base_image_url
     template = _seed_apparel_template_with_color_bases(db_session, colors=("White",))
-    # Patch options to advertise a 2nd color without a base
     opts = json.loads(template.variation_options_json)
     opts["colors"] = ["White", "Black"]
     template.variation_options_json = json.dumps(opts)
@@ -445,8 +476,8 @@ def test_preview_all_colors_partial_failure_returns_error_field(db_session):
 
     by_color = {r["color"]: r for r in results}
     assert by_color["White"]["error"] is None
-    assert by_color["Black"]["error"] is not None
-    assert "no color base" in by_color["Black"]["error"].lower()
+    assert by_color["Black"]["error"] is None
+    assert by_color["Black"]["composite_url"] is not None
 
 
 def test_design_delete_invalidates_per_color_composites(db_session):

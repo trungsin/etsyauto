@@ -60,7 +60,10 @@ def get_or_create_composite(
     if design.source_type == "reference_only":
         raise ValueError("reference_only designs cannot be used in composite preview")
 
-    # Resolve base image URL: per-color or default
+    # Resolve base image URL: per-color → fallback to template default.
+    # The fallback lets a single-blank template work in the multi-color creator
+    # immediately; sellers upload color-specific bases later when they want
+    # accurate per-color mockups.
     if color is None:
         base_image_url = template.base_image_url
     else:
@@ -69,10 +72,11 @@ def get_or_create_composite(
             bases = json.loads(template.color_base_images_json or "{}")
         except (json.JSONDecodeError, TypeError):
             bases = {}
-        base_image_url = bases.get(color_norm)
+        base_image_url = bases.get(color_norm) or template.base_image_url
         if not base_image_url:
             raise ValueError(
-                f"Template {template_id} has no color base image for color={color_norm!r}"
+                f"Template {template_id} has neither a color base for {color_norm!r} "
+                f"nor a default base_image_url"
             )
 
     key = _cache_key(template_id, design_id, color)
