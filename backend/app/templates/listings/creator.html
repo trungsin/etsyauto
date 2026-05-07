@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}Listing Creator — EtsyAuto Admin{% endblock %}
+
+{% block content %}
+<h1>Etsy Listing Creator</h1>
+<p class="hint">
+  Create an Etsy <strong>draft</strong> listing from a template + design with full
+  per-color mockup variations. Idempotent on (template, design).
+</p>
+
+<form id="creator-form" class="creator-form">
+
+  <fieldset class="creator-section">
+    <label for="shop_id">Shop ID</label>
+    <input id="shop_id" name="shop_id" type="text" required
+           placeholder="e.g. 12345678" autocomplete="off" />
+  </fieldset>
+
+  <fieldset class="creator-section">
+    <label for="template_id">Template</label>
+    <select id="template_id" name="template_id" required
+            hx-get="/admin/listings/creator/template-info"
+            hx-target="#template-info-panel"
+            hx-trigger="change"
+            hx-include="this"
+            hx-headers='{"X-Admin-Token": ""}'>
+      <option value="">— select template —</option>
+      {% for t in templates %}
+        <option value="{{ t.id }}">{{ t.name }} (#{{ t.id }})</option>
+      {% endfor %}
+    </select>
+  </fieldset>
+
+  <fieldset class="creator-section">
+    <label for="design_id">Design</label>
+    <select id="design_id" name="design_id" required>
+      <option value="">— select design —</option>
+      {% for d in designs %}
+        <option value="{{ d.id }}">{{ d.name }} (#{{ d.id }})</option>
+      {% endfor %}
+    </select>
+  </fieldset>
+
+  <div id="template-info-panel" class="creator-section"></div>
+
+  <fieldset class="creator-section">
+    <button type="button" class="btn btn-ghost"
+            hx-post="/admin/listings/creator/preview"
+            hx-target="#preview-panel"
+            hx-include="closest form"
+            hx-indicator="#preview-spinner"
+            hx-disabled-elt="this"
+            hx-request='{"timeout": 60000}'
+            hx-headers='{"X-Admin-Token": ""}'>
+      Preview All Colors
+    </button>
+    <span id="preview-spinner" class="htmx-indicator"> ⏳ rendering…</span>
+    <div id="preview-panel"></div>
+  </fieldset>
+
+  <fieldset class="creator-section">
+    <label for="title">Title <span class="hint">(≤140 chars)</span></label>
+    <textarea id="title" name="title" rows="2" maxlength="140" required
+              placeholder="Listing title…"></textarea>
+  </fieldset>
+
+  <fieldset class="creator-section">
+    <label for="description">Description</label>
+    <textarea id="description" name="description" rows="4" required
+              placeholder="Listing description…"></textarea>
+  </fieldset>
+
+  <fieldset class="creator-section">
+    <label for="tags_csv">Tags <span class="hint">(comma-separated, max 13)</span></label>
+    <input id="tags_csv" name="tags_csv" type="text"
+           placeholder="t-shirt, custom, gift" />
+  </fieldset>
+
+  <fieldset class="creator-section">
+    <button type="button" class="btn btn-primary"
+            hx-post="/admin/listings/creator/submit"
+            hx-target="#result-panel"
+            hx-include="closest form"
+            hx-indicator="#submit-spinner"
+            hx-disabled-elt="this"
+            hx-request='{"timeout": 90000}'
+            hx-headers='{"X-Admin-Token": ""}'>
+      Create Etsy Draft
+    </button>
+    <span id="submit-spinner" class="htmx-indicator"> ⏳ creating…</span>
+    <div id="result-panel"></div>
+  </fieldset>
+
+</form>
+
+<script>
+  // Persist text fields across reloads (KISS — no DB column for shop_id).
+  (function persistFormFields() {
+    const fields = ['shop_id', 'title', 'description', 'tags_csv'];
+    fields.forEach(name => {
+      const el = document.querySelector(`[name="${name}"]`);
+      if (!el) return;
+      const stored = localStorage.getItem('creator_' + name);
+      if (stored) el.value = stored;
+      el.addEventListener('input', () =>
+        localStorage.setItem('creator_' + name, el.value));
+    });
+  })();
+
+  // HTMX requires X-Admin-Token. Read from localStorage (set via prompt below)
+  // or fall back to prompting once per session.
+  (function injectAdminToken() {
+    let token = localStorage.getItem('admin_token');
+    if (!token) {
+      token = prompt('Enter ADMIN_TOKEN to use the Listing Creator:') || '';
+      if (token) localStorage.setItem('admin_token', token);
+    }
+    document.body.addEventListener('htmx:configRequest', (evt) => {
+      evt.detail.headers['X-Admin-Token'] = token;
+    });
+  })();
+</script>
+{% endblock %}

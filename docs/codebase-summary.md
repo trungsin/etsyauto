@@ -25,7 +25,7 @@ Module-by-module index with line counts. Updated: 2026-05-06 (v0.4.0).
 | `routes/variations_api.py` | 145 | `GET/POST /templates/{id}/variations`, `PUT/DELETE` variations — bulk replace + single update |
 | `routes/designs_api.py` | 104 | `GET/POST /designs`, `GET/DELETE /designs/{id}` — design upload/list/delete, RGBA PNG validation |
 | `routes/composite_api.py` | 56 | `POST /composite/preview` — trigger Pillow alpha-composite, return cached R2 URL |
-| `routes/templates_admin.py` | 407 | Jinja2 + HTMX admin UI — `/admin/templates` CRUD pages, composite preview UI |
+| `routes/templates_admin.py` | 590 | Jinja2 + HTMX admin UI — `/admin/templates` CRUD, designs, composite preview, **listing creator (v0.5.0)** |
 | `routes/references_api.py` | 329 | `POST /references/scrape`, `GET/PUT/DELETE /references/{id}`, `/{id}/suggest-title`, `/{id}/cutout`, `/{id}/save` — reference workflow, X-Admin-Token protected |
 | `routes/listings_creator_api.py` | 83 | `POST /listings/from-template` — idempotent Etsy draft creator (sub-feature C, v0.4.0) |
 
@@ -122,8 +122,9 @@ Module-by-module index with line counts. Updated: 2026-05-06 (v0.4.0).
 | `test_templates_color_bases_api.py` | ~8 | Per-color base upload/delete, validation against `variation_options.colors`, replacement |
 | `test_listings_creator_api.py` | 9 | Auth, validation, happy path, idempotency, image rank order, taxonomy cache, unknown-value 422 |
 | `test_e2e_listing_creator_workflow.py` | 3 | Full pipeline (template → color bases → expand → design → preview-all → from-template), idempotent re-call, partial-failure 422 |
+| `test_listings_creator_admin_ui.py` | 11 | Admin UI routes — auth, page render, template-info partial, preview/submit form parse, idempotent badge, error mapping (v0.5.0) |
 
-**Total: 197 tests passing**
+**Total: 209 tests passing**
 
 ---
 
@@ -169,7 +170,7 @@ Module-by-module index with line counts. Updated: 2026-05-06 (v0.4.0).
 | `notion-db-setup.md` | Notion database setup + review workflow |
 | `template-system-guide.md` | Template + variations + composite preview UI/API; multi-color base images section (v0.4.0) |
 | `reference-workflow-guide.md` | Reference Mode walkthrough (sub-feature A, v0.3.0) |
-| `etsy-listing-creator-guide.md` | End-to-end Creator Mode walkthrough — per-color mockups, variations matrix, Etsy draft creation (sub-feature C, v0.4.0) |
+| `etsy-listing-creator-guide.md` | End-to-end Creator Mode walkthrough — per-color mockups, variations matrix, Etsy draft creation (sub-feature C, v0.4.0) + Admin UI alternative (v0.5.0) |
 
 ---
 

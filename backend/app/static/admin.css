@@ -65,3 +65,32 @@ body { font-family: system-ui, sans-serif; background: #f5f5f5; color: #222; }
 .fieldset legend { font-size: 0.85rem; font-weight: 600; color: #374151; padding: 0 0.5rem; }
 .form-actions { display: flex; gap: 0.75rem; margin-top: 1.5rem; }
 .required { color: #ef4444; }
+
+/* ---- Listing Creator (v0.5.0) ---- */
+.creator-form { max-width: 760px; }
+.creator-section { border: 0; padding: 0.5rem 0; margin: 0 0 0.75rem; }
+.creator-section label { display: block; font-weight: 600; font-size: 0.85rem; margin-bottom: 0.25rem; }
+.creator-section input[type=text],
+.creator-section textarea,
+.creator-section select { width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 4px; font: inherit; }
+
+.template-info { background: #f9fafb; padding: 0.75rem; border-radius: 4px; }
+.variations-matrix { border-collapse: collapse; font-size: 0.85rem; margin-top: 0.5rem; overflow-x: auto; }
+.variations-matrix th, .variations-matrix td { border: 1px solid #e5e7eb; padding: 4px 8px; text-align: center; }
+.variations-matrix th[scope="row"] { text-align: left; white-space: nowrap; }
+.variations-matrix input[type=checkbox] { cursor: pointer; }
+
+.color-grid { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 0.5rem; }
+.color-grid-item { width: 110px; display: flex; flex-direction: column; align-items: center; }
+.color-thumb { width: 110px; height: 110px; object-fit: cover; border-radius: 4px; border: 1px solid #e5e7eb; }
+.color-label { font-size: 0.8rem; margin: 0 0 0.25rem; color: #6b7280; }
+.color-error { font-size: 0.75rem; color: #ef4444; text-align: center; margin: 0; }
+
+.toast { padding: 0.6rem 0.9rem; border-radius: 4px; margin-top: 0.5rem; font-size: 0.9rem; }
+.toast-success { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+.toast-error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+.toast .badge { display: inline-block; background: #fde68a; color: #92400e; padding: 0.1rem 0.4rem; border-radius: 3px; font-size: 0.75rem; margin-right: 0.4rem; }
+
+.htmx-indicator { display: none; color: #6b7280; font-size: 0.85rem; margin-left: 0.5rem; }
+.htmx-request .htmx-indicator,
+.htmx-request.htmx-indicator { display: inline; }

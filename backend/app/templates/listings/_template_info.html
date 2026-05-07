@@ -1,0 +1,42 @@
+<div class="template-info">
+  <p class="hint">
+    Sizes:
+    {% for s in sizes %}<code>{{ s.name }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
+    &nbsp;|&nbsp; Colors:
+    {% for c in colors %}<code>{{ c }}</code>{% if c == primary_color %} ⭐{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}
+  </p>
+
+  <table class="variations-matrix">
+    <thead>
+      <tr>
+        <th></th>
+        {% for c in colors %}<th>{{ c }}</th>{% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in sizes %}
+        {% set i = loop.index0 %}
+        <tr>
+          <th scope="row">
+            {{ s.name }}
+            <span class="hint">${{ '%.2f'|format(s.price_cents / 100) }}</span>
+          </th>
+          {% for c in colors %}
+            {% set j = loop.index0 %}
+            <td>
+              {# Indexed encoding — robust to any chars in size/color names.
+                 The hidden inputs always submit; the checkbox controls inclusion. #}
+              <input type="checkbox"
+                     name="combo_{{ i }}_{{ j }}"
+                     checked
+                     aria-label="{{ s.name }} {{ c }}">
+              <input type="hidden" name="combo_size_{{ i }}_{{ j }}" value="{{ s.name }}">
+              <input type="hidden" name="combo_color_{{ i }}_{{ j }}" value="{{ c }}">
+            </td>
+          {% endfor %}
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="hint">Uncheck cells to skip those (size, color) combinations. Etsy max 30.</p>
+</div>

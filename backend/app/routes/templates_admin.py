@@ -10,13 +10,20 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.services import design_service, template_service, variation_service
+from app.services import (
+    composite_service,
+    design_service,
+    listing_creator_service,
+    template_service,
+    variation_service,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin/templates", tags=["admin-templates"])
 designs_router = APIRouter(prefix="/admin/designs", tags=["admin-designs"])
 composite_router = APIRouter(prefix="/admin/composite", tags=["admin-composite"])
+creator_router = APIRouter(prefix="/admin/listings", tags=["admin-listings-creator"])
 
 # Templates dir resolved by main.py when it mounts Jinja2Templates; we import the
 # shared instance via a lazy attribute so circular imports are avoided.
@@ -404,4 +411,231 @@ def composite_preview_ui(
         request,
         "templates/composite-preview.html",
         {"templates": templates, "designs": compositable, "composite_url": None, "error": None},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Listing Creator admin UI (sub-feature C, v0.5.0)
+# ---------------------------------------------------------------------------
+
+def _template_has_colors(t) -> bool:
+    """Filter helper — only templates that declare at least one color."""
+    try:
+        opts = json.loads(t.variation_options_json or "{}")
+    except (json.JSONDecodeError, TypeError):
+        return False
+    return bool(opts.get("colors"))
+
+
+def _parse_template_options(t) -> dict:
+    """Parse variation_options_json safely → {sizes, colors, primary_color}."""
+    try:
+        opts = json.loads(t.variation_options_json or "{}")
+    except (json.JSONDecodeError, TypeError):
+        opts = {}
+    sizes_raw = opts.get("sizes", [])
+    sizes = [
+        s if isinstance(s, dict) else {"name": s, "price_cents": t.default_price_cents}
+        for s in sizes_raw
+    ]
+    return {
+        "sizes": sizes,
+        "colors": opts.get("colors", []),
+        "primary_color": opts.get("primary_color"),
+    }
+
+
+def _parse_enabled_combos(form) -> list[dict]:
+    """Parse indexed `combo_<i>_<j>` form keys → enabled_combos list.
+
+    Form encoding (robust to any chars in size/color names):
+      combo_<i>_<j>=on            — checkbox: present only when checked
+      combo_size_<i>_<j>=<name>   — hidden: size name (always present)
+      combo_color_<i>_<j>=<name>  — hidden: color name (always present)
+
+    For each `combo_<i>_<j>` present in the form, look up the matching size/color
+    hidden inputs to reconstruct the (size, color) pair.
+    """
+    combos: list[dict] = []
+    for key in form.keys():
+        # Match only combo_<i>_<j>, not combo_size_<i>_<j> or combo_color_<i>_<j>
+        if not key.startswith("combo_"):
+            continue
+        rest = key[len("combo_"):]
+        if rest.startswith(("size_", "color_")):
+            continue
+        size = form.get(f"combo_size_{rest}")
+        color = form.get(f"combo_color_{rest}")
+        if size is None or color is None:
+            continue
+        combos.append({"size": str(size), "color": str(color), "enabled": True})
+    return combos
+
+
+@creator_router.get("/creator", response_class=HTMLResponse)
+def creator_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    x_admin_token: str | None = Header(default=None),
+) -> HTMLResponse:
+    """Render the Listing Creator form (template + design pickers + matrix + meta)."""
+    _check_token(x_admin_token)
+    all_templates = template_service.list_templates(db)
+    templates = [t for t in all_templates if _template_has_colors(t)]
+    # Designs eligible: anything not reference_only
+    designs = [
+        d for d in design_service.list_designs(db) if d.source_type != "reference_only"
+    ]
+    jinja = get_jinja()
+    return jinja.TemplateResponse(
+        request,
+        "listings/creator.html",
+        {"templates": templates, "designs": designs},
+    )
+
+
+@creator_router.get("/creator/template-info", response_class=HTMLResponse)
+def creator_template_info(
+    request: Request,
+    template_id: int,
+    db: Session = Depends(get_db),
+    x_admin_token: str | None = Header(default=None),
+) -> HTMLResponse:
+    """HTMX partial: variations matrix + color list when template selection changes."""
+    _check_token(x_admin_token)
+    tmpl = template_service.get_template(db, template_id)
+    if tmpl is None:
+        raise HTTPException(status_code=404, detail="Template not found")
+    ctx = _parse_template_options(tmpl)
+    jinja = get_jinja()
+    return jinja.TemplateResponse(request, "listings/_template_info.html", ctx)
+
+
+@creator_router.post("/creator/preview", response_class=HTMLResponse)
+def creator_preview(
+    request: Request,
+    template_id: int = Form(...),
+    design_id: int = Form(...),
+    db: Session = Depends(get_db),
+    x_admin_token: str | None = Header(default=None),
+) -> HTMLResponse:
+    """HTMX partial: render composite previews for every color in the template."""
+    _check_token(x_admin_token)
+    jinja = get_jinja()
+    try:
+        results = composite_service.get_or_create_composites_all_colors(
+            session=db, template_id=template_id, design_id=design_id
+        )
+    except ValueError as exc:
+        return jinja.TemplateResponse(
+            request,
+            "listings/_result.html",
+            {"error": str(exc), "idempotent": False, "draft_url": None},
+            status_code=400,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception(
+            "Admin UI: composite preview failed (template=%d design=%d)",
+            template_id, design_id,
+        )
+        return jinja.TemplateResponse(
+            request,
+            "listings/_result.html",
+            {"error": f"Preview failed: {exc}", "idempotent": False, "draft_url": None},
+            status_code=500,
+        )
+    return jinja.TemplateResponse(
+        request, "listings/_preview_grid.html", {"results": results}
+    )
+
+
+@creator_router.post("/creator/submit", response_class=HTMLResponse)
+async def creator_submit(
+    request: Request,
+    db: Session = Depends(get_db),
+    x_admin_token: str | None = Header(default=None),
+) -> HTMLResponse:
+    """HTMX partial: call listing_creator_service, render success/idempotent/error toast."""
+    _check_token(x_admin_token)
+    jinja = get_jinja()
+
+    form = await request.form()
+    try:
+        template_id = int(form.get("template_id") or 0)
+        design_id = int(form.get("design_id") or 0)
+    except (TypeError, ValueError):
+        template_id = design_id = 0
+
+    title = (form.get("title") or "").strip()
+    description = (form.get("description") or "").strip()
+    shop_id = (form.get("shop_id") or "").strip()
+    tags_csv = form.get("tags_csv") or ""
+    tags = [t.strip() for t in tags_csv.split(",") if t.strip()][:13]
+
+    if not (template_id and design_id and shop_id and title and description):
+        return jinja.TemplateResponse(
+            request,
+            "listings/_result.html",
+            {
+                "error": "Missing required fields (template, design, shop_id, title, description)",
+                "idempotent": False, "draft_url": None,
+            },
+            status_code=422,
+        )
+
+    enabled_combos = _parse_enabled_combos(form)
+    if not enabled_combos:
+        return jinja.TemplateResponse(
+            request,
+            "listings/_result.html",
+            {
+                "error": "No enabled combos — check at least one cell in the matrix",
+                "idempotent": False, "draft_url": None,
+            },
+            status_code=422,
+        )
+
+    try:
+        result = listing_creator_service.create_from_template(
+            session=db,
+            template_id=template_id,
+            design_id=design_id,
+            title=title,
+            description=description,
+            tags=tags,
+            enabled_combos=enabled_combos,
+            shop_id=shop_id,
+        )
+    except ValueError as exc:
+        detail = str(exc)
+        status = 422 if ("Too many" in detail or "no value" in detail.lower()) else (
+            404 if "not found" in detail.lower() else 400
+        )
+        return jinja.TemplateResponse(
+            request,
+            "listings/_result.html",
+            {"error": detail, "idempotent": False, "draft_url": None},
+            status_code=status,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception(
+            "Admin UI: listing creator submit failed (template=%d design=%d)",
+            template_id, design_id,
+        )
+        return jinja.TemplateResponse(
+            request,
+            "listings/_result.html",
+            {"error": f"Etsy listing creation failed: {exc}", "idempotent": False, "draft_url": None},
+            status_code=502,
+        )
+
+    return jinja.TemplateResponse(
+        request,
+        "listings/_result.html",
+        {
+            "error": None,
+            "idempotent": result.get("idempotent", False),
+            "draft_url": result.get("draft_url"),
+            "etsy_listing_id": result.get("etsy_listing_id"),
+        },
     )

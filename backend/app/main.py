@@ -19,6 +19,7 @@ from app.routes.composite_api import router as composite_api_router
 from app.routes.designs_api import router as designs_api_router
 from app.routes.templates_admin import (
     composite_router as composite_admin_router,
+    creator_router as creator_admin_router,
     designs_router as designs_admin_router,
     router as templates_admin_router,
 )
@@ -129,5 +130,6 @@ app.include_router(composite_api_router)
 app.include_router(templates_admin_router)
 app.include_router(designs_admin_router)
 app.include_router(composite_admin_router)
+app.include_router(creator_admin_router)
 app.include_router(references_api_router)
 app.include_router(listings_creator_api_router)

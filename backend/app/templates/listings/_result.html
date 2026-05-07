@@ -1,0 +1,16 @@
+{% if error %}
+  <div class="toast toast-error">
+    ⚠ {{ error }}
+  </div>
+{% else %}
+  <div class="toast toast-success">
+    {% if idempotent %}
+      <span class="badge">Already created</span>
+    {% endif %}
+    ✓ Draft listing
+    {% if etsy_listing_id %}<code>{{ etsy_listing_id }}</code>{% endif %}
+    {% if draft_url %}
+      &middot; <a href="{{ draft_url }}" target="_blank" rel="noopener">Open in Etsy ↗</a>
+    {% endif %}
+  </div>
+{% endif %}

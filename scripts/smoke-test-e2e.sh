@@ -203,6 +203,24 @@ else
   fail "/listings/from-template returned HTTP $CREATOR_AUTH (expected 4xx, e.g. 404)"
 fi
 
+# Listing Creator admin UI page
+ADMIN_UI_NOAUTH=$(curl -s -o /dev/null -w "%{http_code}" \
+  "http://127.0.0.1:$PORT/admin/listings/creator" 2>/dev/null || echo "000")
+if [[ "$ADMIN_UI_NOAUTH" == "401" ]]; then
+  ok "/admin/listings/creator GET 401 without token"
+else
+  fail "/admin/listings/creator no-token returned HTTP $ADMIN_UI_NOAUTH (expected 401)"
+fi
+
+ADMIN_UI_AUTH=$(curl -s -o /dev/null -w "%{http_code}" \
+  -H "X-Admin-Token: $SMOKE_ADMIN_TOKEN" \
+  "http://127.0.0.1:$PORT/admin/listings/creator" 2>/dev/null || echo "000")
+if [[ "$ADMIN_UI_AUTH" == "200" ]]; then
+  ok "/admin/listings/creator GET 200 with token"
+else
+  fail "/admin/listings/creator with token returned HTTP $ADMIN_UI_AUTH (expected 200)"
+fi
+
 kill "$SERVER_PID" 2>/dev/null || true
 SERVER_PID=""
 sleep 1

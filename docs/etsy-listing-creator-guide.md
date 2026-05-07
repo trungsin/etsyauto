@@ -217,5 +217,38 @@ curl -I "$(jq -r '.color_base_images_json | fromjson | .White' < template.json)"
 
 ---
 
-*Etsy Listing Creator — Sub-feature C of EtsyAuto v0.4.0*
+## Admin UI Alternative (v0.5.0)
+
+For batch listing creation, multi-monitor workflows, or testing without leaving the Etsy seller dashboard, open `http://localhost:8787/admin/listings/creator` in any browser.
+
+The page exposes the same flow as the Chrome extension Creator Mode — pick template, pick design, preview all colors, toggle combos in the variations matrix, fill listing meta, click **Create Etsy Draft**.
+
+### Differences vs the Chrome extension
+
+| Aspect | Extension | Admin UI |
+|--------|-----------|----------|
+| Activation | Auto on `/your/shops/*/listings/new` | Manual navigate |
+| Shop ID | Auto-detect from URL slug | Manual entry (cached in `localStorage`) |
+| Stack | Vanilla JS, MV3 service worker | Jinja2 + HTMX, server-rendered |
+| Auth | Settings panel (gear icon) | Single prompt for `ADMIN_TOKEN`, cached in `localStorage` |
+| Width | Side panel (~360 px) | Full browser width |
+
+### Auth flow
+
+On first visit the page prompts once for `ADMIN_TOKEN` and stores it in `localStorage` under key `admin_token`. Every HTMX request injects the value into `X-Admin-Token` via the `htmx:configRequest` listener. To rotate the token, run `localStorage.removeItem('admin_token')` in DevTools and reload.
+
+### Routes added (v0.5.0)
+
+| Method | Path | Returns |
+|--------|------|---------|
+| GET | `/admin/listings/creator` | Full page (Jinja) |
+| GET | `/admin/listings/creator/template-info?template_id=X` | HTMX partial: variations matrix |
+| POST | `/admin/listings/creator/preview` | HTMX partial: composite thumbnails grid |
+| POST | `/admin/listings/creator/submit` | HTMX partial: success / idempotent / error toast |
+
+All four routes are protected by `X-Admin-Token` and reuse the same backend services as the extension flow (no new business logic).
+
+---
+
+*Etsy Listing Creator — Sub-feature C of EtsyAuto v0.4.0 + admin UI v0.5.0*
 *Related guides: `template-system-guide.md`, `reference-workflow-guide.md`*

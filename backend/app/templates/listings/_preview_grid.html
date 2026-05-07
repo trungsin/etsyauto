@@ -1,0 +1,15 @@
+<div class="color-grid">
+  {% for r in results %}
+    <div class="color-grid-item">
+      <p class="color-label">
+        {{ r.color }}{% if r.cached %} ⚡{% endif %}
+      </p>
+      {% if r.composite_url %}
+        <img src="{{ r.composite_url }}" alt="{{ r.color }} mockup"
+             loading="lazy" class="color-thumb" />
+      {% elif r.error %}
+        <p class="color-error">⚠ {{ r.error }}</p>
+      {% endif %}
+    </div>
+  {% endfor %}
+</div>
