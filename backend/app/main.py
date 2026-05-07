@@ -96,6 +96,23 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
+@app.middleware("http")
+async def admin_token_promote_middleware(request, call_next):
+    """For /admin/* requests, promote the admin token from `?token=` query
+    string or `admin_token` cookie into the `X-Admin-Token` header so all the
+    existing route-level `_check_token` calls (which read only the header) keep
+    working from a plain browser navigation. KISS: avoids touching every route.
+    """
+    path = request.url.path
+    if path.startswith("/admin") and not request.headers.get("x-admin-token"):
+        token = request.cookies.get("admin_token") or request.query_params.get("token")
+        if token:
+            new_headers = list(request.scope.get("headers", []))
+            new_headers.append((b"x-admin-token", token.encode("latin-1")))
+            request.scope["headers"] = new_headers
+    return await call_next(request)
+
 # CORS: allow Chrome extension origins (chrome-extension://<id>) and localhost dev
 # FastAPI CORSMiddleware does not natively support wildcard scheme matching, so we
 # allow all origins whose prefix matches chrome-extension:// via allow_origin_regex.
