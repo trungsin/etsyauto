@@ -250,5 +250,68 @@ All four routes are protected by `X-Admin-Token` and reuse the same backend serv
 
 ---
 
-*Etsy Listing Creator — Sub-feature C of EtsyAuto v0.4.0 + admin UI v0.5.0*
+## Dry-Run Mode (v0.7.0)
+
+Etsy doesn't expose a public sandbox API. To validate the pipeline without burning real quota or creating draft listings on Etsy, set:
+
+```bash
+# backend/.env
+ETSY_DRY_RUN=true
+ETSY_DRY_RUN_SCENARIO=happy
+```
+
+When dry-run is on, every `EtsyApiClient` method returns a canned fixture. The pipeline still:
+- composites mockups, uploads to R2, persists `Listing` rows
+- but skips real Etsy HTTP entirely
+
+### Available scenarios
+
+| Scenario | Behavior | Use case |
+|----------|----------|----------|
+| `happy` (default) | Every Etsy call succeeds with realistic shapes | Smoke / dev workflow |
+| `rate_limit` | First `create_draft_listing` raises 429 | Verify retry + error toast |
+| `taxonomy_error` | `get_taxonomy_property_values` returns empty | Verify 422 with friendly message |
+| `auth_fail` | First call raises 401 | Verify "Etsy login expired" toast |
+| `image_too_small` | Image upload raises 400 | Verify pre-check / image-size error path |
+
+### Verifying dry-run is active
+
+```bash
+curl http://localhost:8787/health
+# → {"status":"ok", ..., "etsy_dry_run": true, "etsy_dry_run_scenario": "happy"}
+```
+
+The admin UI also shows a yellow banner across every `/admin/*` page when dry-run is on.
+
+### Switching to production
+
+Set `ETSY_DRY_RUN=false` (or unset; default is false), restart the server, and verify `/health` reports `"etsy_dry_run": false`.
+
+## Error UX (v0.7.0)
+
+Every Etsy 4xx/5xx is mapped to a friendly message + correlation ID:
+
+| Toast | Etsy cause | Where to fix |
+|-------|------------|--------------|
+| "Etsy login expired" | 401 | Re-auth at `/auth/etsy/start` |
+| "Etsy rate-limited" | 429 | Wait 30s; client retries automatically |
+| "Image too small" | 400 (image) | Composite must be ≥ 570×570 |
+| "Color or size doesn't match Etsy" | 400 (taxonomy) | Use Etsy palette names in template |
+| "Etsy is having issues" | 5xx | Wait + retry |
+
+Every error toast includes a `request_id`. Grep `/tmp/backend.log` (or your log destination) for that ID to find the full Etsy request/response trace.
+
+### Pre-flight checks
+
+Before any Etsy call, the creator validates:
+- Title ≤ 140 chars
+- Tags ≤ 13
+- Combos ≤ 30
+- Composite ≥ 570×570 (when known)
+
+A pre-check failure returns 422 with a `{message, issues: [{field, message}]}` JSON body — no Etsy quota consumed.
+
+---
+
+*Etsy Listing Creator — Sub-feature C of EtsyAuto v0.4.0 + admin UI v0.5.0 + dry-run/hardening v0.7.0*
 *Related guides: `template-system-guide.md`, `reference-workflow-guide.md`*

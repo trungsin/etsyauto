@@ -1,6 +1,12 @@
 {% if error %}
   <div class="toast toast-error">
     ⚠ {{ error }}
+    {% if correlation_id %}
+      <details style="margin-top:0.4rem;">
+        <summary>Details</summary>
+        <code>request_id: {{ correlation_id }}</code>
+      </details>
+    {% endif %}
   </div>
 {% else %}
   <div class="toast toast-success">
@@ -11,6 +17,12 @@
     {% if etsy_listing_id %}<code>{{ etsy_listing_id }}</code>{% endif %}
     {% if draft_url %}
       &middot; <a href="{{ draft_url }}" target="_blank" rel="noopener">Open in Etsy ↗</a>
+    {% endif %}
+    {% if correlation_id %}
+      <details style="margin-top:0.4rem;">
+        <summary>Request ID</summary>
+        <code>{{ correlation_id }}</code>
+      </details>
     {% endif %}
   </div>
 {% endif %}

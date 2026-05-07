@@ -32,6 +32,10 @@ from app.routes.listings_creator_api import router as listings_creator_api_route
 _templates_dir = Path(__file__).parent / "templates"
 jinja_templates = Jinja2Templates(directory=str(_templates_dir))
 
+# Globals available to every template — banner reads etsy_dry_run flags
+jinja_templates.env.globals["etsy_dry_run"] = settings.etsy_dry_run
+jinja_templates.env.globals["etsy_dry_run_scenario"] = settings.etsy_dry_run_scenario
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -96,6 +100,11 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+
+from app.middleware.correlation_id import correlation_id_middleware
+
+app.middleware("http")(correlation_id_middleware)
 
 
 @app.middleware("http")

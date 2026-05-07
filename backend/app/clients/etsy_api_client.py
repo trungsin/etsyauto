@@ -183,6 +183,13 @@ class EtsyApiClient:
 
         rank=1 is the primary image. Max 20 images per listing.
         """
+        if settings.etsy_dry_run:
+            from app.clients import etsy_dry_run_fixtures
+            return etsy_dry_run_fixtures.dispatch(
+                settings.etsy_dry_run_scenario,
+                "upload_listing_image",
+                {"listing_id": listing_id, "rank": rank},
+            )
         image_path = Path(image_path)
         if not image_path.exists():
             raise FileNotFoundError(f"Image not found: {image_path}")
@@ -221,6 +228,14 @@ class EtsyApiClient:
         Etsy ref: POST /shops/{shop_id}/listings (draftListing).
         Returns the created listing dict including `listing_id`.
         """
+        if settings.etsy_dry_run:
+            from app.clients import etsy_dry_run_fixtures
+            return etsy_dry_run_fixtures.dispatch(
+                settings.etsy_dry_run_scenario,
+                "create_draft_listing",
+                {"shop_id": shop_id, "title": title, "taxonomy_id": taxonomy_id, **extra},
+            )
+
         body: dict = {
             "title": title,
             "description": description,
@@ -266,6 +281,13 @@ class EtsyApiClient:
 
         Etsy ref: PUT /listings/{listing_id}/inventory.
         """
+        if settings.etsy_dry_run:
+            from app.clients import etsy_dry_run_fixtures
+            return etsy_dry_run_fixtures.dispatch(
+                settings.etsy_dry_run_scenario,
+                "update_listing_inventory",
+                {"listing_id": listing_id, "products": products},
+            )
         body = {
             "products": products,
             "price_on_property": price_on_property or [],
@@ -292,6 +314,13 @@ class EtsyApiClient:
         Etsy ref: POST /shops/{shop_id}/listings/{listing_id}/images.
         rank=1 is the primary image, used as the listing's main thumbnail.
         """
+        if settings.etsy_dry_run:
+            from app.clients import etsy_dry_run_fixtures
+            return etsy_dry_run_fixtures.dispatch(
+                settings.etsy_dry_run_scenario,
+                "upload_listing_image_bytes",
+                {"shop_id": shop_id, "listing_id": listing_id, "rank": rank, "filename": filename},
+            )
         files = {"image": (filename, image_bytes, "image/png")}
         data = {"rank": str(rank)}
         return self._request(
@@ -315,6 +344,13 @@ class EtsyApiClient:
         Etsy ref: GET /seller-taxonomy/nodes/{taxonomy_id}/properties/{property_id}.
         Returns Etsy response dict with `possible_values` array.
         """
+        if settings.etsy_dry_run:
+            from app.clients import etsy_dry_run_fixtures
+            return etsy_dry_run_fixtures.dispatch(
+                settings.etsy_dry_run_scenario,
+                "get_taxonomy_property_values",
+                {"taxonomy_id": taxonomy_id, "property_id": property_id},
+            )
         return self._request(
             "GET",
             f"/seller-taxonomy/nodes/{taxonomy_id}/properties/{property_id}",

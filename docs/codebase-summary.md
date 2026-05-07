@@ -69,6 +69,10 @@ Module-by-module index with line counts. Updated: 2026-05-06 (v0.4.0).
 | `services/etsy_taxonomy.py` | 117 | Etsy taxonomy + property value lookup with in-memory cache; apparel constants (taxonomy 1209, color=200, size=506) |
 | `services/listing_creator_service.py` | 295 | Orchestrator: composite all colors → resolve property values → Etsy create draft → update inventory → upload images sequentially → persist Listing |
 | `services/anchor_schema.py` | 130 | Anchor schema v2 parser — `parse_anchor` (v1 shim → zones[] envelope), `to_v2` serializer, `MAX_ZONES=4` (v0.6.0) |
+| `services/etsy_error_mapper.py` | 80 | Map httpx.HTTPStatusError → user-friendly toast (auth/rate/image/taxonomy/5xx) (v0.7.0) |
+| `services/listing_pre_check.py` | 90 | Etsy hard-cap validation (title/tags/combos/composite) before Etsy call (v0.7.0) |
+| `clients/etsy_dry_run_fixtures.py` | 130 | Canned Etsy v3 responses for ETSY_DRY_RUN — 5 scenarios (v0.7.0) |
+| `middleware/correlation_id.py` | 45 | Per-request X-Request-ID via ContextVar (v0.7.0) |
 
 ### Clients (`app/clients/`)
 
@@ -127,8 +131,13 @@ Module-by-module index with line counts. Updated: 2026-05-06 (v0.4.0).
 | `test_anchor_schema.py` | 8 | v1 shim, v2 parse, malformed JSON, unknown-kind skip, max-zones cap, to_v2 upcast (v0.6.0) |
 | `test_composite_quad.py` | 8 | cv2.warpPerspective correctness, alpha preserve, 4-point validation, output cap, perf gate, layering order, mixed rect+quad (v0.6.0) |
 | `test_e2e_multi_zone.py` | 4 | v1 regression via zone pipeline, multi-zone cache key, full POST flow with zone_designs, idempotency (v0.6.0) |
+| `test_etsy_dry_run.py` | 9 | Each dry-run scenario, real-HTTP-still-fires-when-off, scenario fallback (v0.7.0) |
+| `test_etsy_error_mapper.py` | 7 | All error categories + non-httpx fallback (v0.7.0) |
+| `test_listing_pre_check.py` | 7 | Title/tags/combos/composite caps, exception payload (v0.7.0) |
+| `test_correlation_id_middleware.py` | 3 | X-Request-ID echo, inbound preservation, distinct IDs (v0.7.0) |
+| `test_e2e_dry_run_listing.py` | 2 | Full pipeline happy + auth_fail through admin UI under dry-run (v0.7.0) |
 
-**Total: 233+ tests passing**
+**Total: 255+ tests passing**
 
 ---
 

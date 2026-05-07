@@ -130,7 +130,7 @@ FastAPI · SQLite · APScheduler · Anthropic Claude Sonnet 4.6 · remove.bg · 
 
 ```bash
 cd backend && uv run pytest -v
-# 233 tests, < 130 seconds
+# 255 tests, < 140 seconds
 ```
 
 ---

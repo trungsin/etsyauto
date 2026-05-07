@@ -613,6 +613,10 @@ async def creator_submit(
             status_code=422,
         )
 
+    from app.middleware.correlation_id import get_correlation_id
+    from app.services import etsy_error_mapper, listing_pre_check
+    import httpx as _httpx
+
     try:
         result = listing_creator_service.create_from_template(
             session=db,
@@ -624,6 +628,31 @@ async def creator_submit(
             enabled_combos=enabled_combos,
             shop_id=shop_id,
         )
+    except listing_pre_check.PreCheckFailed as exc:
+        msg = "Pre-check failed: " + ", ".join(
+            f"{i.field} ({i.message})" for i in exc.issues
+        )
+        return jinja.TemplateResponse(
+            request,
+            "listings/_result.html",
+            {"error": msg, "idempotent": False, "draft_url": None,
+             "correlation_id": get_correlation_id()},
+            status_code=422,
+        )
+    except _httpx.HTTPStatusError as exc:
+        mapped = etsy_error_mapper.map_etsy_error(exc)
+        logger.warning(
+            "Etsy %s (admin UI) template=%d design=%d: %s | raw=%s",
+            mapped.category, template_id, design_id,
+            mapped.user_message, (exc.response.text or "")[:500],
+        )
+        return jinja.TemplateResponse(
+            request,
+            "listings/_result.html",
+            {"error": mapped.user_message, "idempotent": False, "draft_url": None,
+             "correlation_id": get_correlation_id()},
+            status_code=mapped.http_status,
+        )
     except ValueError as exc:
         detail = str(exc)
         status = 422 if ("Too many" in detail or "no value" in detail.lower()) else (
@@ -632,7 +661,8 @@ async def creator_submit(
         return jinja.TemplateResponse(
             request,
             "listings/_result.html",
-            {"error": detail, "idempotent": False, "draft_url": None},
+            {"error": detail, "idempotent": False, "draft_url": None,
+             "correlation_id": get_correlation_id()},
             status_code=status,
         )
     except Exception as exc:  # noqa: BLE001
@@ -643,7 +673,8 @@ async def creator_submit(
         return jinja.TemplateResponse(
             request,
             "listings/_result.html",
-            {"error": f"Etsy listing creation failed: {exc}", "idempotent": False, "draft_url": None},
+            {"error": f"Etsy listing creation failed: {exc}", "idempotent": False,
+             "draft_url": None, "correlation_id": get_correlation_id()},
             status_code=502,
         )
 
@@ -655,6 +686,7 @@ async def creator_submit(
             "idempotent": result.get("idempotent", False),
             "draft_url": result.get("draft_url"),
             "etsy_listing_id": result.get("etsy_listing_id"),
+            "correlation_id": get_correlation_id(),
         },
     )
 

@@ -43,6 +43,12 @@ class Settings(BaseSettings):
     # When False, listings skip mockup stage and go straight from title-done → review.
     enable_mockup: bool = False
 
+    # v0.7.0 — Etsy dry-run mode for safe end-to-end testing without quota burn.
+    # When True, EtsyApiClient methods short-circuit to canned fixture responses.
+    # Scenarios: happy | rate_limit | taxonomy_error | auth_fail | image_too_small.
+    etsy_dry_run: bool = False
+    etsy_dry_run_scenario: str = "happy"
+
 
 # Singleton — import this throughout the app
 settings = Settings()

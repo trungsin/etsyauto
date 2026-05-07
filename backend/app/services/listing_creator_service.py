@@ -25,7 +25,7 @@ from app.clients.etsy_api_client import EtsyApiClient
 from app.models.design import Design
 from app.models.listing import Listing
 from app.models.template import Template
-from app.services import composite_service, etsy_taxonomy
+from app.services import composite_service, etsy_taxonomy, listing_pre_check
 
 logger = logging.getLogger(__name__)
 
@@ -167,6 +167,16 @@ def create_from_template(
         }
 
     enabled = _validate_combos(template, enabled_combos)
+
+    # Pre-flight checks against Etsy's hard caps; fail fast before any Etsy call
+    issues = listing_pre_check.pre_check_listing(
+        title=title,
+        tags=tags,
+        enabled_combos=enabled,
+        composite_size=None,  # composite size checked once first render done
+    )
+    if issues:
+        raise listing_pre_check.PreCheckFailed(issues)
 
     # 3. Render composites (parallel)
     used_colors = {c["color"] for c in enabled}

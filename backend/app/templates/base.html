@@ -18,6 +18,13 @@
       <li class="nav-right"><a href="/admin/logout">Logout</a></li>
     </ul>
   </nav>
+  {% if etsy_dry_run %}
+    <div class="banner banner-warn">
+      ⚠ Etsy <strong>DRY-RUN</strong> mode active
+      {% if etsy_dry_run_scenario %} (scenario: <code>{{ etsy_dry_run_scenario }}</code>){% endif %}
+      — no real listings will reach Etsy.
+    </div>
+  {% endif %}
   <main class="container">
     {% block content %}{% endblock %}
   </main>

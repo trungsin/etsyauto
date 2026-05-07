@@ -3,13 +3,14 @@ from __future__ import annotations
 
 import logging
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import require_admin_token
-from app.services import listing_creator_service
+from app.services import etsy_error_mapper, listing_creator_service, listing_pre_check
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +63,24 @@ def create_listing_from_template(
             quantity_per_variant=body.quantity_per_variant,
             zone_designs=body.zone_designs,
         )
+    except listing_pre_check.PreCheckFailed as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "Listing failed pre-check",
+                "issues": [
+                    {"field": i.field, "message": i.message} for i in exc.issues
+                ],
+            },
+        ) from exc
+    except httpx.HTTPStatusError as exc:
+        mapped = etsy_error_mapper.map_etsy_error(exc)
+        logger.warning(
+            "Etsy %s for template=%d design=%d: %s | raw=%s",
+            mapped.category, body.template_id, body.design_id,
+            mapped.user_message, (exc.response.text or "")[:500],
+        )
+        raise HTTPException(status_code=mapped.http_status, detail=mapped.user_message) from exc
     except ValueError as exc:
         detail = str(exc)
         # Map common errors to status codes

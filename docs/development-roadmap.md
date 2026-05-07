@@ -49,6 +49,33 @@
 
 ---
 
+## v0.7.0 — Real-Etsy E2E + Error UX Hardening
+
+### Scope
+
+| Sub-feature | Title | Status | Completed |
+|-------------|-------|--------|-----------|
+| — | [Dry-Run + Error UX Hardening](../plans/260507-1111-real-etsy-dry-run-hardening/plan.md) | **Complete** | 2026-05-07 |
+
+### v0.7.0 Success Metrics
+
+- [x] `ETSY_DRY_RUN=true` makes every EtsyApiClient call short-circuit to fixture
+- [x] 5 scenarios via env: happy / rate_limit / taxonomy_error / auth_fail / image_too_small
+- [x] Friendly user message for every Etsy 4xx/5xx + collapsed correlation ID
+- [x] X-Request-ID round-trip via middleware
+- [x] Pre-flight checks (title/tags/combos/composite size) reject before Etsy quota burn
+- [x] /health exposes `etsy_dry_run` flag; admin UI shows yellow banner
+- [x] `cleanup_placeholder_data.py` removes leftover smoke-test rows
+- [x] 18 new tests; total ≥ 255
+
+### Deferred (post-v0.7.0)
+
+- Real Etsy creds + OAuth production runbook (v0.8)
+- Mock HTTP server option (only if dry-run insufficient)
+- Etsy webhook handling
+
+---
+
 ## v0.6.0 — Template Engine C1 (Quad Zones + Multi-Zone)
 
 ### Scope

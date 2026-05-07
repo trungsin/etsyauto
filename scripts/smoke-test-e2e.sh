@@ -221,12 +221,31 @@ else
   fail "/admin/listings/creator with token returned HTTP $ADMIN_UI_AUTH (expected 200)"
 fi
 
+# ── 6c. Health endpoint exposes dry-run flags (v0.7.0) ───────────────────────
+info "Verifying /health exposes dry-run flags..."
+HEALTH_BODY=$(curl -s "http://127.0.0.1:$PORT/health" 2>/dev/null || echo "{}")
+if echo "$HEALTH_BODY" | grep -q "etsy_dry_run"; then
+  ok "/health exposes etsy_dry_run flag"
+else
+  fail "/health missing etsy_dry_run flag — body: $HEALTH_BODY"
+fi
+
+# ── 6d. X-Request-ID round-trip (correlation id middleware) ──────────────────
+info "X-Request-ID round-trip..."
+CID=$(curl -s -i -H "X-Request-ID: smoketest-1234" "http://127.0.0.1:$PORT/health" \
+  | grep -i "^x-request-id:" | head -1 | awk '{print $2}' | tr -d '\r')
+if [[ "$CID" == "smoketest-1234" ]]; then
+  ok "X-Request-ID echoed correctly"
+else
+  fail "X-Request-ID round-trip broken (got '$CID')"
+fi
+
 kill "$SERVER_PID" 2>/dev/null || true
 SERVER_PID=""
 sleep 1
 rm -f "$SMOKE_DB"
 
-# ── 6c. cv2 import sanity (v0.6.0 dependency) ────────────────────────────────
+# ── 6e. cv2 import sanity (v0.6.0 dependency) ────────────────────────────────
 info "cv2 import check..."
 if uv run python -c "import cv2; print(cv2.__version__)" >/dev/null 2>&1; then
   ok "cv2 imports OK (opencv-python-headless)"

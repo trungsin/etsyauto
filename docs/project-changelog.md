@@ -4,6 +4,61 @@ All notable changes to EtsyAuto. Format: [Keep a Changelog](https://keepachangel
 
 ---
 
+## [0.7.0] — 2026-05-07
+
+Real-Etsy E2E + Error UX hardening. ETSY_DRY_RUN mode + 5 scenarios for safe end-to-end testing without quota burn. Friendly error mapping for every Etsy 4xx/5xx. Per-request correlation IDs. Pre-flight validation against Etsy hard caps.
+
+### Added
+
+#### Dry-run infrastructure
+- `etsy_dry_run` + `etsy_dry_run_scenario` in `app.config.Settings`
+- `app/clients/etsy_dry_run_fixtures.py` — 5 scenarios (happy, rate_limit, taxonomy_error, auth_fail, image_too_small)
+- `EtsyApiClient` short-circuits all 5 public methods when dry-run is on
+- `/health` endpoint exposes `etsy_dry_run` + scenario
+- Admin UI banner across all `/admin/*` pages when dry-run is on
+
+#### Correlation IDs
+- `app/middleware/correlation_id.py` — middleware sets per-request `X-Request-ID` (uuid4 if not provided)
+- Header echoed back on every response
+- `_result.html` admin toast renders the ID in collapsed details
+
+#### Error UX
+- `app/services/etsy_error_mapper.py` — 6 categories (auth, rate_limit, image_size, taxonomy, etsy_5xx, other, unknown) with user-friendly messages
+- Both JSON API (`POST /listings/from-template`) and admin UI (`POST /admin/listings/creator/submit`) now route Etsy errors through the mapper
+- Raw Etsy response body still logged (no info loss)
+
+#### Pre-flight checks
+- `app/services/listing_pre_check.py` — validates title ≤ 140, tags ≤ 13, combos ≤ 30, composite ≥ 570×570
+- `PreCheckFailed` raised with structured `Issue` list before any Etsy call
+
+#### Cleanup
+- `scripts/cleanup_placeholder_data.py` — removes templates/designs created with placeholder `cdn.example.com` URLs
+
+#### Tests (18 new, total ≥ 255)
+- `test_etsy_dry_run.py` (9) — each scenario, real-HTTP-still-fires-when-off, scenario fallback
+- `test_etsy_error_mapper.py` (7) — every error category + non-httpx fallback
+- `test_listing_pre_check.py` (7) — title/tags/combos/composite caps, exception payload
+- `test_correlation_id_middleware.py` (3) — header echo, inbound preservation, distinct ids
+- `test_e2e_dry_run_listing.py` (2) — full pipeline happy + auth_fail through admin UI
+
+#### Smoke (19 → 21)
+- `/health` exposes `etsy_dry_run` flag
+- `X-Request-ID` round-trip
+
+### Architecture Decisions
+- **Inline dry-run, not mock server** — KISS, same client codepath, fewer moving parts
+- **Scenario via env, not request param** — config-driven, doesn't pollute API surface
+- **Correlation ID via ContextVar** — async-safe, propagates into Etsy log lines
+- **Pre-check before Etsy** — fail fast, save quota, friendlier error
+- **Both API + admin UI catch error mapper** — symmetric UX
+
+### Known Limitations
+- Real OAuth + production runbook deferred to v0.8
+- No mock HTTP server (Option A); dry-run is in-process only
+- Etsy webhook handling still out of scope
+
+---
+
 ## [0.6.0] — 2026-05-07
 
 Template Engine C1 — Quad Zones + Multi-Zone Composites. Anchor schema v2 with zones[] (rect | quad). cv2.warpPerspective for curved/tilted surfaces. Multi-design per template via `zone_designs` map.
