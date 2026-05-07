@@ -226,6 +226,14 @@ SERVER_PID=""
 sleep 1
 rm -f "$SMOKE_DB"
 
+# ── 6c. cv2 import sanity (v0.6.0 dependency) ────────────────────────────────
+info "cv2 import check..."
+if uv run python -c "import cv2; print(cv2.__version__)" >/dev/null 2>&1; then
+  ok "cv2 imports OK (opencv-python-headless)"
+else
+  fail "cv2 import failed (opencv-python-headless not installed?)"
+fi
+
 # ── 7. Extension manifest validation ─────────────────────────────────────────
 info "Validating extension manifest.json..."
 if [[ -f "$EXTENSION_DIR/manifest.json" ]]; then

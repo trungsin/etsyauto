@@ -1,4 +1,5 @@
 """Composite service — R2-cached template × design compositing with invalidation."""
+import hashlib
 import json
 import logging
 from io import BytesIO
@@ -21,49 +22,105 @@ def _cache_key(template_id: int, design_id: int, color: str | None = None) -> st
     return f"{_CACHE_PREFIX}{template_id}-{design_id}-{_safe_color_token(color)}.png"
 
 
+def _multi_zone_cache_key(
+    template_id: int,
+    design_id: int,
+    color: str | None,
+    zone_designs: dict[str, int] | None,
+) -> str:
+    """Cache key for multi-zone composites.
+
+    Single-design (zone_designs empty/None or 1 entry that matches design_id) →
+    legacy single-zone key shape so existing R2 cache stays valid.
+    Multi-zone with distinct designs → ``composites/{tid}-{hash}-{Color}-multi.png``.
+    """
+    distinct_dids = set((zone_designs or {}).values())
+    is_multi = (
+        zone_designs is not None
+        and len(zone_designs) > 0
+        and (len(distinct_dids) > 1 or design_id not in distinct_dids)
+    )
+    if not is_multi:
+        return _cache_key(template_id, design_id, color)
+    compound = "_".join(f"{k}-{v}" for k, v in sorted((zone_designs or {}).items()))
+    compound_hash = hashlib.sha1(compound.encode()).hexdigest()[:10]
+    suffix = f"-{_safe_color_token(color)}" if color else ""
+    return f"{_CACHE_PREFIX}{template_id}-{compound_hash}{suffix}-multi.png"
+
+
 def get_or_create_composite(
     session: Session,
     template_id: int,
     design_id: int,
     color: str | None = None,
+    zone_designs: dict[str, int] | None = None,
 ) -> tuple[str, bool]:
     """Return composite URL, creating and caching if needed.
 
     Args:
         session: Active SQLAlchemy session.
         template_id: Template to use as base.
-        design_id: Design (must not be source_type='reference_only').
-        color: Optional color key. When provided, the per-color base image from
-            template.color_base_images_json is used and the cache key includes the color.
-            When None, falls back to template.base_image_url (v0.2.0 behavior).
+        design_id: Default design used when a zone has no explicit override.
+            Must not be ``source_type='reference_only'``.
+        color: Optional color key — selects per-color base image and namespaces
+            the cache key.
+        zone_designs: Optional ``{zone_name: design_id}`` map. Each zone in the
+            template's anchor uses its mapped design when present; zones without
+            an entry fall back to ``design_id``.
 
     Returns:
         (composite_url, cached) — cached=True if R2 object already existed.
 
     Raises:
-        ValueError: If template/design not found, design is reference_only, or
-            color requested but missing in color_base_images_json.
+        ValueError: If template/design not found, any referenced design is
+            reference_only, or template has no zones (anchor empty).
     """
     from app.clients.r2_storage_client import R2StorageClient
     from app.models.design import Design
     from app.models.template import Template
+    from app.services import anchor_schema
+    from app.services.image_composite import composite_zones
 
     # Validate template
     template = session.get(Template, template_id)
     if template is None:
         raise ValueError(f"Template {template_id} not found")
 
-    # Validate design
-    design = session.get(Design, design_id)
-    if design is None:
+    # Validate default design (used when a zone has no override)
+    default_design = session.get(Design, design_id)
+    if default_design is None:
         raise ValueError(f"Design {design_id} not found")
-    if design.source_type == "reference_only":
+    if default_design.source_type == "reference_only":
         raise ValueError("reference_only designs cannot be used in composite preview")
 
+    # Resolve zones; legacy v1 templates auto-upcast to a single 'main' rect zone.
+    zones = anchor_schema.parse_anchor(template.composite_anchor_json)
+    if not zones:
+        # Legacy fall-through — treat as full-canvas rect for backwards compat
+        zones = [{"name": "main", "kind": "rect", "x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0}]
+
+    # Validate per-zone designs *up front* (cheap DB lookup) but defer the
+    # network download until after the cache-hit check, so a cache hit costs
+    # nothing extra.
+    zone_design_rows: dict[str, "Design"] = {}
+    for zone in zones:
+        zone_design_id = (zone_designs or {}).get(zone["name"], design_id)
+        d = (
+            default_design
+            if zone_design_id == design_id
+            else session.get(Design, zone_design_id)
+        )
+        if d is None:
+            raise ValueError(
+                f"Design {zone_design_id} (zone {zone['name']!r}) not found"
+            )
+        if d.source_type == "reference_only":
+            raise ValueError(
+                f"reference_only design {d.id} cannot be used in zone {zone['name']!r}"
+            )
+        zone_design_rows[zone["name"]] = d
+
     # Resolve base image URL: per-color → fallback to template default.
-    # The fallback lets a single-blank template work in the multi-color creator
-    # immediately; sellers upload color-specific bases later when they want
-    # accurate per-color mockups.
     if color is None:
         base_image_url = template.base_image_url
     else:
@@ -79,16 +136,16 @@ def get_or_create_composite(
                 f"nor a default base_image_url"
             )
 
-    key = _cache_key(template_id, design_id, color)
+    key = _multi_zone_cache_key(template_id, design_id, color, zone_designs)
     r2 = R2StorageClient()
 
-    # Cache hit check
+    # Cache hit check — return before any network downloads
     if r2.object_exists(key):
         url = r2.get_public_url(key)
         logger.info("Composite cache hit: %s", key)
         return url, True
 
-    # Download template base image
+    # Download template base + per-zone designs
     import urllib.request
     try:
         with urllib.request.urlopen(base_image_url) as resp:  # noqa: S310
@@ -96,25 +153,23 @@ def get_or_create_composite(
     except Exception as exc:
         raise ValueError(f"Failed to download template base image: {exc}") from exc
 
-    # Download design image
-    try:
-        with urllib.request.urlopen(design.file_url) as resp:  # noqa: S310
-            design_bytes = resp.read()
-    except Exception as exc:
-        raise ValueError(f"Failed to download design image: {exc}") from exc
+    designs_by_name: dict[str, bytes] = {}
+    for name, d in zone_design_rows.items():
+        try:
+            with urllib.request.urlopen(d.file_url) as resp:  # noqa: S310
+                designs_by_name[name] = resp.read()
+        except Exception as exc:
+            raise ValueError(f"Failed to download design image: {exc}") from exc
 
-    # Parse anchor
-    anchor = json.loads(template.composite_anchor_json) if template.composite_anchor_json else {
-        "x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0
-    }
-
-    # Composite
-    from app.services.image_composite import composite_with_anchor
-    output_bytes = composite_with_anchor(base_bytes, design_bytes, anchor)
+    # Composite all zones in array order
+    output_bytes = composite_zones(base_bytes, zones, designs_by_name)
 
     # Upload to R2 cache
     url = r2.upload_image(output_bytes, key)
-    logger.info("Composite created and cached: %s (%d bytes)", key, len(output_bytes))
+    logger.info(
+        "Composite created and cached: %s (%d bytes, %d zone(s))",
+        key, len(output_bytes), len(zones),
+    )
     return url, False
 
 

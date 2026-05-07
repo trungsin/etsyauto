@@ -4,6 +4,50 @@ All notable changes to EtsyAuto. Format: [Keep a Changelog](https://keepachangel
 
 ---
 
+## [0.6.0] — 2026-05-07
+
+Template Engine C1 — Quad Zones + Multi-Zone Composites. Anchor schema v2 with zones[] (rect | quad). cv2.warpPerspective for curved/tilted surfaces. Multi-design per template via `zone_designs` map.
+
+### Added
+
+#### Schema
+- `composite_anchor_json` schema v2: `{version: 2, zones: [{name, kind, ...}]}`
+- v1 → v2 read-time shim (`anchor_schema.parse_anchor`) — no migration; v1 templates continue to work unchanged.
+
+#### Modules
+- `app/services/anchor_schema.py` — `parse_anchor` + zone normalization + `to_v2` serializer + `MAX_ZONES = 4` cap
+- `app/services/image_composite.composite_quad` — cv2.warpPerspective with INTER_LANCZOS4
+- `app/services/image_composite.composite_zones` — orchestrator looping zones, mixing rect (Pillow) + quad (cv2)
+- `app/services/composite_service._multi_zone_cache_key` — `composites/{tid}-{hash10}-{Color}-multi.png` for distinct multi-zone designs
+
+#### Routes
+- `POST /listings/from-template` body adds optional `zone_designs: dict[str, int] | None`
+- `composite_service.get_or_create_composite(..., zone_designs=...)` threads the map through
+
+#### Dependency
+- `opencv-python-headless >= 4.10` (transitive: `numpy`)
+
+#### Tests (20 new)
+- `test_anchor_schema.py` (8) — v1 shim, v2 parse, malformed JSON, unknown kind skip, max-zones cap, to_v2 upcast
+- `test_composite_quad.py` (8) — quad warps to corners, alpha preserved, 4-point validation, output cap, perf gate, layering order, mixed kinds
+- `test_e2e_multi_zone.py` (4) — v1 regression, multi-zone cache key, full POST flow with zone_designs, idempotency
+
+### Architecture Decisions
+- **Read-time shim, no alembic migration** — v1 templates auto-upcast; on-disk JSON unchanged
+- **`opencv-python-headless`** — avoids 80MB Qt deps; works in headless Docker
+- **Pillow path preserved for `kind=rect`** — guarantees v1 byte-equivalence
+- **Cache key namespace** — single-zone keeps legacy filename; multi-zone uses `-multi.png` suffix → existing R2 cache stays valid
+- **Zone layering = array order** — last zone paints on top
+- **MAX_ZONES = 4** soft cap; raise if needed
+
+### Known Limitations
+- No visual 4-point editor in admin UI (manual JSON only)
+- No auto-anchor (deferred to C2)
+- No PSD smart-object support (deferred to C3)
+- No fabric displacement maps (deferred to C4)
+
+---
+
 ## [0.4.0] — 2026-05-06
 
 Etsy Listing Creator (Sub-feature C). End-to-end "create new listing" flow: per-color base images, multi-color composite rendering, full N×M variations matrix, and Etsy draft creation with property-value resolution + sequential image upload.

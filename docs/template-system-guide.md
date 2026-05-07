@@ -498,6 +498,92 @@ When the listing creator uploads composites to Etsy, ranks are assigned:
 
 ---
 
-*Template System — Sub-feature B (v0.2.0) + Multi-Color (v0.4.0) of EtsyAuto*
+## Anchor Schema v2 — Zones (v0.6.0)
+
+v0.6.0 extends `composite_anchor_json` from a single rectangle to an array of typed **zones**. Existing v0.4.x templates auto-upgrade in memory at read time; the on-disk JSON stays untouched until next admin write.
+
+### Schema reference
+
+```jsonc
+{
+  "version": 2,
+  "zones": [
+    {
+      "name": "front",
+      "kind": "quad",
+      "points": [
+        [0.20, 0.20],   // top-left
+        [0.80, 0.22],   // top-right
+        [0.78, 0.78],   // bottom-right
+        [0.22, 0.76]    // bottom-left
+      ]
+    },
+    {
+      "name": "back",
+      "kind": "rect",
+      "x": 0.30, "y": 0.30, "w": 0.40, "h": 0.30
+    }
+  ]
+}
+```
+
+### Zone kinds
+
+| Kind | Engine | Use case |
+|------|--------|----------|
+| `rect` | Pillow alpha-paste (v1 path, byte-identical to legacy) | Flat surfaces — print-on-flat tee, paper, sticker |
+| `quad` | `cv2.warpPerspective` with INTER_LANCZOS4 | Tilted shots, mug curve, hat brim, perspective angles |
+
+### Conventions
+
+- **Coordinates:** all 0-1 fractions of the base image. `[0,0]` = top-left.
+- **Quad order:** clockwise from top-left (TL, TR, BR, BL).
+- **Layering:** zones render in array order — earlier = bottom, later = top.
+- **Max zones:** 4 per template (soft cap, increase if needed).
+- **Zone names:** alphanumeric; used as the key in `zone_designs` and the cache filename.
+
+### Backward compat
+
+v1 templates `{x, y, w, h}` continue to render unchanged via the `parse_anchor` shim. The shim wraps them into a single zone named `main`. If you POST a v1 anchor to `POST /templates`, the row is stored as v1 — only newly written templates use v2.
+
+### Multi-design per template
+
+When `POST /listings/from-template` is called with `zone_designs: {zone_name: design_id}`, each zone uses its mapped design. Zones omitted from the map fall back to the body's `design_id` field.
+
+```bash
+curl -X POST http://localhost:8787/listings/from-template \
+  -H "X-Admin-Token: $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "template_id": 1,
+    "design_id": 5,
+    "title": "Front + Back Tee",
+    "description": "...",
+    "shop_id": "12345678",
+    "enabled_combos": [{"size":"M","color":"White"}],
+    "zone_designs": {"front": 5, "back": 7}
+  }'
+```
+
+### Cache key format
+
+| Scenario | Key |
+|----------|-----|
+| Single-design (legacy) | `composites/{tid}-{did}.png` |
+| Single-design + color | `composites/{tid}-{did}-{Color}.png` |
+| Multi-zone distinct designs | `composites/{tid}-{hash10}-{Color}-multi.png` |
+
+`hash10` is the first 10 chars of SHA-1 of `front-5_back-7` (sorted zone-design pairs).
+
+### What's not in v0.6.0
+
+- Visual 4-point editor in admin UI (manual JSON edit only)
+- Auto-anchor detection (deferred to C2)
+- PSD smart-object pipeline (deferred to C3)
+- Fabric displacement maps (deferred to C4)
+
+---
+
+*Template System — Sub-feature B (v0.2.0) + Multi-Color (v0.4.0) + Quad Zones (v0.6.0) of EtsyAuto*
 *Related plans: extension-reference-upgrade (Sub-feature A), etsy-listing-creator (Sub-feature C)*
 *See `etsy-listing-creator-guide.md` for the end-to-end creator workflow.*

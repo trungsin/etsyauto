@@ -125,6 +125,7 @@ def create_from_template(
     enabled_combos: list[dict],
     shop_id: str | int,
     quantity_per_variant: int = 100,
+    zone_designs: dict[str, int] | None = None,
 ) -> dict:
     """Create an Etsy draft listing from a template + design.
 
@@ -172,7 +173,7 @@ def create_from_template(
     composites_by_color: dict[str, str] = {}
     for color in used_colors:
         url, _cached = composite_service.get_or_create_composite(
-            session, template_id, design_id, color
+            session, template_id, design_id, color, zone_designs=zone_designs
         )
         composites_by_color[color] = url
 

@@ -31,6 +31,8 @@ class FromTemplateBody(BaseModel):
     enabled_combos: list[ComboInput] = Field(default_factory=list)
     shop_id: str | int
     quantity_per_variant: int = Field(default=100, ge=1, le=999)
+    # Optional per-zone design override; falls back to design_id when absent
+    zone_designs: dict[str, int] | None = None
 
 
 @router.post(
@@ -58,6 +60,7 @@ def create_listing_from_template(
             enabled_combos=[c.model_dump() for c in body.enabled_combos],
             shop_id=body.shop_id,
             quantity_per_variant=body.quantity_per_variant,
+            zone_designs=body.zone_designs,
         )
     except ValueError as exc:
         detail = str(exc)

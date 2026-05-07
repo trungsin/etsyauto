@@ -68,6 +68,7 @@ Module-by-module index with line counts. Updated: 2026-05-06 (v0.4.0).
 | `services/reference_service.py` | 364 | Reference scrape (idempotent), CRUD, Gemini suggest-title (3 variants), remove.bg cutout → `Design.source_type='reference_only'`, Notion Idea Bank save (data_sources API + image embed), schema validation on startup |
 | `services/etsy_taxonomy.py` | 117 | Etsy taxonomy + property value lookup with in-memory cache; apparel constants (taxonomy 1209, color=200, size=506) |
 | `services/listing_creator_service.py` | 295 | Orchestrator: composite all colors → resolve property values → Etsy create draft → update inventory → upload images sequentially → persist Listing |
+| `services/anchor_schema.py` | 130 | Anchor schema v2 parser — `parse_anchor` (v1 shim → zones[] envelope), `to_v2` serializer, `MAX_ZONES=4` (v0.6.0) |
 
 ### Clients (`app/clients/`)
 
@@ -122,9 +123,12 @@ Module-by-module index with line counts. Updated: 2026-05-06 (v0.4.0).
 | `test_templates_color_bases_api.py` | ~8 | Per-color base upload/delete, validation against `variation_options.colors`, replacement |
 | `test_listings_creator_api.py` | 9 | Auth, validation, happy path, idempotency, image rank order, taxonomy cache, unknown-value 422 |
 | `test_e2e_listing_creator_workflow.py` | 3 | Full pipeline (template → color bases → expand → design → preview-all → from-template), idempotent re-call, partial-failure 422 |
-| `test_listings_creator_admin_ui.py` | 11 | Admin UI routes — auth, page render, template-info partial, preview/submit form parse, idempotent badge, error mapping (v0.5.0) |
+| `test_listings_creator_admin_ui.py` | 18 | Admin UI routes — auth, page render, template-info partial, preview/submit form parse, idempotent badge, error mapping, login/logout, name-collision regression (v0.5.0+) |
+| `test_anchor_schema.py` | 8 | v1 shim, v2 parse, malformed JSON, unknown-kind skip, max-zones cap, to_v2 upcast (v0.6.0) |
+| `test_composite_quad.py` | 8 | cv2.warpPerspective correctness, alpha preserve, 4-point validation, output cap, perf gate, layering order, mixed rect+quad (v0.6.0) |
+| `test_e2e_multi_zone.py` | 4 | v1 regression via zone pipeline, multi-zone cache key, full POST flow with zone_designs, idempotency (v0.6.0) |
 
-**Total: 209 tests passing**
+**Total: 233+ tests passing**
 
 ---
 

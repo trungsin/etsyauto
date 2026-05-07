@@ -49,6 +49,33 @@
 
 ---
 
+## v0.6.0 — Template Engine C1 (Quad Zones + Multi-Zone)
+
+### Scope
+
+| Sub-feature | Title | Status | Completed |
+|-------------|-------|--------|-----------|
+| C1 | [Quad Zones + Multi-Zone Composites](../plans/260507-1021-template-engine-c1-quad-zones/plan.md) | **Complete** | 2026-05-07 |
+
+### v0.6.0 Success Metrics
+
+- [x] `composite_anchor_json` schema v2 (`{version, zones[]}`) with `rect`/`quad` kinds
+- [x] `cv2.warpPerspective` perspective renderer (`composite_quad`)
+- [x] Multi-zone composites: front + back of t-shirt, etc.
+- [x] `POST /listings/from-template` accepts optional `zone_designs` map
+- [x] v1 templates render byte-identical (regression test)
+- [x] `opencv-python-headless` integrated; `cv2.__version__` 4.13+
+- [x] 20 new tests; total ≥ 230
+
+### Deferred sub-phases (post-v0.6.0)
+
+- **C2** — auto-anchor detection (CTDave001 inspired)
+- **C3** — PSD smart-object pipeline (psd-tools)
+- **C4** — fabric displacement maps (cv2.remap)
+- Visual 4-point editor in admin UI
+
+---
+
 ## v0.4.0 — Etsy Listing Creator
 
 ### Scope

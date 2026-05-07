@@ -1,11 +1,14 @@
 """Image compositing service — alpha-composite product cutout onto generated background.
 
-Also exports `composite_with_anchor` for template-based mockup preview.
+Also exports `composite_with_anchor` for template-based mockup preview and
+`composite_quad` / `composite_zones` for v2 multi-zone perspective composites.
 """
 import io
 import logging
 from io import BytesIO
 
+import cv2
+import numpy as np
 from PIL import Image, ImageFilter
 
 logger = logging.getLogger(__name__)
@@ -181,3 +184,124 @@ def _make_drop_shadow(cutout: Image.Image, shadow_offset: tuple[int, int], blur_
     # Blur to soften edges
     shadow_layer = shadow_layer.filter(ImageFilter.GaussianBlur(radius=blur_radius))
     return shadow_layer
+
+
+# ---------------------------------------------------------------------------
+# Multi-zone composites (anchor schema v2)
+# ---------------------------------------------------------------------------
+
+
+def _decode_rgba_array(data: bytes) -> np.ndarray:
+    """Decode bytes → (H, W, 4) uint8 RGBA ndarray via PIL (channel-order safe)."""
+    img = Image.open(BytesIO(data)).convert("RGBA")
+    return np.asarray(img, dtype=np.uint8).copy()
+
+
+def _encode_png_capped(rgba: np.ndarray, max_bytes: int = _MAX_OUTPUT_BYTES) -> bytes:
+    """Encode an RGBA ndarray as PNG, downscaling if it exceeds max_bytes."""
+    img = Image.fromarray(rgba, mode="RGBA")
+    buf = BytesIO()
+    img.save(buf, format="PNG", optimize=True)
+    out = buf.getvalue()
+    if len(out) <= max_bytes:
+        return out
+    scale = (max_bytes / len(out)) ** 0.5
+    new_w = max(1, int(img.width * scale))
+    new_h = max(1, int(img.height * scale))
+    img = img.resize((new_w, new_h), Image.LANCZOS)
+    buf = BytesIO()
+    img.save(buf, format="PNG", optimize=True)
+    return buf.getvalue()
+
+
+def _alpha_blend(base: np.ndarray, overlay: np.ndarray) -> np.ndarray:
+    """Standard 'over' compositing of overlay (RGBA) onto base (RGBA), in place-safe."""
+    a = overlay[..., 3:4].astype(np.float32) / 255.0
+    base_rgb = base[..., :3].astype(np.float32)
+    over_rgb = overlay[..., :3].astype(np.float32)
+    out_rgb = (over_rgb * a + base_rgb * (1.0 - a)).astype(np.uint8)
+    out_a = np.maximum(base[..., 3], overlay[..., 3])
+    return np.dstack([out_rgb, out_a])
+
+
+def _layer_quad(canvas: np.ndarray, design_bytes: bytes, points: list[list[float]]) -> np.ndarray:
+    """Warp ``design_bytes`` into the 4 normalized corners and alpha-composite."""
+    H, W = canvas.shape[:2]
+    design = _decode_rgba_array(design_bytes)
+    h, w = design.shape[:2]
+    # Source: design corners (px). Destination: zone corners (fractions → px).
+    src = np.array([[0, 0], [w, 0], [w, h], [0, h]], dtype=np.float32)
+    dst = np.array(
+        [[max(0.0, min(1.0, p[0])) * W, max(0.0, min(1.0, p[1])) * H] for p in points],
+        dtype=np.float32,
+    )
+    M = cv2.getPerspectiveTransform(src, dst)
+    warped = cv2.warpPerspective(
+        design, M, (W, H),
+        flags=cv2.INTER_LANCZOS4,
+        borderMode=cv2.BORDER_CONSTANT,
+        borderValue=(0, 0, 0, 0),
+    )
+    return _alpha_blend(canvas, warped)
+
+
+def _layer_rect(canvas: np.ndarray, design_bytes: bytes, zone: dict) -> np.ndarray:
+    """Pillow-style aspect-fit rect paste, returning RGBA ndarray.
+
+    Reuses the contract of ``composite_with_anchor`` so existing v1 templates
+    render byte-identical when called from the multi-zone pipeline.
+    """
+    base_img = Image.fromarray(canvas, mode="RGBA")
+    base_bytes = BytesIO()
+    base_img.save(base_bytes, format="PNG", optimize=False)
+    out = composite_with_anchor(
+        base_bytes.getvalue(),
+        design_bytes,
+        {"x": zone["x"], "y": zone["y"], "w": zone["w"], "h": zone["h"]},
+    )
+    return _decode_rgba_array(out)
+
+
+def composite_quad(
+    base_bytes: bytes,
+    design_bytes: bytes,
+    points: list[list[float]],
+) -> bytes:
+    """Composite ``design_bytes`` warped to the 4-corner ``points`` onto ``base_bytes``.
+
+    ``points`` is a 4×2 list of [x, y] in 0–1 fractions, listed clockwise from
+    the top-left corner of the print zone.
+
+    Returns PNG bytes (capped at 2 MB).
+    """
+    if not isinstance(points, list) or len(points) != 4:
+        raise ValueError(f"composite_quad expected 4 points, got {points!r}")
+    canvas = _decode_rgba_array(base_bytes)
+    canvas = _layer_quad(canvas, design_bytes, points)
+    return _encode_png_capped(canvas)
+
+
+def composite_zones(
+    base_bytes: bytes,
+    zones: list[dict],
+    designs_by_name: dict[str, bytes],
+) -> bytes:
+    """Composite each zone in array order onto the base.
+
+    Zones with no matching design in ``designs_by_name`` are skipped (base shows
+    through). Mixed rect+quad zones are supported; rect zones use the v1
+    Pillow path, quad zones use cv2.warpPerspective.
+
+    Returns PNG bytes (capped at 2 MB).
+    """
+    canvas = _decode_rgba_array(base_bytes)
+    for zone in zones:
+        name = zone.get("name")
+        design_bytes = designs_by_name.get(name)
+        if not design_bytes:
+            continue
+        if zone.get("kind") == "quad":
+            canvas = _layer_quad(canvas, design_bytes, zone["points"])
+        elif zone.get("kind") == "rect":
+            canvas = _layer_rect(canvas, design_bytes, zone)
+    return _encode_png_capped(canvas)

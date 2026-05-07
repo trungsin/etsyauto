@@ -142,7 +142,7 @@ def _patch_externals(etsy_mock):
         patch("app.services.listing_creator_service.EtsyApiClient", return_value=etsy_mock),
         patch(
             "app.services.listing_creator_service.composite_service.get_or_create_composite",
-            side_effect=lambda s, tid, did, color: (f"https://cdn.example.com/composites/{tid}-{did}-{color}.png", False),
+            side_effect=lambda s, tid, did, color, **_kw: (f"https://cdn.example.com/composites/{tid}-{did}-{color}.png", False),
         ),
         patch(
             "app.services.listing_creator_service.httpx.Client",
