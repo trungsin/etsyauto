@@ -75,15 +75,24 @@ def _validate_combos(template: Template, enabled_combos: list[dict]) -> list[dic
 
 
 def _size_price_map(template: Template) -> dict[str, int]:
-    """Extract {size_name: price_cents} from template.variation_options_json."""
+    """Extract {size_name: price_cents} from template.variation_options_json.
+
+    Accepts both schemas:
+      - rich:  [{"name": "S", "price_cents": 1900}, ...]   (preferred, per-size price)
+      - plain: ["S", "M", "L"]                              (admin UI default — falls
+                                                              back to template.default_price_cents)
+    """
     try:
         opts = json.loads(template.variation_options_json or "{}")
     except (json.JSONDecodeError, TypeError):
         opts = {}
+    fallback = int(template.default_price_cents or 0)
     out: dict[str, int] = {}
     for s in opts.get("sizes", []):
-        if isinstance(s, dict) and "name" in s and "price_cents" in s:
-            out[s["name"]] = int(s["price_cents"])
+        if isinstance(s, dict) and "name" in s:
+            out[str(s["name"])] = int(s.get("price_cents", fallback))
+        elif isinstance(s, str) and fallback > 0:
+            out[s] = fallback
     return out
 
 
