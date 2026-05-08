@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Listing Created — EtsyAuto Admin{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Listing Created</h1>
+</div>
+
+<div class="card" style="max-width:560px;">
+  {% if idempotent %}
+    <div class="banner banner-warn" style="margin-bottom:1rem;">
+      A listing already existed for this template + design combination. Returning the existing draft.
+    </div>
+  {% else %}
+    <div style="background:#d1fae5;border:1px solid #6ee7b7;border-radius:4px;padding:.75rem 1rem;
+                margin-bottom:1rem;color:#065f46;">
+      Etsy draft listing created successfully.
+    </div>
+  {% endif %}
+
+  <table style="width:100%;border-collapse:collapse;font-size:.9rem;margin-bottom:1rem;">
+    <tr>
+      <th style="text-align:left;padding:.3rem .5rem;width:140px;">Local Listing ID</th>
+      <td style="padding:.3rem .5rem;font-family:monospace;">{{ listing_id }}</td>
+    </tr>
+    <tr>
+      <th style="text-align:left;padding:.3rem .5rem;">Etsy Listing ID</th>
+      <td style="padding:.3rem .5rem;font-family:monospace;">{{ etsy_listing_id or '—' }}</td>
+    </tr>
+    {% if draft_url %}
+    <tr>
+      <th style="text-align:left;padding:.3rem .5rem;">Draft URL</th>
+      <td style="padding:.3rem .5rem;">
+        <a href="{{ draft_url }}" target="_blank" rel="noopener">{{ draft_url }}</a>
+      </td>
+    </tr>
+    {% endif %}
+    <tr>
+      <th style="text-align:left;padding:.3rem .5rem;">Idea</th>
+      <td style="padding:.3rem .5rem;">
+        <a href="/admin/ideas/{{ idea.id }}">#{{ idea.id }} — {{ idea.title or '(no title)' }}</a>
+      </td>
+    </tr>
+    <tr>
+      <th style="text-align:left;padding:.3rem .5rem;">Idea Status</th>
+      <td style="padding:.3rem .5rem;"><span class="badge">drafted</span></td>
+    </tr>
+  </table>
+
+  <div style="display:flex;gap:.75rem;flex-wrap:wrap;">
+    <a href="/admin/ideas/{{ idea.id }}" class="btn btn-secondary">← Back to Idea</a>
+    <a href="/admin/ideas" class="btn btn-secondary">All Ideas</a>
+    {% if draft_url %}
+      <a href="{{ draft_url }}" target="_blank" rel="noopener" class="btn btn-primary">
+        Open Draft on Etsy ↗
+      </a>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

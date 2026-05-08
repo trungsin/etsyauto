@@ -184,6 +184,63 @@ sequenceDiagram
     API-->>Admin: 200 {id, default_price_cents: 3000, ...}
 ```
 
+## Idea → Listing Flow (v0.8.0)
+
+```
+                   ┌─────────────────────────┐
+                   │  Etsy public API v3      │
+                   │  /listings/active        │
+                   └──────────┬──────────────┘
+                              │ keyword search (x-api-key)
+                              ▼
+   ┌─────────────────┐   ┌──────────────────────────────┐
+   │ APScheduler     │──▶│ idea_miner_service           │
+   │ (hourly)        │   │ - per-keyword search          │
+   └─────────────────┘   │ - get_listing detail          │
+                         │ - upsert idea + signal        │
+                         │ - fail-closed per listing     │
+                         └──────────┬───────────────────┘
+                                    │
+                                    ▼
+   ┌──────────────────────────────────────────────────┐
+   │ SQLite (4-layer schema)                           │
+   │ ┌──────────────────────────────────────────────┐ │
+   │ │ keywords (id, term, enabled, last_run_at)    │ │
+   │ │ ideas (UNIQUE source+source_listing_id,       │ │
+   │ │   status: new|saved|drafted|dismissed)        │ │
+   │ │ idea_signals (timeseries — favorers/views)    │ │
+   │ │ idea_to_listing (idea_id, listing_id) PK      │ │
+   │ └──────────────────────────────────────────────┘ │
+   └──────────────────────────────────────────────────┘
+                                    │
+            ┌───────────────────────┼─────────────────────┐
+            ▼                       ▼                     ▼
+   ┌───────────────────┐  ┌──────────────────┐  ┌────────────────────┐
+   │ POST /extension/  │  │ /admin/keywords  │  │ /admin/ideas/{id}/ │
+   │ idea (passive log │  │ /admin/ideas     │  │ create-listing →   │
+   │ from extension v3 │  │ velocity sort    │  │ wizard 3-step →    │
+   │ reference mode)   │  │ status filters   │  │ listing_creator    │
+   └───────────────────┘  └──────────────────┘  └────────────────────┘
+                                                         │
+                                                         ▼
+                                                   ┌──────────────┐
+                                                   │ Etsy draft   │
+                                                   │ + idea_to_   │
+                                                   │ listing link │
+                                                   │ + status=    │
+                                                   │   drafted    │
+                                                   └──────────────┘
+```
+
+**4-layer idea schema:**
+- `keywords` — user-managed search terms; `enabled` gates miner; `last_run_at` for ops visibility
+- `ideas` — `UNIQUE(source, source_listing_id)` deduplicates; `status` ∈ {new, saved, drafted, dismissed}; carries `reference_image_url`, `tags_json`, `price_cents`, taxonomy fields
+- `idea_signals` — append-only timeseries `(idea_id, captured_at, num_favorers, views_all_time)`; velocity computed via `velocity_per_day(idea_id)` query
+- `idea_to_listing` — composite-PK provenance link; populated on wizard submit
+
+**Wizard stateless:** idea_id in URL only; each step recomputes prefill — no server session.
+**Reuses listing_creator_service** end-to-end for Step 3 (no duplicated Etsy push logic).
+
 ## Status State Machine
 
 ```mermaid

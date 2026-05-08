@@ -149,6 +149,146 @@ function extractDescription() {
   return null;
 }
 
+/**
+ * Extract Etsy product tags from the listing page.
+ * Tries <meta property="product:tag"> elements first (most reliable),
+ * then falls back to visible tag pill elements.
+ * Returns null-safe empty array on miss — never throws.
+ * @returns {string[]}
+ */
+function extractTags() {
+  try {
+    // Meta tags: <meta property="product:tag" content="handmade">
+    const metaTags = Array.from(
+      document.querySelectorAll('meta[property="product:tag"]')
+    ).map((el) => el.getAttribute('content')).filter(Boolean);
+    if (metaTags.length > 0) return metaTags;
+
+    // Visible tag pills — Etsy renders them as links inside a tags section
+    const pillSelectors = [
+      '[data-listing-page-tags] a',
+      '.tags-section a',
+      '[class*="tag"] a[href*="/search?q="]',
+    ];
+    for (const sel of pillSelectors) {
+      const pills = Array.from(document.querySelectorAll(sel))
+        .map((el) => el.textContent.trim())
+        .filter(Boolean);
+      if (pills.length > 0) return pills;
+    }
+  } catch (_) {
+    // DOM access failure — return empty rather than crash
+  }
+  return [];
+}
+
+/**
+ * Extract the listing's materials list from the detail section.
+ * Etsy renders a "Materials:" row in the item details.
+ * Returns null-safe empty array on miss.
+ * @returns {string[]}
+ */
+function extractMaterials() {
+  try {
+    // Look for a detail row whose label contains "Material"
+    const rows = document.querySelectorAll('[class*="detail"] li, .wt-text-body-01');
+    for (const row of rows) {
+      const text = row.textContent || '';
+      if (/material/i.test(text)) {
+        // Text looks like "Materials: clay, glaze" — strip the label and split
+        const value = text.replace(/^.*?:\s*/i, '').trim();
+        if (value) {
+          return value.split(',').map((s) => s.trim()).filter(Boolean);
+        }
+      }
+    }
+
+    // Fallback: <meta itemprop="material"> or similar JSON-LD (best-effort)
+    const ld = _extractJsonLd();
+    if (ld && Array.isArray(ld.material)) return ld.material;
+    if (ld && typeof ld.material === 'string') return [ld.material];
+  } catch (_) {
+    // DOM/JSON parse failure — return empty
+  }
+  return [];
+}
+
+/**
+ * Extract the number of favorites/favorers from the listing page.
+ * Etsy shows "X favorites" near the listing title or in a dedicated badge.
+ * Returns null when not found (don't guess zero — signal absence matters).
+ * @returns {number|null}
+ */
+function extractNumFavorers() {
+  try {
+    // data-favorite-count attribute (most reliable)
+    const el = document.querySelector('[data-favorite-count]');
+    if (el) {
+      const val = parseInt(el.getAttribute('data-favorite-count'), 10);
+      if (!Number.isNaN(val)) return val;
+    }
+
+    // Text pattern: "1,234 favorites" or "1.2k favorites"
+    const bodyText = document.body.innerText || '';
+    const match = bodyText.match(/([\d,]+)\s+favorite/i);
+    if (match) {
+      const parsed = parseInt(match[1].replace(/,/g, ''), 10);
+      if (!Number.isNaN(parsed)) return parsed;
+    }
+  } catch (_) {
+    // DOM read failure
+  }
+  return null;
+}
+
+/**
+ * Extract the primary listing image URL (first gallery image).
+ * Upgrades to il_fullxfull for highest resolution.
+ * Returns null when no suitable image found.
+ * @returns {string|null}
+ */
+function extractPrimaryImageUrl() {
+  try {
+    const selectors = [
+      // Public listing page gallery — active slide first
+      '[data-listing-page-gallery] img',
+      'img.wt-max-width-full',
+      '.listing-page-image-carousel img',
+      '[data-img-zoom] img',
+      'img[data-listing-image]',
+    ];
+    for (const sel of selectors) {
+      const img = document.querySelector(sel);
+      if (img) {
+        const raw = img.src || img.getAttribute('data-src') || '';
+        if (raw && raw.startsWith('http') && !raw.includes('transparent')) {
+          return upgradeEtsyImageUrl(raw);
+        }
+      }
+    }
+  } catch (_) {
+    // DOM access failure
+  }
+  return null;
+}
+
+/**
+ * Parse the first JSON-LD <script> block on the page (best-effort).
+ * Returns the parsed object or null.
+ * @returns {object|null}
+ */
+function _extractJsonLd() {
+  try {
+    const script = document.querySelector('script[type="application/ld+json"]');
+    if (script && script.textContent) {
+      return JSON.parse(script.textContent);
+    }
+  } catch (_) {
+    // Malformed JSON-LD — ignore
+  }
+  return null;
+}
+
 // Expose on window so listing-detector.js (non-module) can access these
 window.__etsyExtractor = {
   getListingIdFromUrl,
@@ -156,4 +296,9 @@ window.__etsyExtractor = {
   extractImages,
   extractDescription,
   upgradeEtsyImageUrl,
+  // v0.8 additions — used by extension passive log (POST /extension/idea)
+  extractTags,
+  extractMaterials,
+  extractNumFavorers,
+  extractPrimaryImageUrl,
 };

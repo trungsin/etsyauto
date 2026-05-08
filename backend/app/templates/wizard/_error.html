@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Wizard Error — EtsyAuto Admin{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Listing Creation Failed</h1>
+</div>
+
+<div class="card" style="max-width:560px;">
+  <div style="background:#fee2e2;border:1px solid #fca5a5;border-radius:4px;padding:.75rem 1rem;
+              margin-bottom:1rem;color:#991b1b;">
+    <strong>Error:</strong> {{ error }}
+  </div>
+
+  <div style="display:flex;gap:.75rem;flex-wrap:wrap;">
+    {% if idea %}
+      <a href="/admin/ideas/{{ idea.id }}/create-listing" class="btn btn-primary">
+        ← Retry Wizard
+      </a>
+      <a href="/admin/ideas/{{ idea.id }}" class="btn btn-secondary">Back to Idea</a>
+    {% endif %}
+    <a href="/admin/ideas" class="btn btn-secondary">All Ideas</a>
+  </div>
+</div>
+{% endblock %}

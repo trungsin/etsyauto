@@ -27,6 +27,10 @@ from app.routes.templates_admin import (
 from app.routes.references_api import router as references_api_router
 from app.routes.variations_api import router as variations_api_router
 from app.routes.listings_creator_api import router as listings_creator_api_router
+from app.routes.keywords_admin import router as keywords_admin_router
+from app.routes.ideas_admin import router as ideas_admin_router
+from app.routes.idea_wizard import router as idea_wizard_router
+from app.routes.extension_idea_api import router as extension_idea_router
 
 # Jinja2 templates — shared instance; imported by templates_admin.py lazily
 _templates_dir = Path(__file__).parent / "templates"
@@ -132,7 +136,7 @@ app.add_middleware(
     allow_origin_regex=r"chrome-extension://.*",
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", "X-Admin-Token"],
 )
 
 # Mount static files directory (create if missing)
@@ -161,3 +165,10 @@ app.include_router(creator_admin_router)
 app.include_router(auth_admin_router)
 app.include_router(references_api_router)
 app.include_router(listings_creator_api_router)
+app.include_router(keywords_admin_router)
+app.include_router(ideas_admin_router)
+# idea_wizard_router MUST be included AFTER ideas_admin_router — its routes are more
+# specific (/admin/ideas/{id}/create-listing vs /admin/ideas/{id}) so FastAPI matches
+# in registration order; placing wizard first would shadow the detail route.
+app.include_router(idea_wizard_router)
+app.include_router(extension_idea_router)

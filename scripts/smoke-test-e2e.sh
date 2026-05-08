@@ -252,12 +252,32 @@ else
   fail "X-Request-ID round-trip broken (got '$CID')"
 fi
 
+# ── 6e. v0.8 Idea Mining + Wizard endpoints ──────────────────────────────────
+info "Checking v0.8 endpoints exist (auth-protected)..."
+
+CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+  -H "X-Admin-Token: $SMOKE_ADMIN_TOKEN" \
+  "http://127.0.0.1:$PORT/admin/keywords")
+if [[ "$CODE" == "200" ]]; then ok "/admin/keywords reachable"; else fail "/admin/keywords got $CODE"; fi
+
+CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+  -H "X-Admin-Token: $SMOKE_ADMIN_TOKEN" \
+  "http://127.0.0.1:$PORT/admin/ideas")
+if [[ "$CODE" == "200" ]]; then ok "/admin/ideas reachable"; else fail "/admin/ideas got $CODE"; fi
+
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+  -H "X-Admin-Token: $SMOKE_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"source_listing_id":"smoke1","source_url":"http://x","title":"Smoke Test"}' \
+  "http://127.0.0.1:$PORT/extension/idea")
+if [[ "$CODE" == "201" || "$CODE" == "200" ]]; then ok "/extension/idea accepts payload"; else fail "/extension/idea got $CODE"; fi
+
 kill "$SERVER_PID" 2>/dev/null || true
 SERVER_PID=""
 sleep 1
 rm -f "$SMOKE_DB"
 
-# ── 6e. cv2 import sanity (v0.6.0 dependency) ────────────────────────────────
+# ── 6f. cv2 import sanity (v0.6.0 dependency) ────────────────────────────────
 info "cv2 import check..."
 if uv run python -c "import cv2; print(cv2.__version__)" >/dev/null 2>&1; then
   ok "cv2 imports OK (opencv-python-headless)"

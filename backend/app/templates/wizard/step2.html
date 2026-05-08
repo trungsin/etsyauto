@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Create Listing — Step 2 — EtsyAuto Admin{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Create Listing from Idea #{{ idea.id }}</h1>
+  <a href="/admin/ideas/{{ idea.id }}/create-listing" class="btn btn-secondary">← Back to Step 1</a>
+</div>
+
+<div style="margin-bottom:.75rem;">
+  <span style="background:#e0f2fe;color:#0369a1;padding:.25rem .75rem;border-radius:99px;font-size:.8rem;font-weight:600;">
+    Step 2 of 3 — Pick Template &amp; Design
+  </span>
+</div>
+
+<div class="card">
+  <form method="post" action="/admin/ideas/{{ idea.id }}/create-listing/step3"
+        enctype="multipart/form-data">
+
+    {# ── Hidden: carry Step 1 prefill flags forward ── #}
+    {% for flag_name, flag_val in prefill_flags.items() %}
+      {# We re-pass flags but the values from the textarea/prefilled dict matter more #}
+    {% endfor %}
+
+    {# ── Hidden: carry prefilled text values forward ── #}
+    <input type="hidden" name="title"        value="{{ prefilled.title }}">
+    <input type="hidden" name="tags_csv"     value="{{ prefilled.tags_csv }}">
+    <input type="hidden" name="description"  value="{{ prefilled.description }}">
+    <input type="hidden" name="materials_csv" value="{{ prefilled.materials_csv }}">
+    <input type="hidden" name="taxonomy_id"  value="{{ prefilled.taxonomy_id }}">
+    <input type="hidden" name="who_made"     value="{{ prefilled.who_made }}">
+    <input type="hidden" name="when_made"    value="{{ prefilled.when_made }}">
+    <input type="hidden" name="price"        value="{{ prefilled.price }}">
+
+    {# ── Template selection ── #}
+    <fieldset style="border:none;padding:0;margin-bottom:1.25rem;">
+      <legend style="font-weight:600;font-size:.95rem;margin-bottom:.5rem;">Template *</legend>
+      {% if templates %}
+        <select name="template_id" required style="width:100%;padding:.4rem;font-size:.9rem;">
+          <option value="">— select template —</option>
+          {% for t in templates %}
+            <option value="{{ t.id }}">{{ t.name }} (#{{ t.id }})</option>
+          {% endfor %}
+        </select>
+      {% else %}
+        <p style="color:#ef4444;font-size:.9rem;">No templates found. Create a template first.</p>
+        <select name="template_id" disabled style="width:100%;padding:.4rem;"></select>
+      {% endif %}
+    </fieldset>
+
+    {# ── Design selection ── #}
+    <fieldset style="border:none;padding:0;margin-bottom:1.25rem;">
+      <legend style="font-weight:600;font-size:.95rem;margin-bottom:.5rem;">Design *</legend>
+      <p style="font-size:.82rem;color:#555;margin:0 0 .6rem;">
+        Choose an existing design <strong>or</strong> upload a new PNG with transparency below.
+        Reference-only designs are excluded (IP boundary).
+      </p>
+
+      {% if designs %}
+        <div style="display:grid;gap:.4rem;max-height:260px;overflow-y:auto;border:1px solid #ddd;
+                    border-radius:4px;padding:.5rem;margin-bottom:.75rem;">
+          {% for d in designs %}
+            <label style="display:flex;align-items:center;gap:.6rem;font-size:.85rem;cursor:pointer;">
+              <input type="radio" name="design_id" value="{{ d.id }}" style="flex-shrink:0;">
+              {% if d.file_url %}
+                <img src="{{ d.file_url }}" alt="{{ d.name }}"
+                     style="width:40px;height:40px;object-fit:cover;border:1px solid #eee;border-radius:3px;">
+              {% endif %}
+              <span>{{ d.name }} (#{{ d.id }}) — <span style="color:#888;">{{ d.source_type }}</span></span>
+            </label>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p style="color:#888;font-size:.85rem;margin-bottom:.75rem;">No usable designs yet. Upload one below.</p>
+      {% endif %}
+
+      {# Inline upload option #}
+      <div style="border:1px dashed #ccc;border-radius:4px;padding:.75rem;background:#fafafa;">
+        <p style="margin:0 0 .5rem;font-size:.82rem;font-weight:600;">Or upload a new design (PNG with alpha):</p>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">
+          <input type="file" name="upload_design" accept=".png,image/png"
+                 style="font-size:.82rem;">
+          <input type="text" name="upload_design_name" placeholder="Design name (optional)"
+                 style="padding:.3rem .5rem;font-size:.82rem;border:1px solid #ddd;border-radius:3px;flex:1;min-width:140px;">
+        </div>
+        <p style="margin:.4rem 0 0;font-size:.75rem;color:#888;">
+          Leave file empty to use an existing design selected above. Max 10 MB.
+        </p>
+      </div>
+    </fieldset>
+
+    <div style="display:flex;gap:.75rem;align-items:center;">
+      <button type="submit" class="btn btn-primary">Next: Review &amp; Submit →</button>
+      <a href="/admin/ideas/{{ idea.id }}/create-listing" class="btn btn-secondary">← Back</a>
+    </div>
+
+  </form>
+</div>
+{% endblock %}

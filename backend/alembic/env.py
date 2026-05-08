@@ -23,6 +23,10 @@ from app.models.template import Template  # noqa: E402, F401
 from app.models.template_variation import TemplateVariation  # noqa: E402, F401
 from app.models.design import Design  # noqa: E402, F401
 from app.models.reference import Reference  # noqa: E402, F401
+from app.models.keyword import Keyword  # noqa: E402, F401
+from app.models.idea import Idea  # noqa: E402, F401
+from app.models.idea_signal import IdeaSignal  # noqa: E402, F401
+from app.models.idea_to_listing import IdeaToListing  # noqa: E402, F401
 
 alembic_config = context.config
 

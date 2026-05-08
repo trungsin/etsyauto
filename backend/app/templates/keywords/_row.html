@@ -1,0 +1,25 @@
+<tr id="keyword-row-{{ kw.id }}">
+  <td>{{ kw.term }}</td>
+  <td>
+    <form method="post" action="/admin/keywords/{{ kw.id }}/toggle"
+          hx-post="/admin/keywords/{{ kw.id }}/toggle"
+          hx-target="#keyword-row-{{ kw.id }}"
+          hx-swap="outerHTML">
+      <button type="submit" class="btn btn-sm {{ 'btn-success' if kw.enabled else 'btn-secondary' }}">
+        {{ 'Enabled' if kw.enabled else 'Disabled' }}
+      </button>
+    </form>
+  </td>
+  <td>{{ kw.last_run_at.strftime('%Y-%m-%d %H:%M') if kw.last_run_at else '—' }}</td>
+  <td>{{ kw.idea_count }}</td>
+  <td style="display:flex;gap:.3rem;flex-wrap:wrap;">
+    <form method="post" action="/admin/keywords/{{ kw.id }}/run">
+      <button type="submit" class="btn btn-sm btn-primary"
+              onclick="return confirm('Start mining for \'{{ kw.term }}\'?')">Run now</button>
+    </form>
+    <form method="post" action="/admin/keywords/{{ kw.id }}/delete"
+          onsubmit="return confirm('Delete keyword \'{{ kw.term }}\'? Ideas will remain.')">
+      <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+    </form>
+  </td>
+</tr>

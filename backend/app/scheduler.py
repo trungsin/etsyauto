@@ -72,6 +72,26 @@ def _register_jobs() -> None:
     )
     logger.info("Registered job: etsy_uploader (interval=600s)")
 
+    # v0.8.0 — idea mining job (guarded by feature flag)
+    from app.config import settings as _settings  # local import; settings already a singleton
+    if _settings.idea_mining_enabled:
+        from app.services.idea_miner_service import run_all as run_idea_mining  # local import avoids circular deps
+
+        scheduler.add_job(
+            run_idea_mining,
+            trigger="interval",
+            seconds=_settings.etsy_miner_interval_sec,
+            id="idea_mining_job",
+            coalesce=True,
+            max_instances=1,
+            replace_existing=True,
+        )
+        logger.info(
+            "Registered job: idea_mining_job (interval=%ds)", _settings.etsy_miner_interval_sec
+        )
+    else:
+        logger.info("idea_mining_job skipped — idea_mining_enabled=False")
+
 
 def start() -> None:
     """Start the scheduler; called from FastAPI lifespan startup."""

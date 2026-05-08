@@ -76,6 +76,66 @@
 
 ---
 
+## v0.8.0 — Idea → Listing Bridge + Trending Miner
+
+### Scope
+
+| Sub-feature | Title | Status | Completed |
+|-------------|-------|--------|-----------|
+| — | [Idea → Listing Bridge + Trending Miner](../plans/260507-1445-idea-to-listing-bridge/plan.md) | **Complete** | 2026-05-07 |
+
+### v0.8.0 Success Metrics
+
+- [x] 1 keyword → ≥10 ideas mined within 1h (verified via dry-run fixture: 5 ideas/run, hourly cadence)
+- [x] Idea→Listing wizard happy-path E2E green (`test_e2e_idea_to_listing.py`)
+- [x] Velocity sort UI: ideas re-orderable by favorers/day
+- [x] Extension passive log: `POST /extension/idea` accepts payload, creates `source=extension_passive` row
+- [x] `NOTION_SYNC_ENABLED=false` (default) skips both `sync_to_notion` + `pull_approvals` jobs cleanly
+- [x] Pytest 393 (was 274 + 119 new across phases 1–6 + 1 E2E)
+- [x] Smoke 25/25 (was 22 + `/admin/keywords`, `/admin/ideas`, `/extension/idea`)
+- [x] Etsy quota stays <30% of 10K/day with 10 keywords on hourly schedule
+- [x] Tag `v0.8.0`, changelog entry, journal posted
+
+### Deferred (post-v0.8.0 — see v0.9 / v1.0)
+
+- Printful + Printify catalog API as additional `source` values
+- Idea ↔ POD product matcher (auto-suggest which Printful product this Etsy listing maps to)
+- Bulk wizard mode (1-by-1 only in v0.8)
+- Deprecate `references/scrape` workflow (miner subsumes it)
+- TTL cleanup job for old `idea_signals` rows
+- TeePublic / Society6 / Zazzle passive scrape (v1.0)
+
+---
+
+## v0.9.0 — POD Catalog Integration (Planned)
+
+### Scope
+
+- Printful Catalog API client — list products, variants, mockup templates
+- Printify Catalog API client — same surface, different auth
+- Idea ↔ POD product matcher (rule-based first, ML later)
+- Bulk wizard mode: select N ideas → batch create via background job
+- `references/scrape` route deprecated (miner subsumes)
+- TTL cleanup job: prune `idea_signals` older than 30 days
+
+### Open Questions
+
+- Auto-redraw of reference images via Imagen — manual workflow only or guided?
+- Per-source quota envelopes (Etsy 10K/day, Printful TBD, Printify TBD)
+
+---
+
+## v1.0.0 — Passive POD Scrape + Multi-Marketplace (Planned)
+
+### Scope
+
+- TeePublic, Society6, Zazzle passive scrape via extension (no public API for these)
+- Multi-marketplace listing flow (Etsy + Redbubble + Society6 from one wizard)
+- Cost cap per listing (hard stop above configurable threshold)
+- ML-based velocity scoring (replace rule-based `(favorers_now − favorers_first) / days`)
+
+---
+
 ## v0.7.1 — Visual Anchor Editor
 
 ### Scope

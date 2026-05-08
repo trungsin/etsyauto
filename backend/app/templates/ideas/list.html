@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Ideas — EtsyAuto Admin{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Ideas</h1>
+</div>
+
+{# Filter / sort form — GET so bookmarkable #}
+<form method="get" action="/admin/ideas" style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem;align-items:center;">
+  <label style="display:flex;flex-direction:column;font-size:.8rem;">
+    Keyword
+    <select name="keyword_id" style="padding:.3rem;">
+      <option value="">All keywords</option>
+      {% for kw in keywords %}
+        <option value="{{ kw.id }}" {{ 'selected' if filter_keyword_id == kw.id }}>{{ kw.term }}</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <label style="display:flex;flex-direction:column;font-size:.8rem;">
+    Status
+    <select name="status" style="padding:.3rem;">
+      <option value="">All statuses</option>
+      {% for s in valid_statuses %}
+        <option value="{{ s }}" {{ 'selected' if filter_status == s }}>{{ s }}</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <label style="display:flex;flex-direction:column;font-size:.8rem;">
+    Source
+    <select name="source" style="padding:.3rem;">
+      <option value="">All sources</option>
+      {% for src in valid_sources %}
+        <option value="{{ src }}" {{ 'selected' if filter_source == src }}>{{ src }}</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <label style="display:flex;flex-direction:column;font-size:.8rem;">
+    Sort
+    <select name="sort" style="padding:.3rem;">
+      {% for s in valid_sorts %}
+        <option value="{{ s }}" {{ 'selected' if filter_sort == s }}>{{ s }}</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <button type="submit" class="btn btn-primary" style="align-self:flex-end;">Filter</button>
+  <a href="/admin/ideas" class="btn btn-secondary" style="align-self:flex-end;">Reset</a>
+</form>
+
+{% if ideas %}
+<table class="table" id="ideas-table">
+  <thead>
+    <tr>
+      <th>Image</th>
+      <th>Title</th>
+      <th>Source</th>
+      <th>Status</th>
+      <th>Favorers</th>
+      <th>Velocity (fav/hr)</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for idea in ideas %}
+    <tr id="idea-row-{{ idea.id }}">
+      <td>
+        {% if idea.reference_image_url %}
+          <img src="{{ idea.reference_image_url }}" alt="" class="thumb" style="width:48px;height:48px;object-fit:cover;">
+        {% else %}
+          <span style="color:#aaa;">—</span>
+        {% endif %}
+      </td>
+      <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+          title="{{ idea.title }}">{{ idea.title }}</td>
+      <td><span class="badge">{{ idea.source }}</span></td>
+      <td><span class="badge {{ 'badge-danger' if idea.status == 'rejected' else '' }}">{{ idea.status }}</span></td>
+      <td>{{ idea.num_favorers if idea.num_favorers is not none else '—' }}</td>
+      <td>{{ idea.velocity }}</td>
+      <td style="display:flex;gap:.3rem;flex-wrap:wrap;">
+        <a href="/admin/ideas/{{ idea.id }}" class="btn btn-sm">View</a>
+        {% if idea.status != 'rejected' %}
+        <form method="post" action="/admin/ideas/{{ idea.id }}/reject"
+              onsubmit="return confirm('Reject this idea?')">
+          <button type="submit" class="btn btn-sm btn-danger">Reject</button>
+        </form>
+        {% endif %}
+        <a href="/admin/ideas/{{ idea.id }}/create-listing" class="btn btn-sm btn-secondary">Create Listing</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{# Offset-based pagination #}
+<div style="display:flex;gap:.5rem;margin-top:1rem;">
+  {% if offset > 0 %}
+    <a href="?keyword_id={{ filter_keyword_id or '' }}&status={{ filter_status }}&source={{ filter_source }}&sort={{ filter_sort }}&offset={{ [offset - limit, 0]|max }}"
+       class="btn btn-secondary">← Previous</a>
+  {% endif %}
+  {% if ideas|length == limit %}
+    <a href="?keyword_id={{ filter_keyword_id or '' }}&status={{ filter_status }}&source={{ filter_source }}&sort={{ filter_sort }}&offset={{ offset + limit }}"
+       class="btn btn-secondary">Next →</a>
+  {% endif %}
+</div>
+{% else %}
+<p class="empty-state">No ideas match the current filters.</p>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}Idea #{{ idea.id }} — EtsyAuto Admin{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Idea #{{ idea.id }}</h1>
+  <a href="/admin/ideas" class="btn btn-secondary">← Back to Ideas</a>
+</div>
+
+<div style="display:grid;grid-template-columns:320px 1fr;gap:1.5rem;align-items:start;">
+
+  {# Left column: image + actions #}
+  <div>
+    {% if idea.reference_image_url %}
+      <img src="{{ idea.reference_image_url }}" alt="{{ idea.title }}"
+           style="width:100%;border-radius:6px;border:1px solid #ddd;margin-bottom:1rem;">
+    {% else %}
+      <div style="width:100%;height:200px;background:#f5f5f5;display:flex;align-items:center;
+                  justify-content:center;border-radius:6px;border:1px solid #ddd;margin-bottom:1rem;
+                  color:#999;">No image</div>
+    {% endif %}
+
+    <div style="display:flex;flex-direction:column;gap:.5rem;">
+      {% if idea.status != 'rejected' %}
+      <form method="post" action="/admin/ideas/{{ idea.id }}/reject"
+            onsubmit="return confirm('Mark this idea as rejected?')">
+        <button type="submit" class="btn btn-danger" style="width:100%;">Reject</button>
+      </form>
+      {% else %}
+        <span class="badge badge-danger" style="text-align:center;padding:.4rem;">Rejected</span>
+      {% endif %}
+      <a href="/admin/ideas/{{ idea.id }}/create-listing" class="btn btn-primary"
+         style="text-align:center;">
+        Create Listing
+      </a>
+    </div>
+  </div>
+
+  {# Right column: metadata #}
+  <div>
+    <div class="card" style="margin-bottom:1rem;">
+      <h2 style="margin-top:0;">{{ idea.title or '(no title)' }}</h2>
+
+      <table style="width:100%;border-collapse:collapse;font-size:.9rem;">
+        <tr><th style="text-align:left;padding:.25rem .5rem;width:140px;">Status</th>
+            <td style="padding:.25rem .5rem;"><span class="badge {{ 'badge-danger' if idea.status == 'rejected' else '' }}">{{ idea.status }}</span></td></tr>
+        <tr><th style="text-align:left;padding:.25rem .5rem;">Source</th>
+            <td style="padding:.25rem .5rem;">{{ idea.source }}</td></tr>
+        <tr><th style="text-align:left;padding:.25rem .5rem;">Listing ID</th>
+            <td style="padding:.25rem .5rem;font-family:monospace;">{{ idea.source_listing_id }}</td></tr>
+        <tr><th style="text-align:left;padding:.25rem .5rem;">Keyword ID</th>
+            <td style="padding:.25rem .5rem;">{{ idea.keyword_id or '—' }}</td></tr>
+        <tr><th style="text-align:left;padding:.25rem .5rem;">Price</th>
+            <td style="padding:.25rem .5rem;">{{ ('$%.2f' % (idea.price_cents / 100)) if idea.price_cents else '—' }}</td></tr>
+        <tr><th style="text-align:left;padding:.25rem .5rem;">Taxonomy ID</th>
+            <td style="padding:.25rem .5rem;">{{ idea.taxonomy_id or '—' }}</td></tr>
+        <tr><th style="text-align:left;padding:.25rem .5rem;">Who made</th>
+            <td style="padding:.25rem .5rem;">{{ idea.who_made or '—' }}</td></tr>
+        <tr><th style="text-align:left;padding:.25rem .5rem;">When made</th>
+            <td style="padding:.25rem .5rem;">{{ idea.when_made or '—' }}</td></tr>
+        <tr><th style="text-align:left;padding:.25rem .5rem;">Velocity</th>
+            <td style="padding:.25rem .5rem;">{{ velocity }} fav/hr</td></tr>
+        <tr><th style="text-align:left;padding:.25rem .5rem;">Created</th>
+            <td style="padding:.25rem .5rem;">{{ idea.created_at.strftime('%Y-%m-%d %H:%M') if idea.created_at else '—' }}</td></tr>
+      </table>
+    </div>
+
+    {% if tags %}
+    <div class="card" style="margin-bottom:1rem;">
+      <h3 style="margin-top:0;">Tags</h3>
+      <div style="display:flex;flex-wrap:wrap;gap:.3rem;">
+        {% for tag in tags %}
+          <span class="badge">{{ tag }}</span>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if materials %}
+    <div class="card" style="margin-bottom:1rem;">
+      <h3 style="margin-top:0;">Materials</h3>
+      <div style="display:flex;flex-wrap:wrap;gap:.3rem;">
+        {% for mat in materials %}
+          <span class="badge">{{ mat }}</span>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if idea.description %}
+    <div class="card" style="margin-bottom:1rem;">
+      <h3 style="margin-top:0;">Description</h3>
+      <p style="white-space:pre-wrap;font-size:.9rem;margin:0;">{{ idea.description }}</p>
+    </div>
+    {% endif %}
+
+    {# Signals timeline #}
+    <div class="card">
+      <h3 style="margin-top:0;">Signal history (last 20)</h3>
+      {% if signals %}
+      <table class="table" style="font-size:.85rem;">
+        <thead>
+          <tr>
+            <th>Timestamp</th>
+            <th>Favorers</th>
+            <th>Views (all-time)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for sig in signals %}
+          <tr>
+            <td>{{ sig.ts.strftime('%Y-%m-%d %H:%M:%S') if sig.ts else '—' }}</td>
+            <td>{{ sig.num_favorers if sig.num_favorers is not none else '—' }}</td>
+            <td>{{ sig.views_all_time if sig.views_all_time is not none else '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+        <p style="color:#999;margin:0;">No signals recorded yet.</p>
+      {% endif %}
+    </div>
+
+  </div>
+</div>
+{% endblock %}

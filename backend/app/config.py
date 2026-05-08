@@ -49,6 +49,16 @@ class Settings(BaseSettings):
     etsy_dry_run: bool = False
     etsy_dry_run_scenario: str = "happy"
 
+    # v0.8.0 — Idea miner: Etsy public API keyword search + signal collection.
+    # etsy_miner_interval_sec: scheduler interval between full mining runs (default 1h).
+    # etsy_miner_per_keyword_limit: max listings fetched per keyword per run (Etsy max 100).
+    # etsy_miner_throttle_ms: delay between consecutive detail calls in milliseconds.
+    # idea_mining_enabled: set False to prevent scheduler job registration.
+    etsy_miner_interval_sec: int = 3600
+    etsy_miner_per_keyword_limit: int = 100
+    etsy_miner_throttle_ms: int = 200
+    idea_mining_enabled: bool = True
+
 
 # Singleton — import this throughout the app
 settings = Settings()

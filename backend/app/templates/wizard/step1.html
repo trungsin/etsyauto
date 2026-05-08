@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Create Listing — Step 1 — EtsyAuto Admin{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Create Listing from Idea #{{ idea.id }}</h1>
+  <a href="/admin/ideas/{{ idea.id }}" class="btn btn-secondary">← Back to Idea</a>
+</div>
+
+<div style="margin-bottom:.75rem;">
+  <span style="background:#e0f2fe;color:#0369a1;padding:.25rem .75rem;border-radius:99px;font-size:.8rem;font-weight:600;">
+    Step 1 of 3 — Choose fields to prefill
+  </span>
+</div>
+
+{% if show_ip_warning %}
+<div class="banner banner-warn" style="margin-bottom:1rem;">
+  &#9888; <strong>Reference image is for inspiration only.</strong>
+  Do not paste 1:1 — copyright risk.
+  Consider re-drawing via AI tools before using as a design.
+</div>
+{% endif %}
+
+<div style="display:grid;grid-template-columns:300px 1fr;gap:1.5rem;align-items:start;">
+
+  {# Left: idea preview card #}
+  <div class="card">
+    {% if idea.reference_image_url %}
+      <img src="{{ idea.reference_image_url }}" alt="{{ idea.title }}"
+           style="width:100%;border-radius:4px;margin-bottom:.75rem;border:1px solid #ddd;">
+    {% else %}
+      <div style="width:100%;height:160px;background:#f5f5f5;display:flex;align-items:center;
+                  justify-content:center;border-radius:4px;border:1px solid #ddd;color:#aaa;
+                  margin-bottom:.75rem;">No image</div>
+    {% endif %}
+    <div style="font-weight:600;margin-bottom:.25rem;">{{ idea.title or '(no title)' }}</div>
+    <div style="font-size:.8rem;color:#666;">Source: {{ idea.source }}</div>
+    <div style="font-size:.8rem;color:#666;">Status: {{ idea.status }}</div>
+    {% if price_dollars %}
+      <div style="font-size:.8rem;color:#666;">Price: ${{ '%.2f'|format(price_dollars) }}</div>
+    {% endif %}
+  </div>
+
+  {# Right: field selection form #}
+  <div class="card">
+    <h2 style="margin-top:0;font-size:1.1rem;">Which fields should prefill from this idea?</h2>
+    <p style="font-size:.85rem;color:#555;margin-bottom:1rem;">
+      Checked fields will be pre-populated in the final review form. You can edit everything before submitting.
+    </p>
+
+    <form method="post" action="/admin/ideas/{{ idea.id }}/create-listing/step2">
+      <div style="display:grid;gap:.6rem;margin-bottom:1.25rem;">
+
+        <label style="display:flex;align-items:center;gap:.5rem;font-size:.9rem;">
+          <input type="checkbox" name="prefill_title" value="on"
+                 {{ 'checked' if idea.title }} style="width:16px;height:16px;">
+          <span><strong>Title</strong>{% if idea.title %} — <em style="color:#555;">{{ idea.title[:80] }}{% if idea.title|length > 80 %}…{% endif %}</em>{% else %} <span style="color:#aaa;">(empty)</span>{% endif %}</span>
+        </label>
+
+        <label style="display:flex;align-items:center;gap:.5rem;font-size:.9rem;">
+          <input type="checkbox" name="prefill_tags" value="on"
+                 {{ 'checked' if idea.tags_json }} style="width:16px;height:16px;">
+          <span><strong>Tags</strong>{% if idea.tags_json %} <span style="color:#555;">(from idea)</span>{% else %} <span style="color:#aaa;">(empty)</span>{% endif %}</span>
+        </label>
+
+        <label style="display:flex;align-items:center;gap:.5rem;font-size:.9rem;">
+          <input type="checkbox" name="prefill_description" value="on"
+                 {{ 'checked' if idea.description }} style="width:16px;height:16px;">
+          <span><strong>Description</strong>{% if idea.description %} <em style="color:#555;">{{ idea.description[:60] }}{% if idea.description|length > 60 %}…{% endif %}</em>{% else %} <span style="color:#aaa;">(empty)</span>{% endif %}</span>
+        </label>
+
+        <label style="display:flex;align-items:center;gap:.5rem;font-size:.9rem;">
+          <input type="checkbox" name="prefill_materials" value="on"
+                 {{ 'checked' if idea.materials_json }} style="width:16px;height:16px;">
+          <span><strong>Materials</strong>{% if not idea.materials_json %} <span style="color:#aaa;">(empty)</span>{% endif %}</span>
+        </label>
+
+        <label style="display:flex;align-items:center;gap:.5rem;font-size:.9rem;">
+          <input type="checkbox" name="prefill_taxonomy" value="on"
+                 {{ 'checked' if idea.taxonomy_id }} style="width:16px;height:16px;">
+          <span><strong>Taxonomy ID</strong>{% if idea.taxonomy_id %} <span style="color:#555;">({{ idea.taxonomy_id }})</span>{% else %} <span style="color:#aaa;">(empty)</span>{% endif %}</span>
+        </label>
+
+        <label style="display:flex;align-items:center;gap:.5rem;font-size:.9rem;">
+          <input type="checkbox" name="prefill_who_made" value="on"
+                 {{ 'checked' if idea.who_made }} style="width:16px;height:16px;">
+          <span><strong>Who made</strong>{% if idea.who_made %} <span style="color:#555;">({{ idea.who_made }})</span>{% else %} <span style="color:#aaa;">(empty)</span>{% endif %}</span>
+        </label>
+
+        <label style="display:flex;align-items:center;gap:.5rem;font-size:.9rem;">
+          <input type="checkbox" name="prefill_when_made" value="on"
+                 {{ 'checked' if idea.when_made }} style="width:16px;height:16px;">
+          <span><strong>When made</strong>{% if idea.when_made %} <span style="color:#555;">({{ idea.when_made }})</span>{% else %} <span style="color:#aaa;">(empty)</span>{% endif %}</span>
+        </label>
+
+        <label style="display:flex;align-items:center;gap:.5rem;font-size:.9rem;">
+          <input type="checkbox" name="prefill_price" value="on"
+                 {{ 'checked' if idea.price_cents }} style="width:16px;height:16px;">
+          <span><strong>Price</strong>{% if price_dollars %} <span style="color:#555;">(${{ '%.2f'|format(price_dollars) }})</span>{% else %} <span style="color:#aaa;">(empty)</span>{% endif %}</span>
+        </label>
+
+      </div>
+
+      <button type="submit" class="btn btn-primary">Next: Pick Template &amp; Design →</button>
+    </form>
+  </div>
+
+</div>
+{% endblock %}

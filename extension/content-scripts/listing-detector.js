@@ -78,4 +78,50 @@
       console.info(`[EtsyAuto] Listing ${listingId} (${mode}) detected and cached.`);
     }
   });
+
+  // v0.8 dual-write: passively log viewed listing to /extension/idea.
+  // Fires only in reference mode (public Etsy listing page).
+  // Non-blocking — any failure is logged but never surfaces to the user.
+  if (mode === 'reference' && listingId) {
+    _logExtensionIdea(listingId, payload);
+  }
 })();
+
+/**
+ * Passively log the viewed listing to the backend /extension/idea endpoint.
+ * Sends via service worker (LOG_EXTENSION_IDEA) so the admin token is kept
+ * in chrome.storage.local and never exposed directly in the content script.
+ * Errors are caught and logged; the extension never breaks if backend is down.
+ *
+ * @param {string} listingId
+ * @param {object} basePayload  — already-extracted title/description from LISTING_DETECTED
+ */
+function _logExtensionIdea(listingId, basePayload) {
+  const ext = window.__etsyExtractor;
+  const ideaPayload = {
+    source_listing_id: listingId,
+    title: (basePayload && basePayload.title) || (ext ? ext.extractTitle() : null) || '',
+    description: (basePayload && basePayload.description)
+      || (ext ? ext.extractDescription() : null)
+      || null,
+    tags: ext ? ext.extractTags() : [],
+    materials: ext ? ext.extractMaterials() : [],
+    reference_image_url: ext ? ext.extractPrimaryImageUrl() : null,
+    num_favorers: ext ? ext.extractNumFavorers() : null,
+    views_all_time: null,  // not exposed in DOM; reserved for API-sourced signal
+  };
+
+  chrome.runtime.sendMessage({ type: 'LOG_EXTENSION_IDEA', payload: ideaPayload }, (response) => {
+    if (chrome.runtime.lastError) {
+      // Service worker not ready or extension reloading — not a user-facing error
+      console.warn('[EtsyAuto] LOG_EXTENSION_IDEA sendMessage error:',
+        chrome.runtime.lastError.message);
+      return;
+    }
+    if (response && response.ok) {
+      console.info('[EtsyAuto] /extension/idea logged, idea_id=', response.data && response.data.idea_id);
+    } else {
+      console.warn('[EtsyAuto] /extension/idea log failed:', response && response.error);
+    }
+  });
+}

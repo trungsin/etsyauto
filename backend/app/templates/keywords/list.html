@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Keywords — EtsyAuto Admin{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Keywords</h1>
+</div>
+
+{% if flash %}
+  <div class="banner banner-info">{{ flash }}</div>
+{% endif %}
+{% if error %}
+  <div class="banner banner-error">{{ error }}</div>
+{% endif %}
+
+{# Add-new keyword form #}
+<section class="card" style="margin-bottom:1.5rem;">
+  <h2 style="margin-top:0;">Add keyword</h2>
+  <form method="post" action="/admin/keywords" style="display:flex;gap:.5rem;align-items:center;">
+    <input type="text" name="term" placeholder="e.g. vintage poster" required
+           style="flex:1;padding:.4rem .6rem;border:1px solid #ccc;border-radius:4px;">
+    <button type="submit" class="btn btn-primary">Add</button>
+  </form>
+</section>
+
+{% if keywords %}
+<table class="table" id="keywords-table">
+  <thead>
+    <tr>
+      <th>Term</th>
+      <th>Enabled</th>
+      <th>Last run</th>
+      <th>Ideas</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for kw in keywords %}
+      {% include "keywords/_row.html" %}
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty-state">No keywords yet. Add one above to start mining.</p>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block title %}Create Listing — Step 3 — EtsyAuto Admin{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Create Listing from Idea #{{ idea.id }}</h1>
+  <a href="/admin/ideas/{{ idea.id }}" class="btn btn-secondary">← Back to Idea</a>
+</div>
+
+<div style="margin-bottom:.75rem;">
+  <span style="background:#e0f2fe;color:#0369a1;padding:.25rem .75rem;border-radius:99px;font-size:.8rem;font-weight:600;">
+    Step 3 of 3 — Review &amp; Submit
+  </span>
+</div>
+
+<div class="card">
+  <p style="font-size:.85rem;color:#555;margin-top:0;">
+    All fields are editable. Review carefully — this will create a draft on Etsy.
+  </p>
+
+  {% if template %}
+    <p style="font-size:.85rem;margin-bottom:.25rem;">
+      <strong>Template:</strong> {{ template.name }} (#{{ template_id }})
+    </p>
+  {% endif %}
+  {% if design %}
+    <p style="font-size:.85rem;margin-bottom:1rem;">
+      <strong>Design:</strong> {{ design.name }} (#{{ design_id }})
+    </p>
+  {% endif %}
+
+  <form method="post" action="/admin/ideas/{{ idea.id }}/create-listing/submit">
+    {# Hidden: immutable selection from Step 2 #}
+    <input type="hidden" name="template_id" value="{{ template_id }}">
+    <input type="hidden" name="design_id"   value="{{ design_id }}">
+
+    <div style="display:grid;gap:1rem;">
+
+      <div>
+        <label style="display:block;font-weight:600;font-size:.85rem;margin-bottom:.3rem;">
+          Title * <span style="font-weight:400;color:#888;">(≤ 140 chars)</span>
+        </label>
+        <textarea name="title" rows="2" maxlength="140" required
+                  style="width:100%;box-sizing:border-box;padding:.4rem;font-size:.9rem;
+                         border:1px solid #ddd;border-radius:4px;">{{ prefilled.title }}</textarea>
+      </div>
+
+      <div>
+        <label style="display:block;font-weight:600;font-size:.85rem;margin-bottom:.3rem;">
+          Tags <span style="font-weight:400;color:#888;">(comma-separated, max 13)</span>
+        </label>
+        <input type="text" name="tags_csv" value="{{ prefilled.tags_csv }}"
+               placeholder="t-shirt, custom, gift"
+               style="width:100%;box-sizing:border-box;padding:.4rem;font-size:.9rem;
+                      border:1px solid #ddd;border-radius:4px;">
+      </div>
+
+      <div>
+        <label style="display:block;font-weight:600;font-size:.85rem;margin-bottom:.3rem;">
+          Description *
+        </label>
+        <textarea name="description" rows="5" required
+                  style="width:100%;box-sizing:border-box;padding:.4rem;font-size:.9rem;
+                         border:1px solid #ddd;border-radius:4px;">{{ prefilled.description }}</textarea>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;">
+
+        <div>
+          <label style="display:block;font-weight:600;font-size:.85rem;margin-bottom:.3rem;">
+            Who made
+          </label>
+          <select name="who_made"
+                  style="width:100%;padding:.4rem;font-size:.9rem;border:1px solid #ddd;border-radius:4px;">
+            <option value="">— select —</option>
+            {% for opt in ["i_did", "collective", "someone_else"] %}
+              <option value="{{ opt }}" {{ 'selected' if prefilled.who_made == opt }}>{{ opt }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div>
+          <label style="display:block;font-weight:600;font-size:.85rem;margin-bottom:.3rem;">
+            When made
+          </label>
+          <select name="when_made"
+                  style="width:100%;padding:.4rem;font-size:.9rem;border:1px solid #ddd;border-radius:4px;">
+            <option value="">— select —</option>
+            {% for opt in ["made_to_order", "2020_2024", "2010_2019", "2001_2009", "before_2001"] %}
+              <option value="{{ opt }}" {{ 'selected' if prefilled.when_made == opt }}>{{ opt }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div>
+          <label style="display:block;font-weight:600;font-size:.85rem;margin-bottom:.3rem;">
+            Materials <span style="font-weight:400;color:#888;">(comma-separated)</span>
+          </label>
+          <input type="text" name="materials_csv" value="{{ prefilled.materials_csv }}"
+                 placeholder="cotton, polyester"
+                 style="width:100%;box-sizing:border-box;padding:.4rem;font-size:.9rem;
+                        border:1px solid #ddd;border-radius:4px;">
+        </div>
+
+        <div>
+          <label style="display:block;font-weight:600;font-size:.85rem;margin-bottom:.3rem;">
+            Taxonomy ID
+          </label>
+          <input type="text" name="taxonomy_id" value="{{ prefilled.taxonomy_id }}"
+                 placeholder="e.g. 68887390"
+                 style="width:100%;box-sizing:border-box;padding:.4rem;font-size:.9rem;
+                        border:1px solid #ddd;border-radius:4px;">
+        </div>
+
+      </div>
+
+      <div>
+        <label style="display:block;font-weight:600;font-size:.85rem;margin-bottom:.3rem;">
+          Etsy Shop ID *
+        </label>
+        <input type="text" name="shop_id" value="{{ default_shop_id }}" required
+               placeholder="e.g. 12345678" autocomplete="off"
+               style="width:100%;box-sizing:border-box;padding:.4rem;font-size:.9rem;
+                      border:1px solid #ddd;border-radius:4px;">
+        <p style="font-size:.75rem;color:#888;margin:.25rem 0 0;">
+          Find your shop ID in the Etsy Seller Dashboard URL.
+        </p>
+      </div>
+
+    </div>
+
+    <div style="display:flex;gap:.75rem;align-items:center;margin-top:1.25rem;">
+      <button type="submit" class="btn btn-primary"
+              onclick="this.disabled=true;this.textContent='Creating draft…';this.form.submit();">
+        Create Etsy Draft
+      </button>
+      <a href="/admin/ideas/{{ idea.id }}" class="btn btn-secondary">Cancel</a>
+    </div>
+
+  </form>
+</div>
+{% endblock %}

@@ -1,6 +1,6 @@
 # Codebase Summary
 
-Module-by-module index with line counts. Updated: 2026-05-06 (v0.4.0).
+Module-by-module index with line counts. Updated: 2026-05-07 (v0.8.0).
 
 ## Backend (`backend/`)
 
@@ -28,6 +28,10 @@ Module-by-module index with line counts. Updated: 2026-05-06 (v0.4.0).
 | `routes/templates_admin.py` | 590 | Jinja2 + HTMX admin UI — `/admin/templates` CRUD, designs, composite preview, **listing creator (v0.5.0)** |
 | `routes/references_api.py` | 329 | `POST /references/scrape`, `GET/PUT/DELETE /references/{id}`, `/{id}/suggest-title`, `/{id}/cutout`, `/{id}/save` — reference workflow, X-Admin-Token protected |
 | `routes/listings_creator_api.py` | 83 | `POST /listings/from-template` — idempotent Etsy draft creator (sub-feature C, v0.4.0) |
+| `routes/keywords_admin.py` | 237 | `/admin/keywords` Jinja+HTMX CRUD — list, create, toggle enabled, manual fetch (v0.8.0) |
+| `routes/ideas_admin.py` | 202 | `/admin/ideas` browse — velocity sort, filters by status/source/keyword (v0.8.0) |
+| `routes/idea_wizard.py` | 445 | 3-step Idea→Listing wizard — `/admin/ideas/{id}/create-listing` step1/step2/step3/submit (v0.8.0) |
+| `routes/extension_idea_api.py` | 87 | `POST /extension/idea` — passive log endpoint, upserts `source=extension_passive` ideas (v0.8.0) |
 
 ### Models (`app/models/`)
 
@@ -42,8 +46,10 @@ Module-by-module index with line counts. Updated: 2026-05-06 (v0.4.0).
 | `models/template_variation.py` | 24 | `TemplateVariation` — size/color/price_cents/sku row; max 30 per template (Etsy limit) |
 | `models/design.py` | 25 | `Design` — uploaded artwork PNG; source_type ∈ {upload, ai_generated, reference_only} |
 | `models/reference.py` | 43 | `Reference` — scraped public Etsy listing: listing_id, source_url, original/edited title, ai_variants, tags, notes, status, optional cutout_design_id FK, notion_page_id |
-
-### Workers (`app/workers/`)
+| `models/keyword.py` | 24 | `Keyword` — user-managed search term + enabled flag + last_run_at; FK target for ideas (v0.8.0) |
+| `models/idea.py` | 56 | `Idea` — UNIQUE on `(source, source_listing_id)`; status ∈ {new, saved, drafted, dismissed}; reference_image_url, tags_json, price_cents (v0.8.0) |
+| `models/idea_signal.py` | 34 | `IdeaSignal` — timeseries of `(idea_id, captured_at, num_favorers, views_all_time)` for velocity sort (v0.8.0) |
+| `models/idea_to_listing.py` | 29 | `IdeaToListing` — composite-PK provenance link `(idea_id, listing_id)` (v0.8.0) |
 
 | File | LOC | Purpose |
 |------|-----|---------|
@@ -71,6 +77,9 @@ Module-by-module index with line counts. Updated: 2026-05-06 (v0.4.0).
 | `services/anchor_schema.py` | 130 | Anchor schema v2 parser — `parse_anchor` (v1 shim → zones[] envelope), `to_v2` serializer, `MAX_ZONES=4` (v0.6.0) |
 | `services/etsy_error_mapper.py` | 80 | Map httpx.HTTPStatusError → user-friendly toast (auth/rate/image/taxonomy/5xx) (v0.7.0) |
 | `services/listing_pre_check.py` | 90 | Etsy hard-cap validation (title/tags/combos/composite) before Etsy call (v0.7.0) |
+| `services/keyword_service.py` | 121 | Keyword CRUD — create, list, toggle enabled, touch_last_run (v0.8.0) |
+| `services/idea_service.py` | 354 | Idea CRUD — `upsert_idea`, `append_signal`, `latest_signal`, `velocity_per_day`, `link_to_listing`, `mark_drafted` (v0.8.0) |
+| `services/idea_miner_service.py` | 223 | Etsy public API → idea pipeline — `run_for_keyword`, `run_all` (scheduler), fail-closed per listing (v0.8.0) |
 | `clients/etsy_dry_run_fixtures.py` | 130 | Canned Etsy v3 responses for ETSY_DRY_RUN — 5 scenarios (v0.7.0) |
 | `middleware/correlation_id.py` | 45 | Per-request X-Request-ID via ContextVar (v0.7.0) |
 | `app/static/anchor-editor.js` | ~130 | Vanilla JS controller for the visual editor (v0.7.1) |
@@ -88,6 +97,8 @@ Module-by-module index with line counts. Updated: 2026-05-06 (v0.4.0).
 | `clients/notion_client.py` | 243 | Notion API wrapper — `create_review_page()`, `query_approved_listings()`, `validate_database_schema()` |
 | `clients/r2_storage_client.py` | 64 | boto3 S3-compatible client — `upload_image(key, data)` → public URL |
 | `clients/removebg_client.py` | 57 | remove.bg REST client — `remove_background(image_url)` → PNG bytes |
+| `clients/etsy_public_client.py` | 197 | Public x-api-key client — `search_active_listings`, `get_listing`; honors ETSY_DRY_RUN (v0.8.0) |
+| `clients/etsy_public_dry_run_fixtures.py` | 224 | Canned public-API responses (happy/empty/rate_limit) for offline tests (v0.8.0) |
 
 ### Prompts (`app/prompts/`)
 

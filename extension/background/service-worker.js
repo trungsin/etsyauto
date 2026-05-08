@@ -3,14 +3,15 @@
  * MV3 service worker: caches detected listing data and handles side panel opening.
  *
  * Messages handled:
- *   LISTING_DETECTED  — from content script, stores payload+mode in chrome.storage.session
- *   GET_LISTING       — from side panel, returns cached listing + mode
- *   SEND_TO_OPTIMIZER — from side panel, POSTs to backend /ingest (admin mode)
- *   SCRAPE_REFERENCE  — POST /references/scrape
- *   SUGGEST_TITLE     — POST /references/{id}/suggest-title
- *   CUTOUT_IMAGE      — POST /references/{id}/cutout
- *   UPDATE_REFERENCE  — PUT /references/{id}
- *   SAVE_REFERENCE    — POST /references/{id}/save
+ *   LISTING_DETECTED    — from content script, stores payload+mode in chrome.storage.session
+ *   GET_LISTING         — from side panel, returns cached listing + mode
+ *   SEND_TO_OPTIMIZER   — from side panel, POSTs to backend /ingest (admin mode)
+ *   SCRAPE_REFERENCE    — POST /references/scrape
+ *   SUGGEST_TITLE       — POST /references/{id}/suggest-title
+ *   CUTOUT_IMAGE        — POST /references/{id}/cutout
+ *   UPDATE_REFERENCE    — PUT /references/{id}
+ *   SAVE_REFERENCE      — POST /references/{id}/save
+ *   LOG_EXTENSION_IDEA  — POST /extension/idea (v0.8 passive log)
  */
 
 'use strict';
@@ -61,6 +62,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     case 'SAVE_REFERENCE':
       handleApiCall('POST', `/references/${message.referenceId}/save`, null, null, sendResponse);
+      return true;
+
+    case 'LOG_EXTENSION_IDEA':
+      // v0.8 — passive listing log; errors are non-fatal (content script handles gracefully)
+      handleApiCall('POST', '/extension/idea', message.payload, null, sendResponse);
       return true;
 
     case 'LIST_TEMPLATES':

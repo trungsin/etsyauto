@@ -4,6 +4,69 @@ All notable changes to EtsyAuto. Format: [Keep a Changelog](https://keepachangel
 
 ---
 
+## [0.8.0] — 2026-05-07
+
+Idea → Listing Bridge + Trending Miner. Closes the gap between extension Idea Bank (v0.3) and Listing Creator (v0.4). Adds Etsy public-API trending miner that hourly snapshots listings for user-managed keywords into a 4-layer idea schema; admin UI for keyword CRUD + idea browsing with velocity sort; 3-step wizard turning any idea into an Etsy draft via existing `listing_creator_service`. Notion sync gated behind env flag.
+
+### Added
+
+#### Backend — schema + miner
+- 4 new tables: `keywords` (CRUD + enabled flag), `ideas` (`UNIQUE(source, source_listing_id)`), `idea_signals` (favorers/views timeseries), `idea_to_listing` (composite-PK provenance)
+- `EtsyPublicClient` (`x-api-key` only, separate from OAuth) — `search_active_listings`, `get_listing`; honors `ETSY_DRY_RUN` with happy/empty/rate_limit fixtures
+- `idea_miner_service.run_for_keyword` + `run_all` (scheduler entrypoint) — fail-closed per listing, 200 ms throttle, idempotent upserts
+- `keyword_service` — create, list, toggle enabled, touch_last_run
+- `idea_service` — `upsert_idea`, `append_signal`, `latest_signal`, `velocity_per_day`, `link_to_listing`, `mark_drafted`
+- New scheduler job `mine_ideas` (hourly cadence, `IDEA_MINER_ENABLED` flag)
+
+#### Backend — admin UI + wizard
+- `/admin/keywords` — Jinja+HTMX list, create, toggle, manual fetch
+- `/admin/ideas` — list with velocity sort, status/source/keyword filters
+- `/admin/ideas/{id}/create-listing` — 3-step wizard (preview → template+design → review+submit)
+  - IP-warning banner on Step 1 for `extension_passive` ideas or any idea with a `reference_image_url`
+  - Submit reuses `listing_creator_service.create_from_template` end-to-end; on success creates `idea_to_listing` row and flips `idea.status='drafted'`
+
+#### Backend — extension passive log
+- `POST /extension/idea` — accepts payload from extension when user visits a public Etsy listing; upserts `source=extension_passive` idea row
+
+#### Tests (118 new, total 392 + 1 new E2E)
+- `test_idea_models.py`, `test_keyword_service.py`, `test_idea_service.py`
+- `test_etsy_public_client.py`, `test_idea_miner_service.py`, `test_idea_mining_scheduler.py`
+- `test_keywords_admin_ui.py`, `test_ideas_admin_ui.py`, `test_idea_wizard.py`
+- `test_extension_idea_api.py`
+- `test_e2e_idea_to_listing.py` — full happy-path E2E: keyword → miner (dry-run) → wizard → drafted listing
+
+#### Smoke (22 → 25)
+- `/admin/keywords` reachable
+- `/admin/ideas` reachable
+- `/extension/idea` accepts payload (201/200)
+
+#### Docs
+- `docs/idea-mining-guide.md` — user-facing how-to
+- `docs/journals/v0.8.0-idea-to-listing-bridge.md`
+- System architecture: idea-flow diagram + 4-layer schema description
+
+### Changed
+
+- `NOTION_SYNC_ENABLED` env flag (default **false**) — gates both `sync_to_notion` and `pull_approvals` scheduler jobs; loud startup log when disabled. Notion code retained dormant for instant reactivation.
+- Extension `manifest.json` 0.4.2 → 0.4.3 — adds passive listing observer that posts to `/extension/idea` on public listing pages
+- README test count badge: 274 → 393
+
+### Notes
+
+- `references/scrape` workflow remains; will be deprecated in v0.9 as miner subsumes its role
+- Etsy public API quota stays <30% of 10K/day cap with 10 keywords on hourly schedule (200 ms detail throttle)
+- IP guidance: reference images are inspiration only — redraw via Imagen before publishing
+
+### Out of Scope (deferred)
+
+- Printful/Printify catalog API (v0.9)
+- Idea ↔ POD product matcher (v0.9)
+- TeePublic/Society6/Zazzle passive scrape (v1.0)
+- Bulk wizard mode (1-by-1 only in v0.8)
+- ML/forecasting trend scoring (rule-based velocity only)
+
+---
+
 ## [0.7.1] — 2026-05-07
 
 Visual 4-Point Anchor Editor — admin UI for non-dev sellers to drag quad zone corners visually instead of hand-editing JSON.
