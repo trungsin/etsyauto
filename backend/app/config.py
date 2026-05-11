@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     notion_data_source_id: str = ""
     # Notion Idea Bank DB — separate database for saving reference listings
     notion_idea_bank_data_source_id: str = ""
+    # v0.8.1 hotfix — gate review-sync jobs (sync_to_notion + pull_approvals) and
+    # review-DB schema validate on startup. Default False per v0.8 deprecation plan.
+    # Does NOT affect Idea Bank save (separate workflow used by extension reference mode).
+    notion_sync_enabled: bool = False
 
     # Cloudflare R2
     r2_account_id: str = ""

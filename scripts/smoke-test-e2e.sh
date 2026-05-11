@@ -242,6 +242,13 @@ else
   fail "/health missing etsy_dry_run flag — body: $HEALTH_BODY"
 fi
 
+# v0.8.1 hotfix — verify notion_sync_enabled flag exposed
+if echo "$HEALTH_BODY" | grep -q "notion_sync_enabled"; then
+  ok "/health exposes notion_sync_enabled flag (v0.8.1)"
+else
+  fail "/health missing notion_sync_enabled flag — body: $HEALTH_BODY"
+fi
+
 # ── 6d. X-Request-ID round-trip (correlation id middleware) ──────────────────
 info "X-Request-ID round-trip..."
 CID=$(curl -s -i -H "X-Request-ID: smoketest-1234" "http://127.0.0.1:$PORT/health" \

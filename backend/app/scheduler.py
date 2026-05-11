@@ -11,9 +11,9 @@ scheduler = BackgroundScheduler(timezone="UTC")
 
 def _register_jobs() -> None:
     """Register all recurring jobs. Called once during startup."""
+    from app.config import settings as _settings  # local import; singleton
     from app.workers.title_optimizer import run_title_optimizer_job  # local import avoids circular deps
     from app.workers.mockup_pipeline import run_mockup_pipeline_job  # local import avoids circular deps
-    from app.workers.notion_sync import sync_to_notion, pull_approvals  # local import avoids circular deps
 
     scheduler.add_job(
         run_title_optimizer_job,
@@ -37,27 +37,37 @@ def _register_jobs() -> None:
     )
     logger.info("Registered job: mockup_pipeline (interval=60s)")
 
-    scheduler.add_job(
-        sync_to_notion,
-        trigger="interval",
-        seconds=30,
-        id="sync_to_notion",
-        coalesce=True,
-        max_instances=1,
-        replace_existing=True,
-    )
-    logger.info("Registered job: sync_to_notion (interval=30s)")
+    # v0.8.1 hotfix — review-sync jobs gated behind NOTION_SYNC_ENABLED.
+    # Notion deprecated by default in v0.8; flip flag true to reactivate.
+    if _settings.notion_sync_enabled:
+        from app.workers.notion_sync import sync_to_notion, pull_approvals  # local import avoids circular deps
 
-    scheduler.add_job(
-        pull_approvals,
-        trigger="interval",
-        seconds=60,
-        id="pull_approvals",
-        coalesce=True,
-        max_instances=1,
-        replace_existing=True,
-    )
-    logger.info("Registered job: pull_approvals (interval=60s)")
+        scheduler.add_job(
+            sync_to_notion,
+            trigger="interval",
+            seconds=30,
+            id="sync_to_notion",
+            coalesce=True,
+            max_instances=1,
+            replace_existing=True,
+        )
+        logger.info("Registered job: sync_to_notion (interval=30s)")
+
+        scheduler.add_job(
+            pull_approvals,
+            trigger="interval",
+            seconds=60,
+            id="pull_approvals",
+            coalesce=True,
+            max_instances=1,
+            replace_existing=True,
+        )
+        logger.info("Registered job: pull_approvals (interval=60s)")
+    else:
+        logger.info(
+            "Notion sync jobs SKIPPED (NOTION_SYNC_ENABLED=false, v0.8 default). "
+            "Set NOTION_SYNC_ENABLED=true in .env to re-enable."
+        )
 
     from app.workers.etsy_uploader import run_etsy_uploader_job  # local import avoids circular deps
 
@@ -73,7 +83,6 @@ def _register_jobs() -> None:
     logger.info("Registered job: etsy_uploader (interval=600s)")
 
     # v0.8.0 — idea mining job (guarded by feature flag)
-    from app.config import settings as _settings  # local import; settings already a singleton
     if _settings.idea_mining_enabled:
         from app.services.idea_miner_service import run_all as run_idea_mining  # local import avoids circular deps
 

@@ -91,7 +91,16 @@ def _validate_notion_schema() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup: validate Notion schemas, start scheduler. Shutdown: stop scheduler."""
-    _validate_notion_schema()
+    # v0.8.1 hotfix — review DB validate gated on NOTION_SYNC_ENABLED so users on
+    # the default (Notion-deprecated) path don't hit schema-validate failures.
+    # Idea Bank validate runs independently (separate workflow, not part of deprecation).
+    if settings.notion_sync_enabled:
+        _validate_notion_schema()
+    else:
+        logger.info(
+            "Notion review-DB validate SKIPPED (NOTION_SYNC_ENABLED=false). "
+            "Idea Bank still validated separately if NOTION_IDEA_BANK_DATA_SOURCE_ID set."
+        )
     _validate_notion_idea_bank_schema()
     sched.start()
     yield

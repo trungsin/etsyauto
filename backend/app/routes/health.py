@@ -30,5 +30,6 @@ def health_check() -> JSONResponse:
             "etsy_dry_run_scenario": (
                 settings.etsy_dry_run_scenario if settings.etsy_dry_run else None
             ),
+            "notion_sync_enabled": settings.notion_sync_enabled,
         },
     )

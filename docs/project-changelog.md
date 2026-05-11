@@ -4,6 +4,32 @@ All notable changes to EtsyAuto. Format: [Keep a Changelog](https://keepachangel
 
 ---
 
+## [0.8.1] — 2026-05-11
+
+Hotfix: `NOTION_SYNC_ENABLED` flag implementation (phase-06 from v0.8 plan was specced but not landed in v0.8.0).
+
+### Fixed
+
+- `app/config.py` — added `notion_sync_enabled: bool = False` setting field (default per v0.8 deprecation plan)
+- `app/scheduler.py` — `sync_to_notion` + `pull_approvals` jobs now conditionally registered behind `settings.notion_sync_enabled`; loud startup log when disabled: `Notion sync jobs SKIPPED (NOTION_SYNC_ENABLED=false, v0.8 default)`
+- `app/main.py` — `_validate_notion_schema()` (review DB) gated on same flag so users on Notion-deprecated default path no longer trigger startup schema-validate calls. Idea Bank validate runs independently (separate workflow, intentionally unaffected)
+- `app/routes/health.py` — `/health` JSON now surfaces `notion_sync_enabled` boolean for admin UI banner
+
+### Added
+
+- `tests/test_scheduler_notion_flag.py` — 6 new tests covering both flag states + non-notion jobs invariant + `/health` exposure
+- `scripts/smoke-test-e2e.sh` — new check ensures `/health` exposes `notion_sync_enabled` flag (25 → 26)
+
+### Notes
+
+Pre-existing v0.8.0 release docs (changelog v0.8.0, roadmap, journal) claimed this gating was already in place. It was specced in `plans/260507-1445-idea-to-listing-bridge/phase-06-notion-sync-deprecation.md` but the code never landed before the v0.8.0 tag. This hotfix closes that gap. Test count: 393 → 399.
+
+### Reactivation
+
+Set `NOTION_SYNC_ENABLED=true` in `.env` and restart — both jobs re-register, review-DB validate resumes. No migration required.
+
+---
+
 ## [0.8.0] — 2026-05-07
 
 Idea → Listing Bridge + Trending Miner. Closes the gap between extension Idea Bank (v0.3) and Listing Creator (v0.4). Adds Etsy public-API trending miner that hourly snapshots listings for user-managed keywords into a 4-layer idea schema; admin UI for keyword CRUD + idea browsing with velocity sort; 3-step wizard turning any idea into an Etsy draft via existing `listing_creator_service`. Notion sync gated behind env flag.
