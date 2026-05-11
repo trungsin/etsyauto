@@ -1,14 +1,16 @@
 {
   "manifest_version": 3,
   "name": "EtsyAuto Optimizer",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "description": "Send Etsy listings to the local optimizer backend; capture public listing references to your Notion Idea Bank; create new Etsy listings from templates with per-color mockups.",
 
   "permissions": ["activeTab", "sidePanel", "storage"],
   "host_permissions": [
     "https://www.etsy.com/*",
     "http://localhost:8787/*",
-    "http://172.16.10.168:8787/*"
+    "http://172.16.10.168:8787/*",
+    "https://etsy.datxanhmientrung.ai/*",
+    "https://etsy.datxanhmientrung.ai:4333/*"
   ],
 
   "icons": {

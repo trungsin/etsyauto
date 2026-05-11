@@ -136,12 +136,20 @@ async def admin_token_promote_middleware(request, call_next):
             request.scope["headers"] = new_headers
     return await call_next(request)
 
-# CORS: allow Chrome extension origins (chrome-extension://<id>) and localhost dev
-# FastAPI CORSMiddleware does not natively support wildcard scheme matching, so we
-# allow all origins whose prefix matches chrome-extension:// via allow_origin_regex.
+# CORS: allow Chrome extension origins (chrome-extension://<id>), localhost dev,
+# LAN box, and the public production domain (HTTPS via nginx reverse proxy on
+# WAN port 4333). Extension service worker still sends Origin: chrome-extension://
+# regardless of which backend host it talks to, so the regex stays the primary
+# pass — explicit entries below cover direct browser access.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:8787"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:8787",
+        "http://172.16.10.168:8787",
+        "https://etsy.datxanhmientrung.ai",
+        "https://etsy.datxanhmientrung.ai:4333",
+    ],
     allow_origin_regex=r"chrome-extension://.*",
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],

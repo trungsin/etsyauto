@@ -251,6 +251,97 @@ sudo systemctl enable etsyauto
 sudo systemctl start etsyauto
 ```
 
+## Public HTTPS Deployment (v0.8.2)
+
+Default install runs backend on `localhost:8787`. To expose publicly (so the extension can run on machines other than the host), put nginx in front and forward a WAN port.
+
+### Architecture
+
+```
+[Public browser/extension]
+       │  https://etsy.datxanhmientrung.ai:4333
+       ▼
+[Router NAT]  WAN:4333 → LAN:443
+       ▼
+[nginx :443 with TLS cert]  → reverse proxy
+       │  http://127.0.0.1:8787
+       ▼
+[uvicorn :8787]  --proxy-headers --forwarded-allow-ips '127.0.0.1'
+```
+
+### nginx site config
+
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name etsy.datxanhmientrung.ai;
+
+    ssl_certificate     /etc/letsencrypt/live/etsy.datxanhmientrung.ai/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/etsy.datxanhmientrung.ai/privkey.pem;
+
+    client_max_body_size 50M;  # composite uploads can be large
+
+    location / {
+        proxy_pass         http://127.0.0.1:8787;
+        proxy_http_version 1.1;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_set_header   X-Request-ID      $request_id;
+        proxy_read_timeout 120s;
+    }
+}
+
+server {
+    listen 80;
+    server_name etsy.datxanhmientrung.ai;
+    return 301 https://$host:4333$request_uri;
+}
+```
+
+### uvicorn flags
+
+```bash
+cd backend
+uv run uvicorn app.main:app \
+    --host 0.0.0.0 --port 8787 \
+    --proxy-headers \
+    --forwarded-allow-ips '127.0.0.1'
+```
+
+`--proxy-headers --forwarded-allow-ips '127.0.0.1'` makes FastAPI trust `X-Forwarded-For` / `X-Forwarded-Proto` from nginx so logs and the correlation-ID middleware see the real client IP, not 127.0.0.1.
+
+### Backend CORS
+
+`app/main.py` already lists `https://etsy.datxanhmientrung.ai` and `https://etsy.datxanhmientrung.ai:4333`. Add additional public origins there if you change domain.
+
+### Extension config
+
+`extension/shared/backend-client.js` defaults `DEFAULT_BACKEND_URL` to `https://etsy.datxanhmientrung.ai:4333`. Power users can override via side-panel settings (stored in `chrome.storage.local.backendUrl`). Manifest `host_permissions` includes both LAN and public hosts so the extension can talk to either without reinstall.
+
+### Test reachability
+
+```bash
+# From outside LAN (mobile data):
+curl -sk https://etsy.datxanhmientrung.ai:4333/health
+# Should return: {"status":"ok",...,"notion_sync_enabled":false}
+
+# CORS preflight check:
+curl -sk -i -X OPTIONS https://etsy.datxanhmientrung.ai:4333/admin/keywords \
+  -H "Origin: https://etsy.datxanhmientrung.ai:4333" \
+  -H "Access-Control-Request-Method: GET" \
+  -H "Access-Control-Request-Headers: X-Admin-Token"
+# Should return 200 + `access-control-allow-origin` echoed.
+```
+
+### Hairpin NAT (testing from LAN)
+
+If `curl https://etsy.datxanhmientrung.ai:4333` times out from a LAN box, your router may not support NAT loopback. Two workarounds:
+
+1. Test from mobile-data or an external VPN.
+2. Add `/etc/hosts` entry on the LAN box: `172.16.10.168 etsy.datxanhmientrung.ai` — bypasses the loopback and hits nginx directly.
+
 ## Windows Notes
 
 - Use WSL2 (Ubuntu) — all commands above work unchanged inside WSL2

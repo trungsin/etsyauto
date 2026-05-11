@@ -5,7 +5,10 @@
  * URL configurable via side panel; persisted in chrome.storage.local.
  */
 
-const DEFAULT_BACKEND_URL = 'http://172.16.10.168:8787';
+// v0.8.2 — default to public HTTPS endpoint (nginx :4333 → backend :8787).
+// User can override via side-panel settings (persisted in chrome.storage.local).
+// LAN fallback http://172.16.10.168:8787 still works if user sets backendUrl manually.
+const DEFAULT_BACKEND_URL = 'https://etsy.datxanhmientrung.ai:4333';
 
 /**
  * Resolve backend base URL from chrome.storage.local (fallback: default).
