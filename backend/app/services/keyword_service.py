@@ -40,6 +40,16 @@ def create_keyword(db: Session, term: str) -> Keyword:
     return keyword
 
 
+def count_enabled(db: Session) -> int:
+    """Return the number of keywords with enabled=True.
+
+    Used by the v0.8.2 quota guard to estimate daily Etsy API load.
+    """
+    from sqlalchemy import func
+    stmt = select(func.count(Keyword.id)).where(Keyword.enabled.is_(True))
+    return int(db.scalar(stmt) or 0)
+
+
 def list_keywords(db: Session, enabled_only: bool = False) -> list[Keyword]:
     """Return all keywords ordered by id ascending.
 

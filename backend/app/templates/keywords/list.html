@@ -12,6 +12,28 @@
   <div class="banner banner-error">{{ error }}</div>
 {% endif %}
 
+{# v0.8.2 — quota estimate banner #}
+{% if quota %}
+  {% if quota.is_over_threshold %}
+    <div class="banner banner-error" data-testid="quota-warn">
+      <strong>Etsy quota risk:</strong>
+      {{ quota.enabled_keywords }} enabled keyword(s) ×
+      {{ quota.runs_per_day }} runs/day ×
+      {{ quota.calls_per_run }} calls/run =
+      <strong>{{ quota.daily_calls }} calls/day</strong>
+      ({{ quota.percent_of_etsy_cap }}% of Etsy 10K cap;
+      threshold {{ quota.threshold }}).
+      Reduce <code>ETSY_MINER_PER_KEYWORD_LIMIT</code> or disable keywords.
+    </div>
+  {% else %}
+    <div class="banner banner-info" data-testid="quota-ok">
+      Etsy quota: ~{{ quota.daily_calls }} calls/day
+      ({{ quota.percent_of_etsy_cap }}% of 10K cap) —
+      {{ quota.enabled_keywords }} enabled × {{ quota.runs_per_day }} runs/day × {{ quota.calls_per_run }} calls/run.
+    </div>
+  {% endif %}
+{% endif %}
+
 {# Add-new keyword form #}
 <section class="card" style="margin-bottom:1.5rem;">
   <h2 style="margin-top:0;">Add keyword</h2>

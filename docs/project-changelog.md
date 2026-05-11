@@ -4,6 +4,34 @@ All notable changes to EtsyAuto. Format: [Keep a Changelog](https://keepachangel
 
 ---
 
+## [0.8.2] — 2026-05-11
+
+Hotfix: Etsy public-API quota guard for the idea miner (closes the `<30% of 10K QPD` claim from v0.8 success criteria — failed-claim Gap 1 in `plans/reports/audit-260511-1352-v08-success-criteria-vs-code.md`).
+
+### Fixed
+
+- `app/config.py` — lowered `etsy_miner_per_keyword_limit` default from `100` → `10`. With default hourly interval, 10 enabled keywords now project to 2,640 calls/day = 26.4% of Etsy 10K cap (was 24,240 = 242%). User can raise via `.env` but admin UI now warns above 30% threshold.
+- `app/config.py` — added `etsy_quota_warn_threshold_calls_per_day: int = 3000` (30% of 10K).
+
+### Added
+
+- `app/services/etsy_quota.py` — pure-function module: `estimate(enabled_keywords) -> QuotaEstimate` with `daily_calls`, `percent_of_etsy_cap`, `is_over_threshold` properties. No DB / no I/O.
+- `app/services/keyword_service.count_enabled()` — count of `enabled=True` rows.
+- `/admin/keywords` quota banner — renders info banner when under threshold (showing daily-call projection + Etsy cap percentage) and red error banner when over, with reduction hint.
+- `tests/test_etsy_quota_math.py` — 6 tests covering default config meeting <30% spec, legacy v0.8.0 config tripping threshold, zero / negative inputs clamped, custom interval scaling.
+
+### Notes
+
+The original v0.8.0 success criterion "Etsy quota stays <30% of 10K/day with 10 keywords on hourly schedule" was ticked green but never enforced in code — out-of-the-box config would have hit 242% of Etsy's daily cap on hour 1 of mining 10 keywords. This is the second ship-gap caught by the v0.8.1 audit (after `NOTION_SYNC_ENABLED`). v0.8.2 closes it via (a) safer defaults and (b) observable warn UI.
+
+Test count: 399 → 405. Smoke unchanged (26/26).
+
+### Reactivation note for power users
+
+To opt into higher per-keyword fetch volumes (e.g., on a paid Etsy quota arrangement), set `ETSY_MINER_PER_KEYWORD_LIMIT=100` in `.env`. The admin UI will surface a red banner reporting the projected daily call count.
+
+---
+
 ## [0.8.1] — 2026-05-11
 
 Hotfix: `NOTION_SYNC_ENABLED` flag implementation (phase-06 from v0.8 plan was specced but not landed in v0.8.0).

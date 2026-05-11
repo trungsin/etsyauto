@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import SessionLocal, get_db
-from app.services import idea_service, idea_miner_service, keyword_service
+from app.services import etsy_quota, idea_service, idea_miner_service, keyword_service
 
 logger = logging.getLogger(__name__)
 
@@ -76,10 +76,12 @@ def list_keywords_ui(
         }
         for kw in keywords
     ]
+    # v0.8.2 — quota estimate banner data
+    quota = etsy_quota.estimate(keyword_service.count_enabled(db))
     return _get_jinja().TemplateResponse(
         request,
         "keywords/list.html",
-        {"keywords": rows, "error": None, "flash": None},
+        {"keywords": rows, "error": None, "flash": None, "quota": quota},
     )
 
 

@@ -56,12 +56,18 @@ class Settings(BaseSettings):
     # v0.8.0 — Idea miner: Etsy public API keyword search + signal collection.
     # etsy_miner_interval_sec: scheduler interval between full mining runs (default 1h).
     # etsy_miner_per_keyword_limit: max listings fetched per keyword per run (Etsy max 100).
+    #   v0.8.2 default lowered from 100 → 10 to honor v0.8 success criterion
+    #   "<30% of 10K QPD with 10 keywords on hourly schedule". User may raise manually
+    #   via .env if they accept quota risk; admin UI warns above the 30% threshold.
     # etsy_miner_throttle_ms: delay between consecutive detail calls in milliseconds.
     # idea_mining_enabled: set False to prevent scheduler job registration.
     etsy_miner_interval_sec: int = 3600
-    etsy_miner_per_keyword_limit: int = 100
+    etsy_miner_per_keyword_limit: int = 10
     etsy_miner_throttle_ms: int = 200
     idea_mining_enabled: bool = True
+    # v0.8.2 — quota guard threshold (calls/day) above which /admin/keywords renders a
+    # warn banner. Default 3000 = 30% of Etsy 10K QPD. Pure UI signal, no enforcement.
+    etsy_quota_warn_threshold_calls_per_day: int = 3000
 
 
 # Singleton — import this throughout the app
