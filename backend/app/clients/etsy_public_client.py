@@ -35,6 +35,9 @@ class EtsyPublicClient:
 
     def __init__(self, api_key: str | None = None) -> None:
         key = api_key or settings.etsy_api_key or ""
+        # Etsy v3 requires x-api-key in `keystring:shared_secret` format.
+        if api_key is None and settings.etsy_shared_secret:
+            key = f"{key}:{settings.etsy_shared_secret}"
         self._http = httpx.Client(
             base_url=BASE_URL,
             headers={"x-api-key": key},

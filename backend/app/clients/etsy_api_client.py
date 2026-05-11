@@ -28,7 +28,8 @@ class EtsyApiClient:
         self._db = db
         self._http = httpx.Client(
             base_url=BASE_URL,
-            headers={"x-api-key": settings.etsy_api_key},
+            # Etsy v3 requires x-api-key in `keystring:shared_secret` format.
+            headers={"x-api-key": f"{settings.etsy_api_key}:{settings.etsy_shared_secret}"},
             timeout=30,
         )
 
