@@ -322,6 +322,25 @@ def compute_velocity(db: Session, iid: int) -> float:
 # ---------------------------------------------------------------------------
 
 
+def set_design_id(db: Session, idea_id: int, design_id: int) -> None:
+    """Set idea.design_id and commit.
+
+    Args:
+        db: Active SQLAlchemy session.
+        idea_id: Primary key of the idea to update.
+        design_id: Primary key of the design to link.
+
+    Raises:
+        ValueError: If idea not found.
+    """
+    idea = db.get(Idea, idea_id)
+    if idea is None:
+        raise ValueError(f"Idea {idea_id} not found")
+    idea.design_id = design_id
+    db.commit()
+    logger.info("Set idea id=%d design_id=%d", idea_id, design_id)
+
+
 def link_to_listing(db: Session, iid: int, listing_id: int) -> IdeaToListing:
     """Link an idea to a listing (idempotent — safe to call multiple times).
 

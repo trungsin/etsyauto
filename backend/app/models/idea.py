@@ -1,10 +1,14 @@
 """Idea model — a candidate product idea discovered by the miner or extension."""
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+
+if TYPE_CHECKING:
+    from app.models.design import Design
 
 
 class Idea(Base):
@@ -35,6 +39,12 @@ class Idea(Base):
     when_made: Mapped[str | None] = mapped_column(String(50), nullable=True)
     # Primary listing image URL
     reference_image_url: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    # FK to designs.id — set when user extracts a derivative design from reference image
+    design_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("designs.id", ondelete="SET NULL"), nullable=True
+    )
+    # Lazy-loaded relationship; avoids circular import at runtime
+    design: Mapped["Design | None"] = relationship("Design", lazy="select", foreign_keys=[design_id])
     # Price in cents (integer arithmetic avoids float rounding)
     price_cents: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Workflow status: new | reviewed | rejected | drafted

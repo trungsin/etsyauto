@@ -117,6 +117,30 @@ def get_design(session: Session, design_id: int) -> Design | None:
     return session.get(Design, design_id)
 
 
+def update_design_file(session: Session, design_id: int, r2_key: str, file_url: str) -> None:
+    """Overwrite the file_url on an existing Design row after R2 re-upload.
+
+    Args:
+        session: Active SQLAlchemy session.
+        design_id: ID of the design to update.
+        r2_key: New R2 object key (stored so caller can delete it later if needed).
+        file_url: New public URL to set on design.file_url.
+
+    Raises:
+        ValueError: If design not found.
+    """
+    design = session.get(Design, design_id)
+    if design is None:
+        raise ValueError(f"Design {design_id} not found")
+    design.file_url = file_url
+    # Store r2_key in file_url derivable form; the key IS the URL suffix so callers
+    # can reconstruct it from settings.r2_public_url + "/" + r2_key.
+    # We persist the full public URL; r2_key is kept by the caller for cleanup.
+    session.commit()
+    session.refresh(design)
+    logger.info("Updated design id=%d file_url=%s", design_id, file_url)
+
+
 def delete_design(session: Session, design_id: int) -> None:
     """Delete design DB row, R2 file, and all composite cache entries.
 
