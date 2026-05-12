@@ -85,6 +85,30 @@ Open `/admin/ideas`. Default sort: **velocity** descending (highest favorers/day
 
 ---
 
+## Extracting a design from the reference image (v0.8.3+)
+
+Some sellers want to start a listing from the design printed on the reference image. The wizard now lets you crop a region of that image, strip the background, and use the cutout as the listing's design — auto-linked to the idea.
+
+**How:**
+1. Open `/admin/ideas/{id}/create-listing` (Step 1).
+2. Click **Extract design from reference image →**.
+3. Drag a rectangle over the design region in the modal; release to confirm.
+4. Click **Extract & Save** — backend downloads the reference image, crops the region (PIL), removes background (remove.bg), uploads PNG to R2, and creates a Design with `source_type='derivative'`.
+5. The Design is linked via `idea.design_id`. In Step 2 the radio is pre-selected automatically.
+6. Continue the wizard as normal.
+
+**Re-extracting** replaces the previous derivative for that idea (old R2 object is deleted; the same Design row is updated in place).
+
+**Status badge** in Step 1 confirms a derivative is attached, with a thumbnail of the current cutout.
+
+**Why `derivative` (not `reference_only`)?**
+- `reference_only` designs are still blocked server-side (legacy inspiration cutouts).
+- `derivative` is a new, eligible source_type — user-acknowledged that the artistic crop + background-strip is the seller's compliance decision, not the system's.
+
+**IP & ToS:** You are responsible for compliance. Etsy may flag duplicate-image listings even when the mockup template differs. See the IP banner in Step 1.
+
+---
+
 ## IP & ToS notes (read this)
 
 The miner caches Etsy listing data **read-only** for sorting. It does not redistribute, repackage, or republish anything.

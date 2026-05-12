@@ -4,6 +4,53 @@ All notable changes to EtsyAuto. Format: [Keep a Changelog](https://keepachangel
 
 ---
 
+## [0.8.3] — 2026-05-12
+
+Idea → Listing region-crop wiring. Closes the chain `keyword → idea → click image select region → cutout → wizard → Etsy draft` that v0.8.0 left half-implemented. See plan `260512-1104-idea-to-listing-region-crop`.
+
+### Added
+
+- `POST /admin/ideas/{idea_id}/extract-design` (`app/routes/idea_wizard.py`) — body `{crop_box: [x,y,w,h]}` in 0-1 fractions. Downloads `idea.reference_image_url` (httpx, 10s + 1 retry), crops via PIL, strips background via `RemoveBgClient`, uploads PNG to R2, upserts a Design row, sets `idea.design_id`. Returns `{design_id, file_url}`.
+- New `Design.source_type='derivative'` — eligible for listing creation (unlike `reference_only` which remains blocked).
+- `Idea.design_id` FK column (nullable, `ON DELETE SET NULL`) — links idea to its active derivative design.
+- `app/services/design_service.update_design_file()` — overwrite Design `file_url` after re-upload (idempotent re-extract path).
+- `app/services/idea_service.set_design_id()` — commit `idea.design_id` link.
+- `app/static/admin-crop-modal.{css,js}` — drag-rectangle crop UI ported from extension. Returns `{cropBox: [x,y,w,h]}` to caller.
+- Wizard Step 1 (`templates/wizard/step1.html`) — "Extract design from reference image →" button when `idea.reference_image_url` is set; badge + thumbnail when a derivative is already linked.
+- Wizard Step 2 (`templates/wizard/step2.html`) — pre-selects the radio matching `idea.design_id`.
+- `tests/test_idea_extract_design.py` — 14 tests (happy, 404, 400, 10 invalid-crop_box parametrized cases, idempotent overwrite).
+
+### Changed
+
+- Wizard Step 2 design picker continues to exclude `reference_only` but now surfaces `derivative` rows.
+- Wizard Step 3 `shop_id` field — no longer hard-required; falls back to `get_default_shop_id(db)` (OAuth-connected shop) when blank.
+
+### Shop ID auto-resolution (companion)
+
+- `app/clients/etsy_oauth.py` — `get_default_shop_id(db)` resolves the connected Etsy shop via `/users/{user_id}/shops`, then caches it on `api_credentials.shop_id`. Subsequent calls are zero-network.
+- `app/models/api_credential.py` — new `shop_id` column on `api_credentials`.
+- `app/routes/etsy_auth.py` — `/auth/etsy/status` now returns `{shop_id}` when connected.
+- `app/routes/listings_creator_api.py` — `POST /listings/from-template` `shop_id` is now optional; missing value resolves from OAuth (`409` if no shop connected).
+- `app/routes/templates_admin.py` and `templates/listings/creator.html` — admin creator UI no longer hard-requires shop_id input.
+- `extension/background/service-worker.js` + `extension/side-panel/creator-mode.js` — extension fetches `/auth/etsy/status`, pre-fills shop_id, removes the manual-entry validation.
+- `tests/test_listings_creator_api.py` — adds 2 tests covering the omitted-shop_id path.
+
+### Migration
+
+- `alembic/versions/f3a1b2c4d5e6_add_design_id_to_ideas.py` — adds nullable `ideas.design_id` FK to `designs.id`. Reversible (drops FK + column on downgrade). Uses `batch_alter_table` for SQLite compatibility.
+- `alembic/versions/c4f1a9d2e7b8_add_shop_id_to_api_credentials.py` — adds nullable `api_credentials.shop_id` column for caching the connected shop.
+
+### IP / ToS
+
+- User-acknowledged business decision. The wizard's Step 1 IP banner repeats the compliance reminder; Etsy duplicate-image detection risk remains user responsibility.
+
+### Notes
+
+- Tech debt: `admin-crop-modal.js` duplicates `extension/side-panel/crop-modal.js`. Tracked for a shared-lib refactor once a 3rd usage emerges.
+- Deferred: Imagen "make it different" variation pass (Approach C in brainstorm), multi-region cutout, CV-based region snap, bulk extract. All slated for v0.9.
+
+---
+
 ## [0.8.2] — 2026-05-11
 
 Hotfix: Etsy public-API quota guard for the idea miner (closes the `<30% of 10K QPD` claim from v0.8 success criteria — failed-claim Gap 1 in `plans/reports/audit-260511-1352-v08-success-criteria-vs-code.md`).
