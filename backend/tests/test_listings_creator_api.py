@@ -385,6 +385,66 @@ def test_taxonomy_resolve_caches_results(client, db_session):
     assert etsy.get_taxonomy_property_values.call_count == 2
 
 
+# ---------------------------------------------------------------------------
+# Default shop_id auto-resolution
+# ---------------------------------------------------------------------------
+
+def test_from_template_omitted_shop_id_uses_connected(client, db_session):
+    """When shop_id is absent, route resolves it from the connected Etsy credential."""
+    from app.models.api_credential import ApiCredential
+
+    db_session.add(ApiCredential(
+        provider="etsy",
+        oauth_token="123456.tok",
+        refresh_token="r",
+        shop_id="77777777",
+    ))
+    db_session.commit()
+
+    template = _seed_template(db_session)
+    design = _seed_design(db_session)
+
+    etsy = _make_etsy_client_mock(listing_id="42")
+    patches = _patch_externals(etsy)
+    with patches[0], patches[1], patches[2], patches[3]:
+        resp = client.post(
+            "/listings/from-template",
+            headers=VALID_HEADERS,
+            json={
+                "template_id": template.id, "design_id": design.id,
+                "title": "x", "description": "y",
+                # no shop_id
+                "enabled_combos": [{"size": "S", "color": "White"}],
+            },
+        )
+
+    assert resp.status_code == 201, resp.text
+    # Service called with the cached shop_id, not None
+    assert etsy.create_draft_listing.call_args.args[0] == "77777777"
+
+
+def test_from_template_no_shop_no_connection_returns_409(client, db_session):
+    """No body shop_id + no connected Etsy account → clear 409."""
+    template = _seed_template(db_session)
+    design = _seed_design(db_session)
+
+    etsy = _make_etsy_client_mock()
+    patches = _patch_externals(etsy)
+    with patches[0], patches[1], patches[2], patches[3]:
+        resp = client.post(
+            "/listings/from-template",
+            headers=VALID_HEADERS,
+            json={
+                "template_id": template.id, "design_id": design.id,
+                "title": "x", "description": "y",
+                "enabled_combos": [{"size": "S", "color": "White"}],
+            },
+        )
+
+    assert resp.status_code == 409
+    assert "No Etsy shop connected" in resp.json()["detail"]
+
+
 def test_taxonomy_unknown_value_raises(client, db_session):
     """If template uses a color that Etsy taxonomy doesn't know, return 422."""
     template = _seed_template(db_session, colors=("White", "Mauve"))  # Mauve not in mock taxonomy

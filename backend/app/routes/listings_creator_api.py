@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.clients.etsy_oauth import get_default_shop_id
 from app.database import get_db
 from app.dependencies import require_admin_token
 from app.services import etsy_error_mapper, listing_creator_service, listing_pre_check
@@ -30,7 +31,8 @@ class FromTemplateBody(BaseModel):
     description: str = Field(..., min_length=1)
     tags: list[str] = Field(default_factory=list)
     enabled_combos: list[ComboInput] = Field(default_factory=list)
-    shop_id: str | int
+    # Optional — when omitted, server resolves the shop connected via Etsy OAuth.
+    shop_id: str | int | None = None
     quantity_per_variant: int = Field(default=100, ge=1, le=999)
     # Optional per-zone design override; falls back to design_id when absent
     zone_designs: dict[str, int] | None = None
@@ -50,6 +52,13 @@ def create_listing_from_template(
     Idempotent on (template_id, design_id): subsequent calls return the existing
     Listing's etsy_listing_id without re-creating.
     """
+    shop_id = body.shop_id or get_default_shop_id(db)
+    if not shop_id:
+        raise HTTPException(
+            status_code=409,
+            detail="No Etsy shop connected — finish /auth/etsy/start first or pass shop_id explicitly.",
+        )
+
     try:
         result = listing_creator_service.create_from_template(
             session=db,
@@ -59,7 +68,7 @@ def create_listing_from_template(
             description=body.description,
             tags=body.tags,
             enabled_combos=[c.model_dump() for c in body.enabled_combos],
-            shop_id=body.shop_id,
+            shop_id=shop_id,
             quantity_per_variant=body.quantity_per_variant,
             zone_designs=body.zone_designs,
         )

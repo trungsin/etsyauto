@@ -85,6 +85,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       handleApiCall('POST', '/listings/from-template', message.body, null, sendResponse);
       return true;
 
+    case 'GET_ETSY_AUTH_STATUS':
+      handleApiCall('GET', '/auth/etsy/status', null, null, sendResponse);
+      return true;
+
     default:
       sendResponse({ ok: false, error: 'Unknown message type' });
       return false;

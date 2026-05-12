@@ -685,6 +685,10 @@ async def creator_submit(
     tags_csv = form.get("tags_csv") or ""
     tags = [t.strip() for t in tags_csv.split(",") if t.strip()][:13]
 
+    if not shop_id:
+        from app.clients.etsy_oauth import get_default_shop_id
+        shop_id = get_default_shop_id(db) or ""
+
     if not (template_id and design_id and shop_id and title and description):
         return jinja.TemplateResponse(
             request,

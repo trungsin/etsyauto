@@ -43,10 +43,18 @@
 
   function initCreatorMode(payload) {
     if (payload && payload.shop_slug) {
-      // We can't auto-resolve numeric shop_id from slug — user must enter it manually.
-      // Pre-populate placeholder with hint.
-      dom.shopId.placeholder = `${payload.shop_slug} → enter your shop_id`;
+      dom.shopId.placeholder = `${payload.shop_slug} → auto-detected from connected shop`;
     }
+    // Pre-fill shop_id from the Etsy account connected via OAuth.
+    chrome.runtime.sendMessage({ type: 'GET_ETSY_AUTH_STATUS' }, (resp) => {
+      if (chrome.runtime.lastError || !resp || !resp.ok) return;
+      const sid = resp.data && resp.data.shop_id;
+      if (sid && !dom.shopId.value) {
+        dom.shopId.value = String(sid);
+        dom.shopId.placeholder = `auto: ${sid}`;
+      }
+    });
+
     _loadTemplatesAndDesigns();
 
     dom.template.addEventListener('change', _onTemplateChange);
@@ -211,8 +219,8 @@
     if (!_selectedTemplate) { _showToast('Pick a template first.', 'warn'); return; }
     const designId = parseInt(dom.design.value, 10);
     if (!designId) { _showToast('Pick a design.', 'warn'); return; }
+    // shop_id is optional — backend falls back to the connected Etsy shop.
     const shopId = dom.shopId.value.trim();
-    if (!shopId) { _showToast('Enter your shop_id.', 'warn'); return; }
     const title = dom.title.value.trim();
     const description = dom.description.value.trim();
     if (!title || !description) {
@@ -230,17 +238,16 @@
     dom.btnCreate.disabled = true;
     dom.btnCreate.textContent = 'Creating…';
 
+    const body = {
+      template_id: _selectedTemplate.id,
+      design_id: designId,
+      title, description, tags,
+      enabled_combos,
+    };
+    if (shopId) body.shop_id = shopId;
+
     chrome.runtime.sendMessage(
-      {
-        type: 'CREATE_LISTING_FROM_TEMPLATE',
-        body: {
-          template_id: _selectedTemplate.id,
-          design_id: designId,
-          title, description, tags,
-          shop_id: shopId,
-          enabled_combos,
-        },
-      },
+      { type: 'CREATE_LISTING_FROM_TEMPLATE', body },
       (resp) => {
         dom.btnCreate.disabled = false;
         dom.btnCreate.textContent = 'Create Etsy Draft';
