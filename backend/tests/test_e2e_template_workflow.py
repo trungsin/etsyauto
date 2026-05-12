@@ -175,7 +175,8 @@ def test_full_template_workflow(client):
 
     # -- Step 4: Composite preview → cached=False (cache miss) --------------------
     def fake_urlopen_miss(url):
-        content = base_png if "templates" in url or "base" in url else design_png
+        u = url.full_url if hasattr(url, "full_url") else url
+        content = base_png if "templates" in u or "base" in u else design_png
         return io.BytesIO(content)
 
     r2_mock_miss = _make_r2_mock(exists=False)

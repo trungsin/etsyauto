@@ -145,19 +145,27 @@ def get_or_create_composite(
         logger.info("Composite cache hit: %s", key)
         return url, True
 
-    # Download template base + per-zone designs
+    # Download template base + per-zone designs.
+    # Cloudflare R2 public buckets 403 the default python-urllib User-Agent,
+    # so we set a browser-ish UA on every fetch.
     import urllib.request
+
+    def _fetch(url: str) -> bytes:
+        req = urllib.request.Request(
+            url, headers={"User-Agent": "Mozilla/5.0 (EtsyAuto-Composite/1.0)"}
+        )
+        with urllib.request.urlopen(req) as resp:  # noqa: S310
+            return resp.read()
+
     try:
-        with urllib.request.urlopen(base_image_url) as resp:  # noqa: S310
-            base_bytes = resp.read()
+        base_bytes = _fetch(base_image_url)
     except Exception as exc:
         raise ValueError(f"Failed to download template base image: {exc}") from exc
 
     designs_by_name: dict[str, bytes] = {}
     for name, d in zone_design_rows.items():
         try:
-            with urllib.request.urlopen(d.file_url) as resp:  # noqa: S310
-                designs_by_name[name] = resp.read()
+            designs_by_name[name] = _fetch(d.file_url)
         except Exception as exc:
             raise ValueError(f"Failed to download design image: {exc}") from exc
 

@@ -153,7 +153,8 @@ def test_composite_cache_miss_creates_and_uploads(db_session):
     design_png = _make_png_rgba(50, 50)
 
     def fake_urlopen(url):
-        content = base_png if "base" in url else design_png
+        u = url.full_url if hasattr(url, "full_url") else url
+        content = base_png if "base" in u else design_png
         return io.BytesIO(content)
 
     with _patch_r2(r2_mock), \
@@ -255,7 +256,8 @@ def test_composite_preview_endpoint_happy_path(client, db_session):
     design_png = _make_png_rgba(50, 50)
 
     def fake_urlopen(url):
-        content = base_png if "base" in url else design_png
+        u = url.full_url if hasattr(url, "full_url") else url
+        content = base_png if "base" in u else design_png
         return io.BytesIO(content)
 
     with _patch_r2(r2_mock), \
@@ -346,7 +348,7 @@ def test_per_color_composite_uses_color_specific_base(db_session):
     downloaded_urls: list[str] = []
 
     def fake_urlopen(url):
-        downloaded_urls.append(url)
+        downloaded_urls.append(url.full_url if hasattr(url, "full_url") else url)
         return io.BytesIO(_make_png_rgba(100, 100))
 
     with _patch_r2(r2_mock), patch("urllib.request.urlopen", side_effect=fake_urlopen):
