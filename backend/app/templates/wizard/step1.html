@@ -20,6 +20,53 @@
 </div>
 {% endif %}
 
+{% if idea.reference_image_url %}
+<div class="card" style="background:#fff7ed;margin-bottom:1rem;">
+  <h3 style="margin:0 0 .5rem;font-size:1rem;">Extract design from reference image</h3>
+  {% if idea.design_id and idea.design %}
+    <p style="font-size:.85rem;color:#16a34a;margin:.25rem 0 .5rem;">
+      &#10003; Design extracted (#{{ idea.design_id }}). Will be pre-selected in Step 2.
+    </p>
+    <img src="{{ idea.design.file_url }}" alt="extracted design"
+         style="max-width:200px;border:1px solid #ddd;border-radius:4px;display:block;margin-bottom:.5rem;">
+  {% endif %}
+  <button type="button" id="btn-extract-design" class="btn btn-secondary">
+    {% if idea.design_id %}Re-extract{% else %}Extract design{% endif %} from reference image &rarr;
+  </button>
+</div>
+
+<link rel="stylesheet" href="/admin/static/admin-crop-modal.css">
+<script src="/admin/static/admin-crop-modal.js"></script>
+<script>
+(function () {
+  var btn = document.getElementById('btn-extract-design');
+  btn.addEventListener('click', async function () {
+    var result = await window.__adminCropModal.open({{ idea.reference_image_url | tojson }});
+    if (!result) return;
+    btn.disabled = true;
+    btn.textContent = 'Extracting…';
+    try {
+      var r = await fetch('/admin/ideas/{{ idea.id }}/extract-design', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ crop_box: result.cropBox }),
+      });
+      if (!r.ok) {
+        var txt = await r.text();
+        alert('Extract failed: ' + txt);
+        return;
+      }
+      window.location.reload();
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '{% if idea.design_id %}Re-extract{% else %}Extract design{% endif %} from reference image →';
+    }
+  });
+})();
+</script>
+{% endif %}
+
 <div style="display:grid;grid-template-columns:300px 1fr;gap:1.5rem;align-items:start;">
 
   {# Left: idea preview card #}

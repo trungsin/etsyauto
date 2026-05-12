@@ -1,0 +1,79 @@
+/* admin-crop-modal.css
+ * Styles for the admin wizard crop modal (Extract design from reference image).
+ * Ported from extension/side-panel/side-panel.css (.crop-modal* rules).
+ * All rules namespaced under .admin-crop-modal to avoid clashing with admin.css.
+ */
+
+/* ── Backdrop ─────────────────────────────────────────────────────────────── */
+.admin-crop-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.78);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9000;
+  padding: 16px;
+}
+
+/* ── Dialog panel ─────────────────────────────────────────────────────────── */
+.admin-crop-modal-inner {
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 16px;
+  max-width: 95vw;
+  max-height: 94vh;
+  width: 800px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 20px 52px rgba(0, 0, 0, 0.38);
+  overflow: hidden;
+}
+
+/* ── Hint text ────────────────────────────────────────────────────────────── */
+.admin-crop-hint {
+  margin: 0;
+  font-size: 0.83rem;
+  color: #6b7280;
+  line-height: 1.5;
+}
+
+/* ── Image canvas wrapper ─────────────────────────────────────────────────── */
+.admin-crop-canvas-wrap {
+  position: relative;
+  overflow: auto;
+  max-height: 72vh;
+  user-select: none;
+  touch-action: none;   /* allow pointer capture on touch */
+  background: #111827;
+  border-radius: 4px;
+  cursor: crosshair;
+  flex-shrink: 1;
+}
+
+/* ── Reference image ──────────────────────────────────────────────────────── */
+.admin-crop-image {
+  display: block;
+  max-width: 100%;
+  max-height: 72vh;
+  pointer-events: none;       /* drag events land on wrapper, not image */
+  -webkit-user-drag: none;
+}
+
+/* ── Selection rectangle ──────────────────────────────────────────────────── */
+.admin-crop-rect {
+  position: absolute;
+  border: 2px dashed #facc15;
+  background: rgba(250, 204, 21, 0.18);
+  pointer-events: none;
+  box-sizing: border-box;
+}
+
+/* ── Footer action row ────────────────────────────────────────────────────── */
+.admin-crop-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}

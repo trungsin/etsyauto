@@ -60,7 +60,8 @@
                     border-radius:4px;padding:.5rem;margin-bottom:.75rem;">
           {% for d in designs %}
             <label style="display:flex;align-items:center;gap:.6rem;font-size:.85rem;cursor:pointer;">
-              <input type="radio" name="design_id" value="{{ d.id }}" style="flex-shrink:0;">
+              <input type="radio" name="design_id" value="{{ d.id }}" style="flex-shrink:0;"
+                     {% if idea.design_id == d.id %}checked{% endif %}>
               {% if d.file_url %}
                 <img src="{{ d.file_url }}" alt="{{ d.name }}"
                      style="width:40px;height:40px;object-fit:cover;border:1px solid #eee;border-radius:3px;">
