@@ -185,7 +185,9 @@ def test_step1_no_ip_warning_for_plain_etsy_api_idea(client, db):
     idea = _seed_idea(db, source="etsy_api", slid="PLAIN003", reference_image_url=None)
     resp = client.get(f"/admin/ideas/{idea.id}/create-listing", headers=VALID_HEADERS)
     assert resp.status_code == 200
-    assert "banner-warn" not in resp.text
+    # The "banner-warn" class is reused by the DRY-RUN banner; assert on IP banner copy
+    assert "Reference image is for inspiration only" not in resp.text
+    assert "copyright risk" not in resp.text
 
 
 def test_step1_404_on_missing_idea(client):
