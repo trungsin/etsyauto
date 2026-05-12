@@ -15,3 +15,5 @@ class ApiCredential(Base):
     oauth_token: Mapped[str | None] = mapped_column(Text, nullable=True)
     refresh_token: Mapped[str | None] = mapped_column(Text, nullable=True)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Provider-scoped default identifier (e.g. Etsy shop_id resolved on first connect).
+    shop_id: Mapped[str | None] = mapped_column(String(64), nullable=True)

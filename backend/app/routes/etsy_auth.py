@@ -11,6 +11,7 @@ from app.clients.etsy_oauth import (
     build_auth_url,
     exchange_code,
     generate_pkce_pair,
+    get_default_shop_id,
     get_valid_token,
     save_token,
 )
@@ -58,7 +59,11 @@ def etsy_auth_callback(
 
     save_token(db, token)
     logger.info("etsy_auth_callback: token saved successfully")
-    return JSONResponse(content={"status": "connected"})
+
+    # Best-effort: resolve and cache the default shop_id so the UI doesn't need to ask.
+    shop_id = get_default_shop_id(db)
+
+    return JSONResponse(content={"status": "connected", "shop_id": shop_id})
 
 
 @router.get("/status")
@@ -81,9 +86,13 @@ def etsy_auth_status(db: Session = Depends(get_db)) -> JSONResponse:
     else:
         token_state = "valid"
 
+    # Lazily backfill shop_id for tokens stored before the column existed.
+    shop_id = cred.shop_id or get_default_shop_id(db)
+
     return JSONResponse(
         content={
             "status": token_state,
             "expires_at": expires_at.isoformat() if expires_at else None,
+            "shop_id": shop_id,
         }
     )

@@ -115,6 +115,74 @@ def save_token(db: Session, token: dict) -> None:
     logger.info("save_token: persisted token, expires_at=%s", expires_at)
 
 
+def extract_user_id(access_token: str) -> str | None:
+    """Etsy v3 access tokens are formatted `{user_id}.{random}`. Return user_id or None."""
+    if not access_token or "." not in access_token:
+        return None
+    head = access_token.split(".", 1)[0]
+    return head if head.isdigit() else None
+
+
+def get_default_shop_id(db: Session) -> str | None:
+    """Resolve the connected Etsy shop_id, caching it on api_credentials.
+
+    First call hits Etsy `/users/{user_id}/shops` then persists the result.
+    Subsequent calls return the cached value with no network I/O.
+    Returns None if no token is available or the user has no shop.
+    """
+    cred = db.get(ApiCredential, PROVIDER)
+    if cred is None or cred.oauth_token is None:
+        return None
+    if cred.shop_id:
+        return cred.shop_id
+
+    token = get_valid_token(db)
+    if not token:
+        return None
+    user_id = extract_user_id(token)
+    if not user_id:
+        logger.warning("get_default_shop_id: could not parse user_id from token")
+        return None
+
+    # Lazy import — avoid circular (etsy_api_client imports this module).
+    from app.clients.etsy_api_client import EtsyApiClient
+
+    try:
+        with EtsyApiClient(db) as client:
+            payload = client.get_user_shops(user_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.error("get_default_shop_id: get_user_shops failed: %s", exc)
+        return None
+
+    shop_id = _extract_shop_id_from_response(payload)
+    if not shop_id:
+        logger.warning("get_default_shop_id: no shop found for user_id=%s", user_id)
+        return None
+
+    cred.shop_id = str(shop_id)
+    db.commit()
+    logger.info("get_default_shop_id: cached shop_id=%s for user_id=%s", shop_id, user_id)
+    return cred.shop_id
+
+
+def _extract_shop_id_from_response(payload: dict | list) -> str | None:
+    """Pull shop_id from the various shapes Etsy returns for getUserShops."""
+    # Etsy v3 historically returns either a single shop dict or {"results": [...]}.
+    if isinstance(payload, dict):
+        if "shop_id" in payload:
+            return str(payload["shop_id"])
+        results = payload.get("results")
+        if isinstance(results, list) and results:
+            first = results[0]
+            if isinstance(first, dict) and first.get("shop_id"):
+                return str(first["shop_id"])
+    elif isinstance(payload, list) and payload:
+        first = payload[0]
+        if isinstance(first, dict) and first.get("shop_id"):
+            return str(first["shop_id"])
+    return None
+
+
 def get_valid_token(db: Session) -> str | None:
     """Return a valid access token, refreshing if it expires within 5 minutes.
 
