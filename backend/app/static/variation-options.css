@@ -13,7 +13,22 @@
   gap: 0.75rem;
   margin-bottom: 0.75rem;
 }
-.variation-options-section h2 { font-size: 1.1rem; margin: 0; flex: 1; }
+.variation-options-section h2 { font-size: 1.1rem; margin: 0; }
+.vo-combo-count {
+  font-size: 0.82rem;
+  color: #6b7280;
+  background: #f3f4f6;
+  padding: 0.25rem 0.6rem;
+  border-radius: 6px;
+  font-variant-numeric: tabular-nums;
+  flex: 1;
+}
+.vo-combo-count.vo-combo-over {
+  background: #fee2e2;
+  color: #991b1b;
+  font-weight: 600;
+}
+.vo-combo-warn { margin-left: 0.4rem; font-weight: 600; }
 .variation-options-section h3 {
   font-size: 0.95rem;
   margin: 0 0 0.5rem 0;

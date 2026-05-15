@@ -15,6 +15,9 @@
 
   function tid() { return window.__templateId; }
 
+  // Etsy hard cap for sizes × colors matrix per listing.
+  var MAX_COMBOS = 30;
+
   /* -------------------------------------------------------------------------
    * Row helpers — Sizes
    * ---------------------------------------------------------------------- */
@@ -79,6 +82,30 @@
     var ready = intOrNull('vo-readiness'); if (ready != null) { opts.readiness_state_id = ready; }
 
     return opts;
+  }
+
+  /* -------------------------------------------------------------------------
+   * Live combo counter — surfaces Etsy 30-row cap before user clicks Save.
+   * ---------------------------------------------------------------------- */
+
+  function refreshComboCounter() {
+    var nSizes = document.querySelectorAll('#vo-sizes-body .vo-size-row input[data-field=name]')
+                          .length;
+    var nColors = document.querySelectorAll('#vo-colors-body .vo-color-row input[data-field=name]')
+                          .length;
+    var total = nSizes * nColors;
+    var elS = document.getElementById('vo-combo-sizes');
+    var elC = document.getElementById('vo-combo-colors');
+    var elT = document.getElementById('vo-combo-total');
+    var elW = document.getElementById('vo-combo-warn');
+    var counter = document.getElementById('vo-combo-count');
+    var saveBtn = document.getElementById('vo-save');
+    if (elS) { elS.textContent = nSizes; }
+    if (elC) { elC.textContent = nColors; }
+    if (elT) { elT.textContent = total; }
+    if (counter) { counter.classList.toggle('vo-combo-over', total > MAX_COMBOS); }
+    if (elW) { elW.hidden = total <= MAX_COMBOS; }
+    if (saveBtn) { saveBtn.disabled = total > MAX_COMBOS; }
   }
 
   /* -------------------------------------------------------------------------
@@ -148,17 +175,20 @@
 
     document.getElementById('vo-size-add').addEventListener('click', function () {
       document.getElementById('vo-sizes-body').appendChild(newSizeRow('', 0));
+      refreshComboCounter();
     });
 
     document.getElementById('vo-color-add').addEventListener('click', function () {
       document.getElementById('vo-colors-body').appendChild(newColorRow(''));
       refreshPrimaryColorSelect();
+      refreshComboCounter();
     });
 
     section.addEventListener('click', function (e) {
       if (e.target.classList && e.target.classList.contains('vo-remove')) {
         e.target.closest('tr').remove();
         refreshPrimaryColorSelect();
+        refreshComboCounter();
       }
     });
 
@@ -170,6 +200,9 @@
     });
 
     document.getElementById('vo-save').addEventListener('click', save);
+
+    // Compute counter once on load (reflects server-rendered rows).
+    refreshComboCounter();
   }
 
   if (document.readyState === 'loading') {

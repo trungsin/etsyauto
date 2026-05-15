@@ -253,6 +253,35 @@ def test_admin_templates_list_ok(client):
 # PUT /templates/{id} — variation_options extras must round-trip
 # ---------------------------------------------------------------------------
 
+def test_update_template_rejects_over_30_combos(client):
+    """sizes × colors > 30 → 422 with explanatory error."""
+    with _TestingSessionLocal() as s:
+        from app.models.template import Template
+        t = Template(
+            name="X", category="apparel",
+            base_image_url="https://example.com/x.png",
+            composite_anchor_json='{"x":0.2,"y":0.2,"w":0.6,"h":0.6}',
+            default_price_cents=1900,
+            variation_options_json="{}",
+        )
+        s.add(t)
+        s.commit()
+        s.refresh(t)
+        tid = t.id
+
+    resp = client.put(
+        f"/templates/{tid}",
+        headers=VALID_HEADERS,
+        json={"variation_options": {
+            "sizes": [{"name": s, "price_cents": 1900} for s in ["S","M","L","XL","2XL","3XL"]],
+            "colors": ["White","Black","Navy","Gray","Beige","Pink"],  # 6×6 = 36
+        }},
+    )
+    assert resp.status_code == 422
+    assert "36" in resp.json()["detail"]
+    assert "30" in resp.json()["detail"]
+
+
 def test_update_template_preserves_variation_options_extras(client):
     """shipping_profile_id, readiness_state_id etc. must survive PUT (admin UI relies on this)."""
     # Seed a template directly via the test session

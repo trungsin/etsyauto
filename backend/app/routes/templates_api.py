@@ -186,7 +186,20 @@ def update_template(
     if body.default_price_cents is not None:
         fields["default_price_cents"] = body.default_price_cents
     if body.variation_options is not None:
-        fields["variation_options_json"] = json.dumps(body.variation_options.model_dump())
+        # Etsy hard cap: sizes × colors ≤ 30 inventory rows per listing. Reject
+        # eagerly so the admin UI surfaces the error before listing-creator runs.
+        vo = body.variation_options.model_dump()
+        n_sizes = len(vo.get("sizes") or [])
+        n_colors = len(vo.get("colors") or [])
+        if n_sizes * n_colors > 30:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"sizes × colors = {n_sizes} × {n_colors} = {n_sizes * n_colors} "
+                    f"exceeds Etsy cap of 30 inventory rows per listing."
+                ),
+            )
+        fields["variation_options_json"] = json.dumps(vo)
 
     try:
         tmpl = template_service.update_template(db, template_id, **fields)
