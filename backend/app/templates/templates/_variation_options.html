@@ -36,15 +36,23 @@
       <button type="button" class="btn btn-secondary btn-sm" id="vo-size-add">+ Add size</button>
     </div>
 
-    {# Colors editor #}
+    {# Colors editor — datalist constrains to valid Etsy primary_color values #}
     <div class="vo-card">
       <h3>Colors <span class="vo-hint">must match Etsy primary_color values</span></h3>
+      <datalist id="vo-known-colors">
+        {# Apparel taxonomy 559 primary_color values, manually curated from Etsy API #}
+        {% for v in [
+          "Beige","Black","Blue","Bronze","Brown","Clear","Copper","Gold","Gray",
+          "Green","Orange","Pink","Purple","Rainbow","Red","Rose gold","Silver",
+          "White","Yellow"
+        ] %}<option value="{{ v }}">{% endfor %}
+      </datalist>
       <table class="vo-table" id="vo-colors-table">
         <thead><tr><th>Name</th><th style="width:3rem;"></th></tr></thead>
         <tbody id="vo-colors-body">
           {% for c in opts.get("colors", []) %}
           <tr class="vo-color-row">
-            <td><input type="text" class="vo-input" data-field="name" value="{{ c }}"></td>
+            <td><input type="text" class="vo-input" data-field="name" list="vo-known-colors" value="{{ c }}"></td>
             <td><button type="button" class="btn btn-danger btn-sm vo-remove">×</button></td>
           </tr>
           {% endfor %}

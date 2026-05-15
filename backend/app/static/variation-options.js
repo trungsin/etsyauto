@@ -36,7 +36,7 @@
     var tr = document.createElement('tr');
     tr.className = 'vo-color-row';
     tr.innerHTML =
-      '<td><input type="text" class="vo-input" data-field="name" value="' + escapeAttr(name) + '"></td>' +
+      '<td><input type="text" class="vo-input" data-field="name" list="vo-known-colors" value="' + escapeAttr(name) + '"></td>' +
       '<td><button type="button" class="btn btn-danger btn-sm vo-remove">&times;</button></td>';
     return tr;
   }
