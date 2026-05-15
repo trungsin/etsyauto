@@ -40,6 +40,36 @@ class TemplateImageView(TypedDict):
 # ---------------------------------------------------------------------------
 
 
+def _is_empty_anchor(raw: str | None) -> bool:
+    """True when anchor_json is missing or has no usable zones."""
+    if not raw:
+        return True
+    try:
+        data = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return True
+    if not isinstance(data, dict):
+        return True
+    if isinstance(data.get("zones"), list) and data["zones"]:
+        return False
+    if all(k in data for k in ("x", "y", "w", "h")):  # legacy v1 rect
+        return False
+    return True
+
+
+def _first_non_empty_anchor(session: Session, template_id: int) -> str | None:
+    """Return the lowest-rank mockup's anchor_json in this template, or None."""
+    rows = session.scalars(
+        select(TemplateImage)
+        .where(TemplateImage.template_id == template_id)
+        .order_by(TemplateImage.rank.asc())
+    ).all()
+    for r in rows:
+        if r.role == "mockup" and not _is_empty_anchor(r.anchor_json):
+            return r.anchor_json
+    return None
+
+
 def _row_to_view(row: TemplateImage) -> TemplateImageView:
     return TemplateImageView(
         id=row.id,
@@ -205,6 +235,15 @@ def create(
         raise ValueError(f"Template {template_id} not found")
 
     color_norm = color.strip().title() if color else None
+
+    # Auto-inherit anchor from an existing mockup in the same template when caller
+    # didn't provide one. Saves the user from having to manually set zones on every
+    # upload, and prevents "no fill zones" silently dropping the image from the
+    # listing-creator gallery.
+    if role == "mockup" and _is_empty_anchor(anchor_json):
+        inherited = _first_non_empty_anchor(session, template_id)
+        if inherited is not None:
+            anchor_json = inherited
 
     _validate_inputs(
         image_url=image_url,

@@ -85,7 +85,6 @@
 .anchor-modal-hint { font-size: 0.82rem; color: #6b7280; margin-bottom: 0.5rem; }
 
 /* SVG overlay elements inside modal */
-#anchor-modal-svg { pointer-events: none; }
 .modal-anchor-poly {
   fill: rgba(79, 70, 229, 0.15);
   stroke: #4f46e5;
@@ -97,7 +96,21 @@
   stroke: #fff;
   stroke-width: 2;
   cursor: grab;
-  pointer-events: auto;
+  pointer-events: all;
   touch-action: none;
 }
 .modal-handle:active { cursor: grabbing; }
+
+/* Pool row warnings — image missing anchor will be skipped during listing creation. */
+.badge-warn {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fbbf24;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.btn-warn { background: #f59e0b; color: #fff; border-color: #d97706; }
+.btn-warn:hover { background: #d97706; }

@@ -51,9 +51,16 @@
   </td>
   <td style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;">
     {% if not img.is_virtual %}
-    <button class="btn btn-secondary btn-sm"
+    {% set _aj = (img.anchor_json or '{}') | trim %}
+    {% set _anchor_empty = img.role == 'mockup' and _aj in ('{}', '', '{"zones":[]}', '{"zones": []}') %}
+    {% if _anchor_empty %}
+    <span class="badge badge-warn" title="Image will be skipped in listing creation until you set at least one fill zone.">
+      &#9888; no anchor
+    </span>
+    {% endif %}
+    <button class="btn btn-secondary btn-sm{% if _anchor_empty %} btn-warn{% endif %}"
             onclick="window.__imagePool.openAnchorModal(this.closest('tr').querySelector('.pool-thumb'))">
-      Edit anchor
+      {% if _anchor_empty %}Set anchor{% else %}Edit anchor{% endif %}
     </button>
     <button class="btn btn-danger btn-sm"
             onclick="if(confirm('Delete this image?')) window.__imagePool.deleteImage({{ template.id }}, {{ img.id }})">

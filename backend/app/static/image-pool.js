@@ -223,10 +223,12 @@
 
     _modalImg.src = imgUrl;
     _modalImg.onload = function () { renderAllZones(); };
-    if (_modalImg.complete && _modalImg.naturalWidth > 0) { renderAllZones(); }
 
     updateZoneCountUI();
     _modal.showModal();
+    // Modal must be visible before SVG has non-zero clientWidth/Height.
+    // Defer initial render to next frame so layout is computed.
+    requestAnimationFrame(function () { renderAllZones(); });
   }
 
   function parseAnchorToZones(raw) {
@@ -324,10 +326,10 @@
             c.addEventListener('pointerdown', function (e) {
               e.preventDefault();
               _dragIndex = capturedIdx;
-              e.target.setPointerCapture(e.pointerId);
-              e.target.addEventListener('pointermove', onDragMove);
-              e.target.addEventListener('pointerup', onDragUp);
-              e.target.addEventListener('pointercancel', onDragUp);
+              // Attach on window so listeners survive renderAllZones() rebuilding the SVG.
+              window.addEventListener('pointermove', onDragMove);
+              window.addEventListener('pointerup', onDragUp);
+              window.addEventListener('pointercancel', onDragUp);
             });
           })(pIdx);
           _modalSvg.appendChild(c);
@@ -345,11 +347,11 @@
     renderAllZones();
   }
 
-  function onDragUp(e) {
+  function onDragUp() {
     _dragIndex = -1;
-    e.target.removeEventListener('pointermove', onDragMove);
-    e.target.removeEventListener('pointerup', onDragUp);
-    e.target.removeEventListener('pointercancel', onDragUp);
+    window.removeEventListener('pointermove', onDragMove);
+    window.removeEventListener('pointerup', onDragUp);
+    window.removeEventListener('pointercancel', onDragUp);
   }
 
   function updateZoneCountUI() {

@@ -247,14 +247,12 @@ def test_delete_removes_row_and_r2_object(client, db_session):
     # Verify R2 delete was called
     mock_r2.delete_object.assert_called_once_with("template-images/t1/abc.png")
 
-    # Verify delete happened (row should be gone from fresh query)
-    from sqlalchemy import select
-    from app.database import SessionLocal
-    with SessionLocal() as fresh_session:
-        deleted = fresh_session.scalars(
-            select(TemplateImage).where(TemplateImage.id == img.id)
-        ).first()
-        assert deleted is None
+    # Verify delete happened (row gone from test DB)
+    from sqlalchemy import func, select
+    remaining = db_session.scalar(
+        select(func.count()).select_from(TemplateImage).where(TemplateImage.id == img.id)
+    )
+    assert remaining == 0
 
 
 def test_delete_returns_404_for_missing(client, db_session):

@@ -170,6 +170,54 @@ class TestCreate:
         )
         assert img2["id"] is not None
 
+    def test_create_inherits_anchor_from_existing_mockup(self, db_session):
+        """When new mockup has empty anchor_json, copy from lowest-rank existing mockup."""
+        template = seed_template(db_session)
+        anchor_v2 = json.dumps({
+            "version": 2,
+            "zones": [{"name": "main", "kind": "quad",
+                       "points": [[0.1, 0.1], [0.9, 0.1], [0.9, 0.9], [0.1, 0.9]]}],
+        })
+        seed_template_image(db_session, template.id, rank=0, anchor_json=anchor_v2)
+
+        new_view = template_image_service.create(
+            db_session,
+            template_id=template.id,
+            image_url="https://example.com/photo2.png",
+            rank=1,
+            # anchor_json omitted → defaults to "{}"
+        )
+        assert new_view["anchor_json"] == anchor_v2
+
+    def test_create_does_not_inherit_when_anchor_provided(self, db_session):
+        """Caller-supplied anchor_json wins — no inheritance."""
+        template = seed_template(db_session)
+        seed_template_image(db_session, template.id, rank=0)  # has default rect
+        explicit = json.dumps({"x": 0.4, "y": 0.4, "w": 0.2, "h": 0.2})
+
+        new_view = template_image_service.create(
+            db_session,
+            template_id=template.id,
+            image_url="https://example.com/photo2.png",
+            rank=1,
+            anchor_json=explicit,
+        )
+        assert new_view["anchor_json"] == explicit
+
+    def test_create_does_not_inherit_for_lifestyle_role(self, db_session):
+        """lifestyle_no_fill role never needs anchor; skip inheritance."""
+        template = seed_template(db_session)
+        seed_template_image(db_session, template.id, rank=0)  # mockup with anchor
+
+        new_view = template_image_service.create(
+            db_session,
+            template_id=template.id,
+            image_url="https://example.com/lifestyle.png",
+            rank=1,
+            role="lifestyle_no_fill",
+        )
+        assert new_view["anchor_json"] == "{}"
+
 
 class TestMaterialize:
     """Test materialize — legacy→real conversion."""
