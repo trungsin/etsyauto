@@ -17,17 +17,35 @@ Covers the end-to-end flow that turns a (template + design + colors + sizes) tup
 
 ---
 
-## What This Builds
+## What This Builds (v0.9+)
 
-For a typical 3-sizes × 5-colors apparel template with one design upload, the creator:
+For a typical 3-sizes × 5-colors apparel template with an image pool, the creator:
 
-1. Renders **5 composite mockups** (one per color) via Pillow
-2. Calls Etsy `POST /shops/{shop}/listings` → creates a **draft listing**
-3. Calls Etsy `PUT /listings/{lid}/inventory` with **15 inventory rows** (size × color cartesian, minus any toggled-off combos)
-4. Calls Etsy `POST /listings/{lid}/images` **5 times** (primary color first, rest by template order)
-5. Persists `Listing(etsy_listing_id, template_id, design_id, status='created')` for idempotency
+1. **Renders all pool images** (parallel, ThreadPoolExecutor, max_workers=8) via Pillow
+2. **Sorts by rank** (ascending); keeps top 10 for upload
+3. Calls Etsy `POST /shops/{shop}/listings` → creates a **draft listing**
+4. Calls Etsy `PUT /listings/{lid}/inventory` with **up to 15 inventory rows** (size × color, minus any toggled-off combos)
+5. **Uploads top 10 images** sequentially with 200 ms gap (Etsy rate-limit safety)
+6. **Binds per-color images** (if color set) as Etsy variation hero images via `set_variation_images` API
+7. Persists `Listing(etsy_listing_id, template_id, design_id, status='created')` for idempotency
 
 The listing stays in **draft** state on Etsy. Seller reviews, finalizes title/description/SEO, and publishes from the Etsy UI — the project never auto-publishes.
+
+### Image pool rendering (v0.9+)
+
+The template's `images` table (up to 20 rows, sorted by rank) is processed:
+- **Role = "mockup"**: Design composited onto image via anchor zones
+- **Role = "lifestyle_no_fill"**: Image uploaded as-is
+- Rendered composites cached in R2 under keys: `composites/{tid}-{img_id}-{did}.png` (single zone) or `composites/{tid}-{img_id}-{hash}-multi.png` (multi-zone)
+- Top 10 by rank are uploaded to Etsy gallery
+- Extras retained as backups (not uploaded, still in R2)
+
+### Variation hero binding (v0.9+)
+
+If a pool image has `color` set:
+1. The listing creator looks for an Etsy variant matching that color
+2. If found and enabled in `enabled_combos`, the image is bound via `set_variation_images`
+3. On Etsy, the image appears as the product photo when the customer selects that color
 
 ---
 
@@ -133,9 +151,20 @@ Content-Type: application/json
   "etsy_listing_id": "1234567890",
   "draft_url": "https://www.etsy.com/your/shops/me/listings/draft/1234567890",
   "composite_urls": [
-    {"color": "Sand", "url": "...", "rank": 1},
-    {"color": "White", "url": "...", "rank": 2}
+    {
+      "rank": 1,                       // Etsy gallery position
+      "color": "White",                // optional; None if universal
+      "url": "https://pub.r2.dev/...",
+      "etsy_image_id": "1001002003"    // set_variation_images binding id (if color matched variant)
+    },
+    {
+      "rank": 2,
+      "color": "Black",
+      "url": "https://pub.r2.dev/...",
+      "etsy_image_id": "1001002004"
+    }
   ],
+  "variation_images_bound": 2,         // count of images bound as color-variant heroes
   "idempotent": false                  // true if returned from existing Listing row
 }
 ```
@@ -214,6 +243,21 @@ The composite step fetches `template.color_base_images_json[color]` via HTTP. If
 curl -I "$(jq -r '.color_base_images_json | fromjson | .White' < template.json)"
 # Expect 200
 ```
+
+### "Variation hero not showing on Etsy" (v0.9+)
+
+After publishing, the color-variant hero image doesn't appear when selecting that color variant.
+
+**Causes:**
+1. Image in pool has no `color` set — color binding is skipped
+2. Color value doesn't match template's `variation_options.colors` (case-sensitive after title-casing)
+3. That color variant was toggled off in `enabled_combos`
+
+**Fix:**
+- Edit the pool image: ensure `color` field is set to the exact variant name (e.g. "White", "Black")
+- Verify the color exists in template `variation_options_json.colors`
+- Verify the (size, color) combo is in `enabled_combos` and enabled=true
+- Re-run listing creator; on success, `variation_images_bound` in response will be > 0
 
 ---
 

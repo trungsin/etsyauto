@@ -583,6 +583,89 @@ curl -X POST http://localhost:8787/listings/from-template \
 
 ---
 
+## Image Pool (v0.9+)
+
+A template can host up to 20 images, each with its own anchor zones (≤2 per image). The image pool is the foundation for per-template image rotation: listing creator renders all images, sorts by rank, uploads top 10 to Etsy, and optionally binds per-color images as Etsy variation hero images.
+
+### Image roles
+
+| Role | Compositing | Use case |
+|------|-------------|----------|
+| `mockup` (default) | Design is composited onto image via anchor zones | Product blank with design |
+| `lifestyle_no_fill` | Image uploaded as-is, no compositing | Size chart, model photo, scene context |
+
+### Image fields
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `id` | integer | PK, auto-increment |
+| `image_url` | string (500) | R2 URL; required |
+| `color` | string (50) | Optional; title-cased. Null means universal (no color tag) |
+| `rank` | integer | Sort order (0, 1, 2, ...); unique per template |
+| `anchor_json` | string (400) | JSON anchor schema (v1 or v2); default `"{}"` |
+| `role` | string (20) | `"mockup"` or `"lifestyle_no_fill"` |
+| `created_at` | datetime | Server-generated |
+
+### Admin REST API — Image Pool
+
+Base path: `/admin/templates/{tid}/images`
+All endpoints require `X-Admin-Token` header.
+
+| Method | Path | Body / Form | Status | Response |
+|--------|------|-------------|--------|----------|
+| `POST` | `""` | multipart: `file`, `color?`, `rank=0`, `role='mockup'`, `anchor_json='{}'` | 201 | Image object |
+| `GET` | `""` | — | 200 | `[{id, image_url, color, rank, role, anchor_json, is_virtual}]` |
+| `PATCH` | `"/{img_id}"` | JSON: `{image_url?, color?, rank?, role?, anchor_json?}` | 200 | Updated image |
+| `DELETE` | `"/{img_id}"` | — | 204 | — |
+| `POST` | `"/reorder"` | JSON: `[{id, rank}, ...]` | 200 | `{reordered: count}` |
+| `POST` | `"/migrate"` | — | 200 | `{materialized: count}` |
+
+**POST upload example:**
+```bash
+curl -X POST http://localhost:8787/admin/templates/1/images \
+  -H "X-Admin-Token: $ADMIN_TOKEN" \
+  -F "file=@my-image.png" \
+  -F "color=White" \
+  -F "rank=1" \
+  -F "role=mockup"
+```
+
+### Backward compatibility — virtualization
+
+Templates created before v0.9 (no `template_images` rows) continue to work via **on-the-fly virtualization**:
+- When listing images for a template with no real rows, `list_for_template()` synthesizes rows from `Template.base_image_url` + `color_base_images_json`.
+- Virtual rows are read-only and flagged `is_virtual=true`.
+- **First admin edit auto-materializes:** When you POST, PATCH, or DELETE an image, the service automatically materializes all virtual rows into the `template_images` table (1-time migration).
+- Use the **"Migrate from legacy"** button (POST `/images/migrate`) to materialize without editing.
+
+### Constraints
+
+- **Max 20 images per template** (enforced on create)
+- **Max 2 zones per image** (enforced via `anchor_schema.validate_for_image`)
+- **Unique rank per template** (DB constraint)
+- **Color must exist in `variation_options.colors`** (enforced on create/update)
+- **Max 10 images uploaded to Etsy** (listing creator clips top 10 by rank)
+
+### Etsy variation hero images (per-color binding)
+
+When a template image has `color` set and the listing creator is called:
+1. After rendering the image, the listing creator looks up the corresponding Etsy color variant.
+2. If a match exists, the image is bound to that variant via `set_variation_images` Etsy API.
+3. The image appears on the Etsy listing page when the customer selects that color.
+
+If the color doesn't match any variant in the listing's `enabled_combos`, the image is uploaded to the gallery (rank-ordered) but not bound as a variation hero.
+
+### Admin UI — Template Detail Page (`/admin/templates/{id}`)
+
+Below the variations matrix, an **Image Pool** section displays:
+- **Drag-drop upload zone** — upload PNG/JPEG; form fields for color, rank, role, anchor
+- **Sortable table** — thumbnail preview, color tag, rank, role, edit anchor (modal), delete
+- **"Migrate from legacy"** button — materializes virtual rows if template is pre-v0.9
+
+Anchor editor opens in a modal; save invalidates composites for that image.
+
+---
+
 ### Visual Anchor Editor (v0.7.1)
 
 For non-dev sellers, edit a template's quad zone visually:

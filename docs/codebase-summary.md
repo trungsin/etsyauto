@@ -28,6 +28,7 @@ Module-by-module index with line counts. Updated: 2026-05-07 (v0.8.0).
 | `routes/templates_admin.py` | 590 | Jinja2 + HTMX admin UI — `/admin/templates` CRUD, designs, composite preview, **listing creator (v0.5.0)** |
 | `routes/references_api.py` | 329 | `POST /references/scrape`, `GET/PUT/DELETE /references/{id}`, `/{id}/suggest-title`, `/{id}/cutout`, `/{id}/save` — reference workflow, X-Admin-Token protected |
 | `routes/listings_creator_api.py` | 83 | `POST /listings/from-template` — idempotent Etsy draft creator (sub-feature C, v0.4.0) |
+| `routes/template_images_admin.py` | 272 | `/admin/templates/{id}/images` JSON API — upload, list, PATCH, DELETE, reorder, migrate (v0.9.0) |
 | `routes/keywords_admin.py` | 237 | `/admin/keywords` Jinja+HTMX CRUD — list, create, toggle enabled, manual fetch (v0.8.0) |
 | `routes/ideas_admin.py` | 202 | `/admin/ideas` browse — velocity sort, filters by status/source/keyword (v0.8.0) |
 | `routes/idea_wizard.py` | 445 | 3-step Idea→Listing wizard — `/admin/ideas/{id}/create-listing` step1/step2/step3/submit (v0.8.0) |
@@ -43,6 +44,7 @@ Module-by-module index with line counts. Updated: 2026-05-07 (v0.8.0).
 | `models/job.py` | 21 | `Job` — async task execution tracking |
 | `models/api_credential.py` | 17 | `ApiCredential` — Etsy OAuth tokens (access + refresh) |
 | `models/template.py` | 32 | `Template` — product blank image, composite anchor JSON, variation_options JSON, R2 URL |
+| `models/template_image.py` | 33 | `TemplateImage` — image pool entry; id, template_id FK, image_url, color, rank, anchor_json, role, created_at (v0.9.0) |
 | `models/template_variation.py` | 24 | `TemplateVariation` — size/color/price_cents/sku row; max 30 per template (Etsy limit) |
 | `models/design.py` | 25 | `Design` — uploaded artwork PNG; source_type ∈ {upload, ai_generated, reference_only} |
 | `models/reference.py` | 43 | `Reference` — scraped public Etsy listing: listing_id, source_url, original/edited title, ai_variants, tags, notes, status, optional cutout_design_id FK, notion_page_id |
@@ -68,6 +70,7 @@ Module-by-module index with line counts. Updated: 2026-05-07 (v0.8.0).
 | `services/retry_policy.py` | 25 | Exponential backoff decorator + `should_retry(attempts)` helper |
 | `services/image_composite.py` | 183 | `composite_with_anchor(base, design, anchor)` — Pillow RGBA alpha-paste with bounds clamping |
 | `services/template_service.py` | 154 | Template CRUD helpers — create/update/delete with R2 cleanup + composite cache invalidation |
+| `services/template_image_service.py` | 376 | TemplateImage CRUD + legacy virtualization — list (real or virtual), create, update, delete, reorder, materialize (v0.9.0) |
 | `services/variation_service.py` | 102 | Bulk replace, list, update, clear variations; enforces max-30 and unique (size, color) |
 | `services/design_service.py` | 156 | Design upload/list/delete with PNG+alpha validation, R2 upload, composite cache cascade |
 | `services/composite_service.py` | 134 | `get_or_create_composite` — cache-check → Pillow composite → R2 upload; rejects reference_only |
@@ -151,8 +154,12 @@ Module-by-module index with line counts. Updated: 2026-05-07 (v0.8.0).
 | `test_correlation_id_middleware.py` | 3 | X-Request-ID echo, inbound preservation, distinct IDs (v0.7.0) |
 | `test_e2e_dry_run_listing.py` | 2 | Full pipeline happy + auth_fail through admin UI under dry-run (v0.7.0) |
 | `test_anchor_editor.py` | 9 | Page render, v1/v2 pre-pop, save round-trip, 422 (3 points / out-of-bounds), 404 GET/POST, auth-required (v0.7.1) |
+| `test_template_image_service.py` | ~20 | TemplateImage CRUD, virtualization, reorder, materialize, validation (v0.9.0) |
+| `test_composite_service_image_pool.py` | ~18 | Composite rendering with template_image_id, cache key, invalidation per image (v0.9.0) |
+| `test_template_images_api.py` | ~8 | REST endpoints: upload, list, PATCH, DELETE, reorder, migrate (v0.9.0) |
+| `test_template_image_pool_ui.py` | ~10 | Admin UI: detail page partial, anchor modal, upload form, reorder table (v0.9.0) |
 
-**Total: 274 tests passing**
+**Total: 490 tests passing**
 
 ---
 

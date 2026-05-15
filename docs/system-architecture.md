@@ -322,9 +322,56 @@ erDiagram
         datetime updated_at
     }
 
+    TEMPLATES {
+        int id PK
+        str name
+        str category
+        str base_image_url
+        text composite_anchor_json
+        int default_price_cents
+        text variation_options_json
+        text color_base_images_json
+        datetime created_at
+        datetime updated_at
+    }
+
+    TEMPLATE_IMAGES {
+        int id PK
+        int template_id FK
+        str image_url
+        str color "nullable"
+        int rank
+        str anchor_json
+        str role
+        datetime created_at
+    }
+
+    TEMPLATE_VARIATIONS {
+        int id PK
+        int template_id FK
+        str size
+        str color
+        int price_cents
+        str sku "nullable"
+        datetime created_at
+    }
+
+    DESIGNS {
+        int id PK
+        str name
+        str source_type
+        str file_url
+        int width
+        int height
+        datetime created_at
+    }
+
     LISTINGS ||--o{ TITLE_VARIANTS : "has"
     LISTINGS ||--o{ MOCKUP_VARIANTS : "has"
     LISTINGS ||--o{ JOBS : "has"
+    TEMPLATES ||--o{ TEMPLATE_IMAGES : "contains"
+    TEMPLATES ||--o{ TEMPLATE_VARIATIONS : "defines"
+    TEMPLATES ||--|{ DESIGNS : "uses"
 ```
 
 ## Directory Structure

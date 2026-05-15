@@ -107,7 +107,39 @@
 
 ---
 
-## v0.9.0 — POD Catalog Integration (Planned)
+## v0.9.0 — Template Image Pool
+
+### Scope
+
+| Sub-feature | Title | Status | Completed |
+|-------------|-------|--------|-----------|
+| — | [Template Image Pool](../plans/260515-0153-template-image-pool/plan.md) | **Complete** | 2026-05-15 |
+
+### v0.9.0 Success Metrics
+
+- [x] Per-template image pool (up to 20 images)
+- [x] Per-image anchor zones (up to 2 per image)
+- [x] Image roles: `mockup` (composited) + `lifestyle_no_fill` (as-is)
+- [x] Admin REST API: upload, list, PATCH, DELETE, reorder, migrate
+- [x] Admin UI: drag-drop upload, sortable table, anchor modal, migrate button
+- [x] Legacy virtualization: pre-v0.9 templates auto-virtualize; first edit materializes
+- [x] Listing creator: render-all (parallel) → top-10 by rank → upload + bind variation heroes
+- [x] Composite cache key: `composites/{tid}-{img_id}-{did}.png` (single zone) or `-{hash}-multi.png` (multi-zone)
+- [x] Etsy `set_variation_images` integration: per-color image binding when color matches variant
+- [x] 56 new tests (490 total, all passing)
+- [x] Docs updated: template-system-guide, etsy-listing-creator-guide, system-architecture, codebase-summary, changelog
+
+### Deferred (post-v0.9.0)
+
+- Printful Catalog API (v1.0)
+- Printify Catalog API (v1.0)
+- Idea ↔ POD product matcher (v1.0)
+- Bulk wizard mode (1-by-1 only in v0.9)
+- TeePublic/Society6/Zazzle passive scrape (v1.0)
+
+---
+
+## v1.0.0 — POD Catalog Integration (Planned)
 
 ### Scope
 

@@ -4,6 +4,84 @@ All notable changes to EtsyAuto. Format: [Keep a Changelog](https://keepachangel
 
 ---
 
+## [0.9.0] — 2026-05-15
+
+Template Image Pool. Per-template image rotation with up to 20 images, per-image anchor zones, and Etsy variation hero binding. Listing creator now renders all pool images, uploads top 10 by rank, and optionally binds per-color images as product variant photos on Etsy.
+
+### Added
+
+#### Backend — TemplateImage table + service
+- `TemplateImage` model — id, template_id FK, image_url, color (nullable), rank, anchor_json, role, created_at
+- `template_image_service` module — CRUD (create, list, get, update, delete), reorder (bulk rank update), materialize (virtual→real)
+- Image roles: `"mockup"` (design composited) + `"lifestyle_no_fill"` (uploaded as-is)
+- Max 20 images per template; max 2 zones per image
+
+#### Backend — Admin REST API
+- `POST /admin/templates/{tid}/images` — multipart upload (file, color?, rank=0, role='mockup', anchor_json='{}')
+- `GET /admin/templates/{tid}/images` — list (returns real or virtual rows, is_virtual flag)
+- `PATCH /admin/templates/{tid}/images/{img_id}` — update (color, rank, role, anchor_json, image_url)
+- `DELETE /admin/templates/{tid}/images/{img_id}` — delete + R2 cleanup
+- `POST /admin/templates/{tid}/images/reorder` — bulk reorder by rank
+- `POST /admin/templates/{tid}/images/migrate` — materialize legacy virtual rows (idempotent)
+
+#### Backend — Listing creator changes
+- `composite_service.get_or_create_composite` now accepts `template_image_id` param (preferred); `color` param deprecated but still works via virtualization
+- Listing creator renders all pool images (parallel, ThreadPoolExecutor, max_workers=8) sorted by rank
+- Top 10 by rank uploaded to Etsy gallery
+- Per-color images bound as Etsy variation heroes via `set_variation_images` API
+- Return shape extended: `composite_urls` items now include `etsy_image_id`; new `variation_images_bound: int` key
+
+#### Backend — Cache invalidation
+- Per-image prefix prune: `composites/{tid}-{img_id}-*` deleted when image is updated/deleted
+- Cache key shape updated: `composites/{tid}-{img_id}-{did}.png` (was `{tid}-{did}-{Color}.png`)
+- Multi-zone keys: `composites/{tid}-{img_id}-{hash}-multi.png`
+
+#### Backend — Legacy virtualization (backward compat)
+- Templates created before v0.9 with no template_images rows auto-virtualize on read
+- Virtualization synthesizes rows from Template.base_image_url + color_base_images_json
+- First admin edit auto-materializes virtual rows to real DB
+- Migrate button available for manual materialization without editing
+
+#### Frontend — Admin UI
+- Template detail page (`/admin/templates/{id}`) expands with "Image Pool" section
+- Drag-drop upload zone (PNG/JPEG, ≤20 MB)
+- Sortable table: thumbnail, color, rank, role, edit-anchor (modal), delete
+- Migrate-from-legacy button (if no real rows)
+
+#### Frontend — Anchor editor modal
+- Opens on table row "Edit" or new upload form
+- Displays image with draggable anchor zones (up to 2)
+- Save via PATCH invalidates composites
+
+#### Tests (56 new, 490 total)
+- `test_template_image_service.py` (~20) — CRUD, virtualization, reorder, materialize, validation
+- `test_composite_service_image_pool.py` (~18) — rendering with template_image_id, cache keys, per-image invalidation
+- `test_template_images_api.py` (~8) — REST endpoint validation
+- `test_template_image_pool_ui.py` (~10) — admin UI routes and form parsing
+
+#### Docs
+- `docs/template-system-guide.md` — new "Image Pool" section with API reference, backward compat, constraints
+- `docs/etsy-listing-creator-guide.md` — updated flow description, render-all + top-10 + variation hero, troubleshooting
+- `docs/system-architecture.md` — updated DB schema ERD with `template_images`
+- `docs/codebase-summary.md` — added new modules with line counts
+- `docs/development-roadmap.md` — v0.9.0 section marked complete
+- `docs/project-changelog.md` — this entry
+
+### Changed
+
+- Composite cache key format: `composites/{tid}-{img_id}-{did}.png` (was per-color legacy: `{tid}-{did}-{Color}.png`)
+- `POST /listings/from-template` response: `composite_urls` items include `etsy_image_id` (or null if not bound); new `variation_images_bound` count
+- Listing creator parallelization: ThreadPoolExecutor max_workers=8 (was 5 for color preview)
+
+### Migration
+
+- Alembic migration `add_template_images` creates `template_images` table with INDEX on `(template_id, rank)`
+- No breaking changes for existing callers — virtual rows preserve backward compat
+- Existing listings continue to use old cache keys (not retroactively migrated)
+- Safe to deploy alongside v0.8.3 (new code ignores old `{tid}-{did}-{Color}.png` keys)
+
+---
+
 ## [0.8.3] — 2026-05-12
 
 Idea → Listing region-crop wiring. Closes the chain `keyword → idea → click image select region → cutout → wizard → Etsy draft` that v0.8.0 left half-implemented. See plan `260512-1104-idea-to-listing-region-crop`.
