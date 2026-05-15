@@ -1,6 +1,6 @@
 # Codebase Summary
 
-Module-by-module index with line counts. Updated: 2026-05-07 (v0.8.0).
+Module-by-module index with line counts. Updated: 2026-05-15 (v0.10.0).
 
 ## Backend (`backend/`)
 
@@ -33,12 +33,13 @@ Module-by-module index with line counts. Updated: 2026-05-07 (v0.8.0).
 | `routes/ideas_admin.py` | 202 | `/admin/ideas` browse — velocity sort, filters by status/source/keyword (v0.8.0) |
 | `routes/idea_wizard.py` | 445 | 3-step Idea→Listing wizard — `/admin/ideas/{id}/create-listing` step1/step2/step3/submit (v0.8.0) |
 | `routes/extension_idea_api.py` | 87 | `POST /extension/idea` — passive log endpoint, upserts `source=extension_passive` ideas (v0.8.0) |
+| `routes/listings_admin.py` | 475 | `/admin/listings` CRUD + actions — list/detail UI, PUT edit (draft local / live write-through), POST upload/sync/rerender, DELETE (v0.10.0) |
 
 ### Models (`app/models/`)
 
 | File | LOC | Purpose |
 |------|-----|---------|
-| `models/listing.py` | 37 | `Listing` table — core state machine, etsy_listing_id, status, notion_page_id, template_id+design_id (v0.4.0 idempotency) |
+| `models/listing.py` | 54 | `Listing` table — core state machine; `etsy_listing_id` nullable (v0.10), `local_payload_json`, `deleted_at`, status domain extended to `new|uploading|created|syncing|failed|deleted` (v0.10.0) |
 | `models/title_variant.py` | 20 | `TitleVariant` — 3 Claude-generated variants per listing |
 | `models/mockup_variant.py` | 22 | `MockupVariant` — 3 Imagen-generated variants with R2 URLs |
 | `models/job.py` | 21 | `Job` — async task execution tracking |
@@ -76,7 +77,7 @@ Module-by-module index with line counts. Updated: 2026-05-07 (v0.8.0).
 | `services/composite_service.py` | 134 | `get_or_create_composite` — cache-check → Pillow composite → R2 upload; rejects reference_only |
 | `services/reference_service.py` | 364 | Reference scrape (idempotent), CRUD, Gemini suggest-title (3 variants), remove.bg cutout → `Design.source_type='reference_only'`, Notion Idea Bank save (data_sources API + image embed), schema validation on startup |
 | `services/etsy_taxonomy.py` | 117 | Etsy taxonomy + property value lookup with in-memory cache; apparel constants (taxonomy 1209, color=200, size=506) |
-| `services/listing_creator_service.py` | 295 | Orchestrator: composite all colors → resolve property values → Etsy create draft → update inventory → upload images sequentially → persist Listing |
+| `services/listing_creator_service.py` | 595 | 2-phase orchestrator (v0.10): `save_draft()` (render + persist local row, no Etsy call), `upload_to_etsy()` (CAS-locked Etsy push: create draft → inventory → images → variation hero), `create_from_template()` back-compat shim. `ConflictError` for concurrent uploads. |
 | `services/anchor_schema.py` | 130 | Anchor schema v2 parser — `parse_anchor` (v1 shim → zones[] envelope), `to_v2` serializer, `MAX_ZONES=4` (v0.6.0) |
 | `services/etsy_error_mapper.py` | 80 | Map httpx.HTTPStatusError → user-friendly toast (auth/rate/image/taxonomy/5xx) (v0.7.0) |
 | `services/listing_pre_check.py` | 90 | Etsy hard-cap validation (title/tags/combos/composite) before Etsy call (v0.7.0) |
@@ -94,7 +95,7 @@ Module-by-module index with line counts. Updated: 2026-05-07 (v0.8.0).
 | File | LOC | Purpose |
 |------|-----|---------|
 | `clients/claude_client.py` | 124 | Anthropic SDK wrapper — `generate_title_variants(title, desc, tags)` → `list[TitleVariantData]` |
-| `clients/etsy_api_client.py` | 321 | Etsy Open API v3 — `get_listing/update_listing/upload_listing_image` (v0.1.0); `create_draft_listing/update_listing_inventory/upload_listing_image_bytes/get_taxonomy_property_values` (v0.4.0) |
+| `clients/etsy_api_client.py` | 485 | Etsy Open API v3 — `get_listing/update_listing/upload_listing_image` (v0.1.0); `create_draft_listing/update_listing_inventory/upload_listing_image_bytes/get_taxonomy_property_values` (v0.4.0); `delete_listing` (404=idempotent success) + extended `get_listing` (full payload sync) (v0.10.0) |
 | `clients/etsy_oauth.py` | 145 | PKCE helpers — `generate_pkce_pair()`, `build_auth_url()`, `exchange_code()`, `get_valid_token()` |
 | `clients/gemini_imagen_client.py` | 82 | Google GenAI SDK wrapper — `generate_mockup_image(prompt)` → base64 PNG |
 | `clients/notion_client.py` | 243 | Notion API wrapper — `create_review_page()`, `query_approved_listings()`, `validate_database_schema()` |
@@ -122,6 +123,7 @@ Module-by-module index with line counts. Updated: 2026-05-07 (v0.8.0).
 | `33596c423a0e_references_table.py` | Add `references` table with FK to `designs.id` (sub-feature A) |
 | `a3d8008fe208_*.py` | Add `color_base_images_json` to templates (sub-feature C) |
 | `7e644acd83eb_*.py` | Add `template_id`, `design_id` to listings + `(template_id, design_id)` index (sub-feature C idempotency) |
+| `36665e3c284b_*.py` | Relax `listings.etsy_listing_id` to nullable; add `local_payload_json`, `deleted_at` (v0.10.0) |
 
 ### Tests (`tests/`)
 
@@ -158,8 +160,12 @@ Module-by-module index with line counts. Updated: 2026-05-07 (v0.8.0).
 | `test_composite_service_image_pool.py` | ~18 | Composite rendering with template_image_id, cache key, invalidation per image (v0.9.0) |
 | `test_template_images_api.py` | ~8 | REST endpoints: upload, list, PATCH, DELETE, reorder, migrate (v0.9.0) |
 | `test_template_image_pool_ui.py` | ~10 | Admin UI: detail page partial, anchor modal, upload form, reorder table (v0.9.0) |
+| `test_listing_service_refactor.py` | 7 | save_draft (idempotent + no Etsy call), upload_to_etsy (CAS lock blocks concurrent, failure rolls back to 'failed', idempotent when already uploaded), back-compat shim (v0.10.0) |
+| `test_etsy_client_delete_get.py` | 3 | delete dry-run + 404 idempotent success, get_listing payload shape (v0.10.0) |
+| `test_listings_admin_api.py` | 8 | GET list filter, GET detail composite, PUT edit (draft local / live write-through), POST upload/sync/rerender, DELETE soft-delete (v0.10.0) |
+| `test_listings_admin_ui.py` | 3 | Detail page gallery+form markers, status badge class, base nav link (v0.10.0) |
 
-**Total: 490 tests passing**
+**Total: 518 tests passing**
 
 ---
 

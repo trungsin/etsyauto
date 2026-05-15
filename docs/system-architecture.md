@@ -239,7 +239,26 @@ sequenceDiagram
 - `idea_to_listing` — composite-PK provenance link; populated on wizard submit
 
 **Wizard stateless:** idea_id in URL only; each step recomputes prefill — no server session.
-**Reuses listing_creator_service** end-to-end for Step 3 (no duplicated Etsy push logic).
+
+**v0.10 — 2-phase flow:** wizard submit now calls `listing_creator_service.save_draft()` (renders composites + writes a `Listing` row with `status='new'`, `etsy_listing_id=NULL`) then **redirects 303** to `/admin/listings/{id}`. The detail page renders the composite gallery and an edit form; the user reviews, edits, then clicks **Upload** to trigger `upload_to_etsy()` (CAS-locked Etsy push). Sync (Etsy → local), live Edit (write-through to Etsy), and Delete (Etsy DELETE + soft-delete) are wired through the same detail page.
+
+### Listing lifecycle (v0.10)
+
+```
+   ┌──── save_draft() ──── new ──── upload_to_etsy() (CAS) ──── uploading
+   │                       │                                          │
+   │   user edits locally  │                                       success
+   │   (PUT, no Etsy call) │                                          ▼
+   │                       │                                       created  ←──── sync (GET) ←──── Etsy
+   │                       │                                          │
+   │                       ▼                                       PUT (live, write-through to Etsy)
+   │                    failed  ←──── upload error (rollback) ────────┤
+   │                       │                                          │
+   └──── retry ────────────┘                                       DELETE
+                                                                      │
+                                                                      ▼
+                                                                   deleted (soft, Etsy=inactive)
+```
 
 ## Status State Machine
 
@@ -267,16 +286,20 @@ stateDiagram-v2
 erDiagram
     LISTINGS {
         int id PK
-        str etsy_listing_id UK
+        str etsy_listing_id UK "nullable v0.10"
         str original_title
         text original_desc
         text original_tags
         text original_images
-        str status
+        str status "new|uploading|created|syncing|failed|deleted"
         str notion_page_id
         int push_attempts
         text last_push_error
         datetime pushed_at
+        int template_id
+        int design_id
+        text local_payload_json "v0.10 editable payload"
+        datetime deleted_at "v0.10 soft-delete"
         datetime created_at
         datetime updated_at
     }

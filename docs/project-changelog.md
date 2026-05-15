@@ -4,6 +4,71 @@ All notable changes to EtsyAuto. Format: [Keep a Changelog](https://keepachangel
 
 ---
 
+## [0.10.0] — 2026-05-15
+
+Listing Management — local draft + 2-phase upload. Wizard no longer pushes to Etsy directly: it saves a local draft. Users review the rendered composite gallery + edit text/pricing on `/admin/listings/{id}` then click **Upload** to push to Etsy. Sync / Edit (write-through) / Delete are wired through to the Etsy API for live listings.
+
+### Added
+
+#### Backend — Listing admin routes (`app/routes/listings_admin.py`)
+- `GET  /admin/listings` — paginated list with status + template filters
+- `GET  /admin/listings/{id}` — detail page with composite gallery + edit form + action buttons
+- `PUT  /admin/listings/{id}` — edit title/description/tags/combos (draft: local-only; live: write-through to Etsy via `update_listing`)
+- `POST /admin/listings/{id}/upload` — push draft to Etsy (calls `listing_creator_service.upload_to_etsy`)
+- `POST /admin/listings/{id}/sync` — pull state from Etsy (`get_listing`), map state→status, overwrite local fields
+- `POST /admin/listings/{id}/rerender` — invalidate composite cache + re-render gallery
+- `DELETE /admin/listings/{id}` — Etsy delete + soft-delete local row
+
+#### Backend — Service refactor (`listing_creator_service`)
+- `save_draft()` — render composites + persist Listing row (status='new', etsy_listing_id=None). No Etsy call. Idempotent on (template_id, design_id).
+- `upload_to_etsy()` — CAS-locked state transition (new/failed → uploading → created/failed). Create_draft + inventory + image upload + variation hero. Rolls back to 'failed' on error.
+- `ConflictError` — raised when CAS lock fails (concurrent upload click)
+- `create_from_template()` retained as back-compat shim (save_draft + upload_to_etsy)
+
+#### Backend — Etsy client extensions (`etsy_api_client.py`)
+- `delete_listing(shop_id, listing_id)` — DELETE /shops/{shop_id}/listings/{listing_id}; 404 treated as idempotent success
+- `get_listing(listing_id, includes)` — full payload fetch for sync; dry-run fixture wired
+
+#### Frontend — Admin UI
+- `templates/listings/list.html` — listings table with status badges, template + status filter, pagination
+- `templates/listings/detail.html` — composite gallery + edit form + Upload / Sync / Re-render / Delete action bar; flash banner on redirect from wizard
+- `static/listings-admin.css` + `listings-admin.js` — styles + AJAX wiring for action buttons
+- `base.html` — "Listings" link added to admin nav (before legacy "Listing Creator")
+
+#### Wizard refactor (`app/routes/idea_wizard.py`)
+- Submit endpoint now calls `save_draft()` and returns `RedirectResponse` (303) to `/admin/listings/{id}?flash=Draft+saved...`
+- Old `wizard/success.html` flow removed — review and Etsy push happen on the listings detail page
+
+#### Tests (21 new, 518 total)
+- `tests/test_listing_service_refactor.py` (7) — save_draft persists local + no Etsy call, idempotent upsert, existing-live returns idempotent; upload_to_etsy CAS lock blocks concurrent, failure rolls back to 'failed', idempotent when already uploaded; create_from_template back-compat shim
+- `tests/test_etsy_client_delete_get.py` (3) — delete dry-run, delete 404 idempotent, get_listing payload shape
+- `tests/test_listings_admin_api.py` (8) — list filter, detail composite, PUT draft (local) vs live (write-through), upload, sync, rerender, delete
+- `tests/test_listings_admin_ui.py` (3) — detail gallery + form markers, status badge class, nav link
+- `tests/test_idea_wizard.py` — 3 wizard submit tests updated for 303 redirect + status='new' assertions
+
+### Changed
+
+- Wizard submit no longer pushes to Etsy on Save — produces a local draft with status='new'. Users complete the push from the listings detail page.
+- `Listing.etsy_listing_id` is now nullable (was unique-not-null) — local drafts have no Etsy ID until upload completes.
+- New `Listing.local_payload_json` (Text) carries editable fields (title, description, tags, enabled_combos, zone_designs, gallery_snapshot).
+- New `Listing.deleted_at` (DateTime) for soft-delete semantics — list view filters these out.
+- Listing status domain extended: `new | uploading | created | syncing | failed | deleted` (legacy values still accepted).
+
+### Migration
+
+- Alembic migration `36665e3c284b_add_local_draft_fields_to_listings.py` — relaxes `etsy_listing_id` to nullable + adds `local_payload_json`, `deleted_at`. SQLite batch-mode migration.
+- Existing listings keep their current state — populated rows continue working unchanged.
+
+### Breaking change
+
+- Wizard submit response: **303 redirect** to `/admin/listings/{id}` (was `200 wizard/success.html`). Callers parsing the success page must follow the redirect or read the listing via `GET /admin/listings/{id}`.
+
+### Plan reference
+
+- `plans/260515-0822-listing-management/plan.md`
+
+---
+
 ## [0.9.0] — 2026-05-15
 
 Template Image Pool. Per-template image rotation with up to 20 images, per-image anchor zones, and Etsy variation hero binding. Listing creator now renders all pool images, uploads top 10 by rank, and optionally binds per-color images as product variant photos on Etsy.

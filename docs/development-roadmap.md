@@ -139,6 +139,36 @@
 
 ---
 
+## v0.10.0 — Listing Management (local draft + 2-phase upload)
+
+### Scope
+
+| Sub-feature | Title | Status | Completed |
+|-------------|-------|--------|-----------|
+| — | [Listing Management](../plans/260515-0822-listing-management/plan.md) | **Complete** | 2026-05-15 |
+
+### v0.10.0 Success Metrics
+
+- [x] Wizard submit saves local draft (`status='new'`, `etsy_listing_id=NULL`) — no Etsy call at submit time
+- [x] Wizard returns 303 redirect to `/admin/listings/{id}` (was `wizard/success.html`)
+- [x] Listings admin: list + detail UI with status badges, template/status filter, pagination
+- [x] Detail page: composite gallery, edit form, action bar (Upload / Sync / Re-render / Delete)
+- [x] Service refactored: `save_draft()` (local) + `upload_to_etsy()` (CAS-locked Etsy push) + back-compat `create_from_template()` shim
+- [x] CAS lock blocks concurrent upload attempts (`ConflictError`); rollback to `failed` on Etsy error with `last_push_error`
+- [x] Etsy client: `delete_listing` (404=idempotent) + extended `get_listing` (full-payload sync)
+- [x] Live PUT writes through to Etsy `update_listing`; draft PUT is local-only
+- [x] Alembic migration relaxes `etsy_listing_id` to nullable + adds `local_payload_json`, `deleted_at`
+- [x] 21 new tests; 518 total passing (was 497)
+- [x] Docs updated: project-changelog, codebase-summary, system-architecture, development-roadmap
+
+### Deferred (post-v0.10.0)
+
+- Bulk operations (upload N drafts in one click)
+- Listing-level analytics (views/favorers timeseries on detail page)
+- Etsy state→local more granular mapping (sold_out / featured)
+
+---
+
 ## v1.0.0 — POD Catalog Integration (Planned)
 
 ### Scope

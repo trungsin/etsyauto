@@ -3,6 +3,8 @@
 User guide for the EtsyAuto **Etsy Listing Creator** (Sub-feature C, v0.4.0).
 Covers the end-to-end flow that turns a (template + design + colors + sizes) tuple into an Etsy *draft* listing with full variations matrix and per-color mockup images.
 
+> **v0.10 note:** From v0.10 the wizard saves a **local draft** (no Etsy call at submit time) and redirects to `/admin/listings/{id}`. Review composites + edit text on the listings detail page, then click **Upload** to push to Etsy. The single-shot `POST /listings/from-template` API documented below is retained as a back-compat shim (`listing_creator_service.create_from_template` runs `save_draft` + `upload_to_etsy` atomically). Prefer the 2-phase API (`save_draft` then `upload_to_etsy`) for new callers — it preserves the draft on failure so the admin UI can retry. See `docs/system-architecture.md` for the v0.10 lifecycle diagram.
+
 ---
 
 ## Table of Contents
