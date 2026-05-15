@@ -70,6 +70,11 @@ class Settings(BaseSettings):
     etsy_miner_interval_sec: int = 3600
     etsy_miner_per_keyword_limit: int = 10
     etsy_miner_throttle_ms: int = 200
+    # Quality gate: after fetching details, keep only top-N new candidates by
+    # num_favorers per run. Existing ideas (already in DB) are always processed
+    # so we don't lose signal history on previously-tracked items. Set to 0 to
+    # disable filter and keep every fetched listing (legacy behaviour).
+    etsy_miner_keep_top_n_per_run: int = 20
     idea_mining_enabled: bool = True
     # v0.8.2 — quota guard threshold (calls/day) above which /admin/keywords renders a
     # warn banner. Default 3000 = 30% of Etsy 10K QPD. Pure UI signal, no enforcement.

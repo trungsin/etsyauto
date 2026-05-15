@@ -88,6 +88,24 @@ def get_idea(db: Session, iid: int) -> Idea | None:
     return db.get(Idea, iid)
 
 
+def find_existing_source_listing_ids(
+    db: Session, *, source: str, source_listing_ids: list[str]
+) -> set[str]:
+    """Return the subset of ``source_listing_ids`` that already have an Idea row.
+
+    Used by the miner to split fetched listings into "already-tracked" (always
+    upserted to keep signal history fresh) vs "new candidates" (filtered to
+    top-N by favorers per run).
+    """
+    if not source_listing_ids:
+        return set()
+    stmt = select(Idea.source_listing_id).where(
+        Idea.source == source,
+        Idea.source_listing_id.in_(source_listing_ids),
+    )
+    return set(db.scalars(stmt).all())
+
+
 def reject_idea(db: Session, iid: int) -> Idea:
     """Mark an idea as rejected.
 

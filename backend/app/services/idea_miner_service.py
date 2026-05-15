@@ -128,15 +128,51 @@ def run_for_keyword(
             "miner: keyword=%r returned %d summaries", kw.term, len(summaries)
         )
 
+        # Phase 1: fetch all details (existing + new) so we can rank by favorers.
+        fetched: list[tuple[str, dict]] = []
         for summary in summaries:
             listing_id = summary.get("listing_id")
+            if listing_id is None:
+                continue
             try:
                 detail = client.get_listing(str(listing_id))
                 time.sleep(_DETAIL_THROTTLE_SEC)
+                fetched.append((str(listing_id), detail))
+            except Exception as exc:
+                logger.warning(
+                    "miner: skip listing=%s keyword=%r: %s",
+                    listing_id, kw.term, exc,
+                )
+                errors += 1
 
+        # Phase 2: split existing vs new. Always upsert existing (keep tracking
+        # signals even on cooled-down items). For new candidates, keep only
+        # top-N by num_favorers per run — drops the long tail of zero-fav noise.
+        existing_ids = idea_service.find_existing_source_listing_ids(
+            db, source="etsy_api",
+            source_listing_ids=[lid for lid, _ in fetched],
+        )
+        existing_payloads = [(lid, d) for lid, d in fetched if lid in existing_ids]
+        new_payloads = [(lid, d) for lid, d in fetched if lid not in existing_ids]
+
+        top_n = settings.etsy_miner_keep_top_n_per_run
+        if top_n > 0 and len(new_payloads) > top_n:
+            new_payloads.sort(
+                key=lambda x: x[1].get("num_favorers") or 0,
+                reverse=True,
+            )
+            dropped = len(new_payloads) - top_n
+            logger.info(
+                "miner: keyword=%r dropping %d new candidate(s) below top-%d (min favs in kept set=%d)",
+                kw.term, dropped, top_n, new_payloads[top_n - 1][1].get("num_favorers") or 0,
+            )
+            new_payloads = new_payloads[:top_n]
+
+        # Phase 3: upsert + signal for everything we kept.
+        for listing_id, detail in existing_payloads + new_payloads:
+            try:
                 idea_fields = _map_etsy_to_idea(detail, keyword_id=kw.id)
                 idea, _ = idea_service.upsert_idea(db, **idea_fields)
-
                 idea_service.append_signal(
                     db,
                     idea.id,
@@ -145,10 +181,9 @@ def run_for_keyword(
                 )
                 ideas_upserted += 1
                 signals_appended += 1
-
             except Exception as exc:
                 logger.warning(
-                    "miner: skip listing=%s keyword=%r: %s",
+                    "miner: upsert failed listing=%s keyword=%r: %s",
                     listing_id, kw.term, exc,
                 )
                 errors += 1

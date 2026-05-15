@@ -205,6 +205,85 @@ def test_run_for_keyword_one_bad_listing_skipped(db, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# Top-N filter: many new candidates → only top-N by favorers kept
+# ---------------------------------------------------------------------------
+
+
+def test_run_for_keyword_top_n_filter_keeps_high_favorers(db, monkeypatch):
+    """When new candidates exceed keep_top_n_per_run, low-favorers ones are dropped."""
+    monkeypatch.setattr(settings, "etsy_dry_run", False)
+    monkeypatch.setattr(settings, "etsy_miner_keep_top_n_per_run", 2)
+
+    kw = keyword_service.create_keyword(db, "trending tee")
+
+    # 5 listings: favorers 5, 200, 10, 500, 30 → top 2 by favorers = 500, 200
+    summaries = [{"listing_id": str(i)} for i in range(101, 106)]
+    favs_by_lid = {"101": 5, "102": 200, "103": 10, "104": 500, "105": 30}
+
+    def _detail(lid):
+        return {
+            "listing_id": int(lid),
+            "title": f"Listing {lid}",
+            "num_favorers": favs_by_lid[str(lid)],
+            "views_all_time": 100,
+            "price": {"amount": 1900, "divisor": 100},
+        }
+
+    mock_client = MagicMock(spec=EtsyPublicClient)
+    mock_client.search_active_listings.return_value = summaries
+    mock_client.get_listing.side_effect = lambda lid: _detail(lid)
+
+    with patch("app.services.idea_miner_service.time.sleep"):
+        result = idea_miner_service.run_for_keyword(db, kw.id, client=mock_client)
+
+    assert result["ideas_upserted"] == 2  # only top-2 by favorers
+    kept_favs = sorted(
+        idea_service.latest_signal(db, i.id).num_favorers
+        for i in idea_service.list_ideas(db, keyword_id=kw.id)
+    )
+    assert kept_favs == [200, 500]
+
+
+def test_run_for_keyword_top_n_existing_always_upserted(db, monkeypatch):
+    """Existing ideas in DB are always re-upserted, regardless of top-N cap on new candidates."""
+    monkeypatch.setattr(settings, "etsy_dry_run", False)
+    monkeypatch.setattr(settings, "etsy_miner_keep_top_n_per_run", 1)
+
+    kw = keyword_service.create_keyword(db, "established term")
+
+    # Pre-seed an existing idea (low favorers — would normally be filtered out)
+    idea_service.upsert_idea(
+        db, source="etsy_api", source_listing_id="999",
+        title="Already Tracked", keyword_id=kw.id,
+    )
+
+    summaries = [
+        {"listing_id": "999"},  # existing — should always be processed
+        {"listing_id": "888"},  # new, high-fav — kept by top-1
+        {"listing_id": "777"},  # new, low-fav — dropped
+    ]
+    favs = {"999": 2, "888": 800, "777": 5}
+
+    mock_client = MagicMock(spec=EtsyPublicClient)
+    mock_client.search_active_listings.return_value = summaries
+    mock_client.get_listing.side_effect = lambda lid: {
+        "listing_id": int(lid),
+        "title": f"L{lid}",
+        "num_favorers": favs[str(lid)],
+        "views_all_time": 50,
+        "price": {"amount": 1900, "divisor": 100},
+    }
+
+    with patch("app.services.idea_miner_service.time.sleep"):
+        result = idea_miner_service.run_for_keyword(db, kw.id, client=mock_client)
+
+    # 999 (existing) + 888 (top-1 new) = 2 upserted; 777 dropped
+    assert result["ideas_upserted"] == 2
+    kept = {i.source_listing_id for i in idea_service.list_ideas(db, keyword_id=kw.id)}
+    assert kept == {"999", "888"}
+
+
+# ---------------------------------------------------------------------------
 # run_all: respects enabled flag
 # ---------------------------------------------------------------------------
 

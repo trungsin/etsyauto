@@ -94,15 +94,21 @@
   </tbody>
 </table>
 
-{# Offset-based pagination #}
-<div style="display:flex;gap:.5rem;margin-top:1rem;">
+{# Offset-based pagination — emit only non-empty filter params to avoid 422 on int|None coercion #}
+{% set _base = [] %}
+{% if filter_keyword_id %}{% set _ = _base.append("keyword_id=" ~ filter_keyword_id) %}{% endif %}
+{% if filter_status %}{% set _ = _base.append("status=" ~ filter_status) %}{% endif %}
+{% if filter_source %}{% set _ = _base.append("source=" ~ filter_source) %}{% endif %}
+{% set _ = _base.append("sort=" ~ filter_sort) %}
+{% set _qs = _base | join("&") %}
+<div style="display:flex;gap:.5rem;margin-top:1rem;align-items:center;">
+  <span style="color:#6b7280;font-size:.85rem;">Page {{ (offset // limit) + 1 }} · showing {{ ideas|length }} of ≥{{ offset + ideas|length }}</span>
+  <div style="flex:1;"></div>
   {% if offset > 0 %}
-    <a href="?keyword_id={{ filter_keyword_id or '' }}&status={{ filter_status }}&source={{ filter_source }}&sort={{ filter_sort }}&offset={{ [offset - limit, 0]|max }}"
-       class="btn btn-secondary">← Previous</a>
+    <a href="?{{ _qs }}&offset={{ [offset - limit, 0]|max }}" class="btn btn-secondary">← Previous</a>
   {% endif %}
   {% if ideas|length == limit %}
-    <a href="?keyword_id={{ filter_keyword_id or '' }}&status={{ filter_status }}&source={{ filter_source }}&sort={{ filter_sort }}&offset={{ offset + limit }}"
-       class="btn btn-secondary">Next →</a>
+    <a href="?{{ _qs }}&offset={{ offset + limit }}" class="btn btn-secondary">Next →</a>
   {% endif %}
 </div>
 {% else %}
