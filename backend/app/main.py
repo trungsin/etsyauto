@@ -32,6 +32,7 @@ from app.routes.ideas_admin import router as ideas_admin_router
 from app.routes.idea_wizard import router as idea_wizard_router
 from app.routes.extension_idea_api import router as extension_idea_router
 from app.routes.template_images_admin import router as template_images_admin_router
+from app.routes.listings_admin import router as listings_admin_router
 
 # Jinja2 templates — shared instance; imported by templates_admin.py lazily
 _templates_dir = Path(__file__).parent / "templates"
@@ -191,3 +192,4 @@ app.include_router(ideas_admin_router)
 app.include_router(idea_wizard_router)
 app.include_router(extension_idea_router)
 app.include_router(template_images_admin_router)
+app.include_router(listings_admin_router)

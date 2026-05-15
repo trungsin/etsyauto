@@ -1,0 +1,65 @@
+/* listings-admin.css — list + detail pages for /admin/listings. */
+
+.lst-filter { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: end; margin-bottom: 1rem; }
+.lst-filter label { display: flex; flex-direction: column; font-size: 0.8rem; }
+.lst-filter select { padding: 0.3rem; }
+
+.lst-table { width: 100%; font-size: 0.88rem; }
+.lst-table th, .lst-table td { padding: 0.4rem 0.6rem; vertical-align: middle; }
+.lst-thumb { width: 48px; height: 48px; object-fit: cover; border-radius: 4px; }
+.lst-title { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lst-date { white-space: nowrap; color: #6b7280; font-size: 0.78rem; }
+
+.lst-pager { display: flex; gap: 0.5rem; align-items: center; margin-top: 1rem; }
+
+/* Status badges */
+.badge-new       { background: #dbeafe; color: #1e3a8a; }
+.badge-uploading { background: #fef3c7; color: #92400e; }
+.badge-created   { background: #d1fae5; color: #065f46; }
+.badge-syncing   { background: #ede9fe; color: #5b21b6; }
+.badge-failed    { background: #fee2e2; color: #991b1b; }
+.badge-deleted   { background: #e5e7eb; color: #4b5563; text-decoration: line-through; }
+
+/* Detail page */
+.lst-status-pill { font-size: 0.9rem; padding: 0.25rem 0.7rem; }
+.lst-actions {
+  display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;
+  margin-bottom: 1rem; padding: 0.75rem; background: #f9fafb;
+  border: 1px solid #e5e7eb; border-radius: 8px;
+}
+.lst-status-ok  { color: #065f46; }
+.lst-status-err { color: #991b1b; }
+
+.lst-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 1.25rem; }
+@media (max-width: 880px) { .lst-grid { grid-template-columns: 1fr; } }
+
+.lst-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+}
+.lst-card h2 { font-size: 1rem; margin: 0 0 0.75rem 0; }
+
+.lst-gallery { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem; }
+.lst-gallery figure { margin: 0; }
+.lst-gallery img { width: 100%; height: auto; border-radius: 4px; display: block; }
+.lst-gallery figcaption { font-size: 0.75rem; color: #6b7280; padding: 0.25rem; }
+
+#lst-edit-form { display: flex; flex-direction: column; gap: 0.6rem; }
+#lst-edit-form label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; }
+#lst-edit-form input, #lst-edit-form textarea {
+  padding: 0.4rem 0.55rem;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 0.88rem;
+  box-sizing: border-box;
+}
+#lst-edit-form textarea { resize: vertical; min-height: 8rem; }
+
+.lst-meta { margin-top: 1rem; padding-top: 0.75rem; border-top: 1px dashed #e5e7eb; }
+.lst-meta summary { cursor: pointer; color: #4f46e5; font-size: 0.88rem; }
+
+.muted { color: #6b7280; font-size: 0.82rem; }
+.banner-info { background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; padding: 0.6rem 0.85rem; border-radius: 6px; margin-bottom: 1rem; }

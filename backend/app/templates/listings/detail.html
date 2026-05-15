@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}{{ listing.title or 'Listing' }} — EtsyAuto Admin{% endblock %}
+{% block extra_head %}
+<link rel="stylesheet" href="/admin/static/listings-admin.css">
+{% endblock %}
+{% block content %}
+{% if request.query_params.get('flash') %}
+<div class="banner banner-info">{{ request.query_params.get('flash') }}</div>
+{% endif %}
+
+<div class="page-header">
+  <h1>{{ listing.title or '(untitled)' }}</h1>
+  <span class="badge badge-{{ listing.status }} lst-status-pill">{{ listing.status }}</span>
+  <div style="flex:1;"></div>
+  <a href="/admin/listings" class="btn btn-secondary">← All listings</a>
+</div>
+
+{% if listing.last_push_error %}
+<div class="banner banner-warn">
+  <strong>Last error:</strong> {{ listing.last_push_error }}
+</div>
+{% endif %}
+
+{# Action bar #}
+<div class="lst-actions">
+  {% if listing.status in ('new', 'failed') %}
+  <button type="button" class="btn btn-primary" id="btn-upload">Upload to Etsy</button>
+  {% endif %}
+  {% if listing.etsy_listing_id %}
+  <a href="{{ draft_url }}" target="_blank" rel="noopener" class="btn btn-secondary">Open on Etsy ↗</a>
+  <button type="button" class="btn btn-secondary" id="btn-sync">Sync from Etsy</button>
+  {% endif %}
+  <button type="button" class="btn btn-secondary" id="btn-rerender">Re-render images</button>
+  <div style="flex:1;"></div>
+  <button type="button" class="btn btn-danger" id="btn-delete">Delete</button>
+  <span id="lst-status-msg" class="muted"></span>
+</div>
+
+<div class="lst-grid">
+  {# Left: composite gallery #}
+  <section class="lst-card">
+    <h2>Composite Gallery <span class="muted">({{ listing.gallery|length }} images)</span></h2>
+    <div class="lst-gallery">
+      {% for g in listing.gallery %}
+      <figure>
+        <img src="{{ g.url }}" alt="rank {{ g.rank }}" loading="lazy">
+        <figcaption>
+          #{{ g.rank }} · {{ g.color or 'universal' }}
+        </figcaption>
+      </figure>
+      {% else %}
+      <p class="muted">No rendered images. Click "Re-render images" to regenerate.</p>
+      {% endfor %}
+    </div>
+  </section>
+
+  {# Right: edit form #}
+  <section class="lst-card">
+    <h2>Edit</h2>
+    <form id="lst-edit-form" onsubmit="return false;">
+      <label>Title
+        <input type="text" name="title" value="{{ listing.title or '' }}" maxlength="140" required>
+      </label>
+      <label>Description
+        <textarea name="description" rows="8">{{ listing.description or '' }}</textarea>
+      </label>
+      <label>Tags <span class="muted">(comma-separated, max 13)</span>
+        <input type="text" name="tags" value="{{ listing.tags | join(', ') }}">
+      </label>
+      <button type="button" class="btn btn-primary" id="btn-save-edit">Save changes</button>
+      <span class="muted">
+        {% if listing.status == 'created' %}edits push to Etsy immediately{% else %}local only — not on Etsy yet{% endif %}
+      </span>
+    </form>
+
+    <details class="lst-meta">
+      <summary>Variations &amp; pricing ({{ listing.enabled_combos|length }} combos)</summary>
+      {% if listing.enabled_combos %}
+      <table class="vo-table">
+        <thead><tr><th>Size</th><th>Color</th></tr></thead>
+        <tbody>
+          {% for c in listing.enabled_combos %}
+          <tr><td>{{ c.size }}</td><td>{{ c.color }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+      <p class="muted">To change sizes/colors/prices, edit the template at
+        <a href="/admin/templates/{{ listing.template_id }}">{{ listing.template_name }}</a>
+        and re-render here.</p>
+    </details>
+  </section>
+</div>
+
+<script>
+  window.__listingId = {{ listing.id }};
+</script>
+<script src="/admin/static/listings-admin.js" defer></script>
+{% endblock %}

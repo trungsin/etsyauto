@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Listings — EtsyAuto Admin{% endblock %}
+{% block extra_head %}
+<link rel="stylesheet" href="/admin/static/listings-admin.css">
+{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Listings</h1>
+</div>
+
+<form method="get" action="/admin/listings" class="lst-filter">
+  <label>Status
+    <select name="status">
+      <option value="">All</option>
+      {% for s in valid_statuses %}
+      <option value="{{ s }}" {{ 'selected' if filter_status == s }}>{{ s }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Template
+    <select name="template_id">
+      <option value="">All</option>
+      {% for t in templates %}
+      <option value="{{ t.id }}" {{ 'selected' if filter_template_id == t.id }}>{{ t.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <button type="submit" class="btn btn-primary">Filter</button>
+  <a href="/admin/listings" class="btn btn-secondary">Reset</a>
+</form>
+
+{% if listings %}
+<table class="table lst-table">
+  <thead>
+    <tr>
+      <th>Thumb</th><th>Title</th><th>Status</th><th>Etsy</th><th>Template</th><th>Created</th><th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for l in listings %}
+    <tr id="lst-row-{{ l.id }}">
+      <td>
+        {% if l.gallery and l.gallery[0].url %}
+        <img src="{{ l.gallery[0].url }}" alt="" class="thumb lst-thumb">
+        {% else %}<span class="muted">—</span>{% endif %}
+      </td>
+      <td class="lst-title">
+        <a href="/admin/listings/{{ l.id }}">{{ l.title or '(no title)' }}</a>
+      </td>
+      <td>
+        <span class="badge badge-{{ l.status }}">{{ l.status }}</span>
+      </td>
+      <td>
+        {% if l.etsy_listing_id %}
+        <a href="https://www.etsy.com/your/shops/me/tools/listings/{{ l.etsy_listing_id }}"
+           target="_blank" rel="noopener">#{{ l.etsy_listing_id }}</a>
+        {% else %}<span class="muted">—</span>{% endif %}
+      </td>
+      <td>{{ l.template_name or '—' }}</td>
+      <td class="lst-date">{{ l.created_at.strftime('%Y-%m-%d %H:%M') if l.created_at else '—' }}</td>
+      <td>
+        <a href="/admin/listings/{{ l.id }}" class="btn btn-sm">View</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{# Pagination — same pattern as ideas list (only emit non-empty params) #}
+{% set _base = [] %}
+{% if filter_status %}{% set _ = _base.append("status=" ~ filter_status) %}{% endif %}
+{% if filter_template_id %}{% set _ = _base.append("template_id=" ~ filter_template_id) %}{% endif %}
+{% set _qs = _base | join("&") %}
+<div class="lst-pager">
+  <span class="muted">Page {{ (offset // limit) + 1 }} · showing {{ listings|length }}</span>
+  <div style="flex:1;"></div>
+  {% if offset > 0 %}
+  <a href="?{{ _qs }}{% if _qs %}&{% endif %}offset={{ [offset - limit, 0]|max }}" class="btn btn-secondary">← Previous</a>
+  {% endif %}
+  {% if listings|length == limit %}
+  <a href="?{{ _qs }}{% if _qs %}&{% endif %}offset={{ offset + limit }}" class="btn btn-secondary">Next →</a>
+  {% endif %}
+</div>
+{% else %}
+<p class="empty-state">No listings yet. Use the <a href="/admin/ideas">Ideas</a> wizard to save your first draft.</p>
+{% endif %}
+{% endblock %}
