@@ -1,0 +1,94 @@
+/* variation-options.css — styles for the structured Variation Options editor. */
+
+.variation-options-section {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+}
+.variation-options-section .pool-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+.variation-options-section h2 { font-size: 1.1rem; margin: 0; flex: 1; }
+.variation-options-section h3 {
+  font-size: 0.95rem;
+  margin: 0 0 0.5rem 0;
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+.vo-hint { font-size: 0.78rem; color: #6b7280; font-weight: normal; }
+
+.vo-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+@media (max-width: 720px) {
+  .vo-grid { grid-template-columns: 1fr; }
+}
+
+.vo-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 0.75rem;
+  background: #fafafa;
+}
+.vo-table { width: 100%; border-collapse: collapse; margin-bottom: 0.5rem; }
+.vo-table th, .vo-table td { padding: 0.25rem 0.4rem; font-size: 0.85rem; }
+.vo-table thead th {
+  text-align: left;
+  font-weight: 600;
+  color: #374151;
+  border-bottom: 1px solid #e5e7eb;
+}
+.vo-input {
+  width: 100%;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  box-sizing: border-box;
+}
+.vo-input:focus { outline: none; border-color: #4f46e5; box-shadow: 0 0 0 2px rgba(79,70,229,0.15); }
+
+.vo-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+  margin: 0.75rem 0;
+}
+.vo-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.82rem;
+  color: #374151;
+}
+
+.vo-json-view {
+  margin-top: 0.75rem;
+  border-top: 1px dashed #e5e7eb;
+  padding-top: 0.5rem;
+}
+.vo-json-view summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: #4f46e5;
+  user-select: none;
+}
+.vo-json-view summary:hover { text-decoration: underline; }
+.vo-json-view pre {
+  background: #1f2937;
+  color: #f3f4f6;
+  padding: 0.75rem;
+  border-radius: 4px;
+  font-size: 0.78rem;
+  overflow-x: auto;
+  margin-top: 0.5rem;
+}

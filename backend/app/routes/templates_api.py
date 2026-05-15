@@ -4,7 +4,7 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -41,7 +41,11 @@ class VariationOptions(BaseModel):
 
     `sizes` accepts either legacy list[str] (v0.2.0) or list[{name, price_cents}] (v0.4.0+).
     `primary_color` and `etsy_taxonomy_id` are used by the Listing Creator (sub-feature C).
+    Extra keys (e.g. shipping_profile_id, readiness_state_id, item_weight) are
+    preserved through PUT round-trips so the admin UI can save them.
     """
+
+    model_config = ConfigDict(extra="allow")
 
     sizes: list[Any] = []
     colors: list[str] = []

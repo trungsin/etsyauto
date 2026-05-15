@@ -2,6 +2,7 @@
 {% block title %}{{ template.name }} — EtsyAuto Admin{% endblock %}
 {% block extra_head %}
 <link rel="stylesheet" href="/admin/static/image-pool.css">
+<link rel="stylesheet" href="/admin/static/variation-options.css">
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 {% endblock %}
 {% block content %}
@@ -25,6 +26,9 @@
   </div>
 </div>
 
+{# Variation options editor — sizes / colors / Etsy IDs #}
+{% include "templates/_variation_options.html" %}
+
 {# Image Pool section — HTMX target for swaps #}
 <div id="image-pool">
   {% include "templates/_image_pool.html" %}
@@ -37,4 +41,5 @@
   window.__templateId = {{ template.id }};
 </script>
 <script src="/admin/static/image-pool.js" defer></script>
+<script src="/admin/static/variation-options.js" defer></script>
 {% endblock %}

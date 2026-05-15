@@ -221,7 +221,7 @@ def _build_detail_context(db: Session, template_id: int) -> dict:
     opts = json.loads(tmpl.variation_options_json or "{}") if tmpl.variation_options_json else {}
     colors: list[str] = opts.get("colors", [])
     images = template_image_service.list_for_template(db, template_id)
-    return {"template": tmpl, "colors": colors, "images": images}
+    return {"template": tmpl, "colors": colors, "images": images, "opts": opts}
 
 
 @router.get("/{template_id}", response_class=HTMLResponse)

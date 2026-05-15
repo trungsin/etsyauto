@@ -1,0 +1,77 @@
+{# Variation options editor — structured form for sizes/colors/pricing/Etsy IDs.
+   Context: template (Template), opts (dict parsed from variation_options_json).
+   JS in variation-options.js wires add/remove rows + save → PUT /templates/{id}.
+#}
+<section id="variation-options" class="variation-options-section">
+  <div class="pool-header">
+    <h2>Variation Options</h2>
+    <button type="button" class="btn btn-primary btn-sm" id="vo-save">Save</button>
+    <span id="vo-status" style="font-size:0.85rem;color:#6b7280;"></span>
+  </div>
+
+  <div class="vo-grid">
+    {# Sizes editor — progressive pricing per size #}
+    <div class="vo-card">
+      <h3>Sizes <span class="vo-hint">price per size (USD cents)</span></h3>
+      <table class="vo-table" id="vo-sizes-table">
+        <thead><tr><th style="width:6rem;">Name</th><th>Price (cents)</th><th style="width:3rem;"></th></tr></thead>
+        <tbody id="vo-sizes-body">
+          {% for s in opts.get("sizes", []) %}
+            {% set name = s.name if s is mapping else s %}
+            {% set price = s.price_cents if s is mapping else (template.default_price_cents or 0) %}
+          <tr class="vo-size-row">
+            <td><input type="text" class="vo-input" data-field="name" value="{{ name }}"></td>
+            <td><input type="number" class="vo-input" data-field="price_cents" min="0" value="{{ price }}"></td>
+            <td><button type="button" class="btn btn-danger btn-sm vo-remove">×</button></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <button type="button" class="btn btn-secondary btn-sm" id="vo-size-add">+ Add size</button>
+    </div>
+
+    {# Colors editor #}
+    <div class="vo-card">
+      <h3>Colors <span class="vo-hint">must match Etsy primary_color values</span></h3>
+      <table class="vo-table" id="vo-colors-table">
+        <thead><tr><th>Name</th><th style="width:3rem;"></th></tr></thead>
+        <tbody id="vo-colors-body">
+          {% for c in opts.get("colors", []) %}
+          <tr class="vo-color-row">
+            <td><input type="text" class="vo-input" data-field="name" value="{{ c }}"></td>
+            <td><button type="button" class="btn btn-danger btn-sm vo-remove">×</button></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <button type="button" class="btn btn-secondary btn-sm" id="vo-color-add">+ Add color</button>
+    </div>
+  </div>
+
+  {# Etsy IDs + primary color #}
+  <div class="vo-fields">
+    <label>Primary color
+      <select id="vo-primary-color" class="vo-input">
+        <option value="">— none —</option>
+        {% for c in opts.get("colors", []) %}
+        <option value="{{ c }}" {% if opts.get("primary_color") == c %}selected{% endif %}>{{ c }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Etsy taxonomy_id
+      <input type="number" id="vo-taxonomy" class="vo-input" value="{{ opts.get('etsy_taxonomy_id') or '' }}">
+    </label>
+    <label>Shipping profile_id
+      <input type="number" id="vo-shipping" class="vo-input" value="{{ opts.get('shipping_profile_id') or '' }}">
+    </label>
+    <label>Readiness state_id
+      <input type="number" id="vo-readiness" class="vo-input" value="{{ opts.get('readiness_state_id') or '' }}">
+    </label>
+  </div>
+
+  {# Raw JSON preview — collapsible for power users #}
+  <details class="vo-json-view">
+    <summary>View raw JSON</summary>
+    <pre id="vo-json-preview">{{ opts | tojson(indent=2) }}</pre>
+  </details>
+</section>

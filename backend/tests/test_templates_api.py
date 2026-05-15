@@ -247,3 +247,46 @@ def test_admin_templates_list_ok(client):
     resp = client.get("/admin/templates", headers=VALID_HEADERS)
     assert resp.status_code == 200
     assert b"Templates" in resp.content
+
+
+# ---------------------------------------------------------------------------
+# PUT /templates/{id} — variation_options extras must round-trip
+# ---------------------------------------------------------------------------
+
+def test_update_template_preserves_variation_options_extras(client):
+    """shipping_profile_id, readiness_state_id etc. must survive PUT (admin UI relies on this)."""
+    # Seed a template directly via the test session
+    with _TestingSessionLocal() as s:
+        from app.models.template import Template
+        t = Template(
+            name="X", category="apparel",
+            base_image_url="https://example.com/x.png",
+            composite_anchor_json='{"x":0.2,"y":0.2,"w":0.6,"h":0.6}',
+            default_price_cents=1900,
+            variation_options_json="{}",
+        )
+        s.add(t)
+        s.commit()
+        s.refresh(t)
+        tid = t.id
+
+    new_options = {
+        "sizes": [{"name": "S", "price_cents": 1900}, {"name": "L", "price_cents": 2100}],
+        "colors": ["White", "Black"],
+        "primary_color": "White",
+        "etsy_taxonomy_id": 559,
+        "shipping_profile_id": 305316740744,
+        "readiness_state_id": 1487657403639,
+    }
+
+    resp = client.put(
+        f"/templates/{tid}",
+        headers=VALID_HEADERS,
+        json={"variation_options": new_options},
+    )
+    assert resp.status_code == 200, resp.text
+    out = resp.json()["variation_options"]
+    assert out["shipping_profile_id"] == 305316740744
+    assert out["readiness_state_id"] == 1487657403639
+    assert out["primary_color"] == "White"
+    assert out["sizes"] == new_options["sizes"]
