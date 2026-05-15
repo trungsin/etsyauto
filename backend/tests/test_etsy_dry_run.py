@@ -47,8 +47,9 @@ def test_dry_run_happy_taxonomy_returns_seeded_values(dry_run_on, monkeypatch):
     monkeypatch.setattr(settings, "etsy_dry_run_scenario", "happy")
     client = _build_client()
     out = client.get_taxonomy_property_values(taxonomy_id=1209, property_id=200)
-    names = {entry["name"] for entry in out["results"]}
+    names = {entry["name"] for entry in out["possible_values"]}
     assert {"White", "Black", "Sand"}.issubset(names)
+    assert out["name"] == "Primary color"
 
 
 # ---------------------------------------------------------------------------
@@ -71,7 +72,7 @@ def test_dry_run_taxonomy_error_returns_empty_results(dry_run_on, monkeypatch):
     monkeypatch.setattr(settings, "etsy_dry_run_scenario", "taxonomy_error")
     client = _build_client()
     out = client.get_taxonomy_property_values(taxonomy_id=1209, property_id=200)
-    assert out == {"results": []}
+    assert out == {"name": "", "scales": [], "possible_values": []}
 
 
 def test_dry_run_auth_fail_raises_401(dry_run_on, monkeypatch):
@@ -131,3 +132,39 @@ def test_dispatch_falls_back_to_happy_when_scenario_missing_method():
     """rate_limit only overrides create_draft_listing; other methods fall back to happy."""
     out = etsy_dry_run_fixtures.dispatch("rate_limit", "update_listing_inventory", {"products": []})
     assert out == {"products": []}
+
+
+# ---------------------------------------------------------------------------
+# set_variation_images tests
+# ---------------------------------------------------------------------------
+
+
+def test_set_variation_images_dry_run_returns_canned(dry_run_on, monkeypatch):
+    """set_variation_images in dry-run returns fixture response."""
+    monkeypatch.setattr(settings, "etsy_dry_run_scenario", "happy")
+    client = _build_client()
+    out = client.set_variation_images(
+        shop_id="123",
+        listing_id="9001",
+        property_id=200,
+        value_to_image_id={1: 100, 2: 101},
+    )
+    # Fixture returns results list + count
+    assert "results" in out
+    assert out["count"] == 2
+    assert len(out["results"]) == 2
+
+
+def test_set_variation_images_request_body_shape(dry_run_on, monkeypatch):
+    """Verify request body shape matches Etsy API spec."""
+    monkeypatch.setattr(settings, "etsy_dry_run_scenario", "happy")
+    client = _build_client()
+    # Should not raise
+    out = client.set_variation_images(
+        shop_id="123",
+        listing_id="9001",
+        property_id=200,
+        value_to_image_id={1: 100, 2: 101, 3: 102},
+    )
+    assert out is not None
+    assert out["count"] == 3

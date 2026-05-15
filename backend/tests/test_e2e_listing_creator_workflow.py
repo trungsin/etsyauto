@@ -282,12 +282,11 @@ def test_e2e_creator_workflow_happy_path(client, db_session):
     products = inv_args.args[1] if len(inv_args.args) > 1 else inv_args.kwargs["products"]
     assert len(products) == 8
 
-    # Image uploads: 1 per distinct color used (all 3 still used at least once)
-    assert etsy.upload_listing_image_bytes.call_count == 3
-    # First rank goes to primary_color "Sand"
+    # Image uploads: 1 universal + 3 per-color (gallery sorted by template_image.rank)
+    assert etsy.upload_listing_image_bytes.call_count == 4
+    # First upload gets rank=1 (loop counter) regardless of color
     first_call = etsy.upload_listing_image_bytes.call_args_list[0]
     assert first_call.kwargs.get("rank") == 1
-    assert "Sand" in first_call.kwargs.get("filename", "")
 
     # Local Listing row persisted with template/design link
     rows = list(db_session.scalars(select(Listing)))
