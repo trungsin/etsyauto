@@ -1,0 +1,66 @@
+{# Single image pool row — updated via JS fetch (PATCH sends JSON body).
+   Context: img (TemplateImageView), template, colors (list[str])
+#}
+<tr id="pool-row-{{ img.id or 'v' ~ loop_index0 }}"
+    class="pool-row{% if not img.is_virtual %} pool-row-real{% endif %}"
+    {% if not img.is_virtual %}data-id="{{ img.id }}" data-rank="{{ img.rank }}"{% endif %}>
+  <td class="drag-handle" title="{% if img.is_virtual %}Virtual row{% else %}Drag to reorder{% endif %}"
+      style="{% if img.is_virtual %}color:#d1d5db;cursor:default;{% endif %}">&#9776;</td>
+  <td>
+    <img src="{{ img.image_url }}" alt="image {{ img.rank }}"
+         class="thumb pool-thumb"
+         loading="lazy"
+         data-img-id="{{ img.id }}"
+         data-anchor='{{ img.anchor_json | e }}'
+         data-img-url="{{ img.image_url | e }}"
+         style="cursor:{% if img.is_virtual %}default{% else %}pointer{% endif %};"
+         {% if not img.is_virtual %}onclick="window.__imagePool.openAnchorModal(this)"{% endif %}>
+  </td>
+  <td>
+    {% if img.is_virtual %}
+      <span class="badge">{{ img.color or "universal" }} (virtual)</span>
+    {% else %}
+      <select class="pool-select"
+              onchange="window.__imagePool.patchImage({{ template.id }}, {{ img.id }}, {color: this.value})">
+        <option value="">— universal —</option>
+        {% for c in colors %}
+        <option value="{{ c }}" {% if img.color == c %}selected{% endif %}>{{ c }}</option>
+        {% endfor %}
+      </select>
+    {% endif %}
+  </td>
+  <td>
+    {% if img.is_virtual %}
+      <span>{{ img.rank }}</span>
+    {% else %}
+      <input type="number" class="pool-rank-input" value="{{ img.rank }}" min="0"
+             style="width:60px;"
+             onchange="window.__imagePool.patchImage({{ template.id }}, {{ img.id }}, {rank: parseInt(this.value, 10)})">
+    {% endif %}
+  </td>
+  <td>
+    {% if img.is_virtual %}
+      <span class="badge">{{ img.role }}</span>
+    {% else %}
+      <select class="pool-select"
+              onchange="window.__imagePool.patchImage({{ template.id }}, {{ img.id }}, {role: this.value})">
+        <option value="mockup" {% if img.role == "mockup" %}selected{% endif %}>Mockup</option>
+        <option value="lifestyle_no_fill" {% if img.role == "lifestyle_no_fill" %}selected{% endif %}>Lifestyle</option>
+      </select>
+    {% endif %}
+  </td>
+  <td style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;">
+    {% if not img.is_virtual %}
+    <button class="btn btn-secondary btn-sm"
+            onclick="window.__imagePool.openAnchorModal(this.closest('tr').querySelector('.pool-thumb'))">
+      Edit anchor
+    </button>
+    <button class="btn btn-danger btn-sm"
+            onclick="if(confirm('Delete this image?')) window.__imagePool.deleteImage({{ template.id }}, {{ img.id }})">
+      Delete
+    </button>
+    {% else %}
+    <span style="color:#9ca3af;font-size:0.82rem;">virtual</span>
+    {% endif %}
+  </td>
+</tr>

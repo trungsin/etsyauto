@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}{{ template.name }} — EtsyAuto Admin{% endblock %}
+{% block extra_head %}
+<link rel="stylesheet" href="/admin/static/image-pool.css">
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>{{ template.name }}</h1>
+  <div style="display:flex;gap:0.5rem;">
+    <a href="/admin/templates" class="btn btn-secondary">← Templates</a>
+    <a href="/admin/templates/{{ template.id }}/anchor" class="btn">Edit Anchor</a>
+    <a href="/admin/templates/{{ template.id }}/variations" class="btn">Variations</a>
+  </div>
+</div>
+
+<div style="display:flex;gap:1.5rem;align-items:flex-start;margin-bottom:1.5rem;">
+  <img src="{{ template.base_image_url }}" alt="{{ template.name }}"
+       style="width:120px;height:120px;object-fit:cover;border-radius:6px;border:1px solid #ddd;"
+       loading="lazy">
+  <div>
+    <p><strong>Category:</strong> {{ template.category }}</p>
+    <p><strong>Default price:</strong> {{ template.default_price_cents }} cents</p>
+    <p><strong>Colors:</strong> {{ colors | join(", ") or "—" }}</p>
+  </div>
+</div>
+
+{# Image Pool section — HTMX target for swaps #}
+<div id="image-pool">
+  {% include "templates/_image_pool.html" %}
+</div>
+
+{# Anchor editor modal — reused for per-image zone editing #}
+{% include "templates/_anchor_editor_modal.html" %}
+
+<script>
+  window.__templateId = {{ template.id }};
+</script>
+<script src="/admin/static/image-pool.js" defer></script>
+{% endblock %}

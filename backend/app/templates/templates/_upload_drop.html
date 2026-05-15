@@ -1,0 +1,30 @@
+{# Drag-and-drop multi-upload zone.
+   Posts multipart to /admin/templates/{id}/images; full pool reloads via #image-pool.
+   Color/role defaults can be set before drop; rank auto-assigned server-side.
+#}
+<div class="drop-zone" id="drop-zone">
+  <input type="file" id="pool-file-input" accept="image/png,image/jpeg"
+         multiple style="display:none;">
+  <label for="pool-file-input" style="cursor:pointer;">
+    + Drop PNG/JPG files here or click to select (max 20 MB each)
+  </label>
+  <div class="drop-meta" style="margin-top:0.5rem;display:flex;gap:1rem;align-items:center;flex-wrap:wrap;">
+    <label style="font-size:0.85rem;">
+      Default color:
+      <select id="drop-color" style="font-size:0.85rem;">
+        <option value="">— universal —</option>
+        {% for c in colors %}
+        <option value="{{ c }}">{{ c }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label style="font-size:0.85rem;">
+      Default role:
+      <select id="drop-role" style="font-size:0.85rem;">
+        <option value="mockup">Mockup</option>
+        <option value="lifestyle_no_fill">Lifestyle</option>
+      </select>
+    </label>
+  </div>
+  <div id="upload-progress" style="margin-top:0.5rem;"></div>
+</div>

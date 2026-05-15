@@ -17,6 +17,7 @@ from app.services import (
     composite_service,
     design_service,
     listing_creator_service,
+    template_image_service,
     template_service,
     variation_service,
 )
@@ -206,6 +207,49 @@ def delete_template_form(
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return RedirectResponse(url="/admin/templates", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Template detail page + image pool HTML partial
+# ---------------------------------------------------------------------------
+
+def _build_detail_context(db: Session, template_id: int) -> dict:
+    """Shared context for the template detail page and pool partial."""
+    tmpl = template_service.get_template(db, template_id)
+    if tmpl is None:
+        raise HTTPException(status_code=404, detail="Template not found")
+    opts = json.loads(tmpl.variation_options_json or "{}") if tmpl.variation_options_json else {}
+    colors: list[str] = opts.get("colors", [])
+    images = template_image_service.list_for_template(db, template_id)
+    return {"template": tmpl, "colors": colors, "images": images}
+
+
+@router.get("/{template_id}", response_class=HTMLResponse)
+def template_detail_ui(
+    template_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    x_admin_token: str | None = Header(default=None),
+    admin_token: str | None = Cookie(default=None),
+) -> HTMLResponse:
+    """Render the template detail page (metadata + image pool)."""
+    _check_token(x_admin_token, request, admin_token)
+    ctx = _build_detail_context(db, template_id)
+    return get_jinja().TemplateResponse(request, "templates/detail.html", ctx)
+
+
+@router.get("/{template_id}/images/partial", response_class=HTMLResponse)
+def image_pool_partial(
+    template_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    x_admin_token: str | None = Header(default=None),
+    admin_token: str | None = Cookie(default=None),
+) -> HTMLResponse:
+    """HTMX partial: render the image pool section for swap into #image-pool."""
+    _check_token(x_admin_token, request, admin_token)
+    ctx = _build_detail_context(db, template_id)
+    return get_jinja().TemplateResponse(request, "templates/_image_pool.html", ctx)
 
 
 # ---------------------------------------------------------------------------

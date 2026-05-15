@@ -1,0 +1,63 @@
+{# Image Pool section partial — HTMX swap target: #image-pool
+   Context vars: template, images (list[TemplateImageView]), colors (list[str])
+#}
+<div class="pool-header">
+  <h2>Image Pool <span class="pool-count">{{ images | length }} / 20 used</span></h2>
+  <div style="display:flex;gap:0.5rem;align-items:center;">
+    {% if images and not images[0].is_virtual %}
+      {# Pool has real rows — show nothing extra #}
+    {% elif template.base_image_url %}
+      <button class="btn btn-secondary btn-sm"
+              onclick="window.__imagePool.migrateAndReload({{ template.id }})">
+        Migrate legacy to pool
+      </button>
+    {% endif %}
+  </div>
+</div>
+
+{# Upload drop zone #}
+{% include "templates/_upload_drop.html" %}
+
+{# Pool table #}
+{% if images %}
+<div style="overflow-x:auto;margin-top:1rem;">
+  <table class="table pool-table" id="pool-table">
+    <thead>
+      <tr>
+        <th style="width:2rem;">#</th>
+        <th style="width:80px;">Thumb</th>
+        <th>Color</th>
+        <th style="width:80px;">Rank</th>
+        <th>Role</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody id="pool-tbody">
+      {% for img in images %}
+        {% with loop_index0 = loop.index0 %}
+          {% include "templates/_image_pool_row.html" %}
+        {% endwith %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="empty-state" style="margin-top:1rem;">No images yet. Drop files above to upload.</p>
+{% endif %}
+
+{# Legacy fields collapsible — shown only when pool is empty or has virtual rows #}
+{% if not images or images[0].is_virtual %}
+<details class="legacy-panel" style="margin-top:1.5rem;">
+  <summary>Show legacy fields</summary>
+  <div style="margin-top:0.75rem;">
+    <p><strong>base_image_url:</strong>
+      {% if template.base_image_url %}
+        <a href="{{ template.base_image_url }}" target="_blank" rel="noopener">{{ template.base_image_url }}</a>
+      {% else %}—{% endif %}
+    </p>
+    <p><strong>color_base_images_json:</strong>
+      <code>{{ template.color_base_images_json or "{}" }}</code>
+    </p>
+  </div>
+</details>
+{% endif %}

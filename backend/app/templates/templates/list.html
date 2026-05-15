@@ -29,6 +29,7 @@
       <td>{{ t.default_price_cents }}</td>
       <td>{{ t.variation_count }}</td>
       <td>
+        <a href="/admin/templates/{{ t.id }}" class="btn btn-sm">View</a>
         <a href="/admin/templates/{{ t.id }}/anchor" class="btn btn-sm">Edit anchor</a>
         <form method="post" action="/admin/templates/{{ t.id }}/delete"
               onsubmit="return confirm('Delete template {{ t.name }}?')">
