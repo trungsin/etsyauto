@@ -77,6 +77,12 @@ class EtsyApiClient:
 
                 # Success or client error (not retryable)
                 if resp.status_code < 429:
+                    if resp.status_code >= 400:
+                        # Log Etsy's error body so callers can diagnose 4xx.
+                        logger.error(
+                            "etsy_api %s %s body: %s",
+                            method, path, (resp.text or "")[:2000],
+                        )
                     resp.raise_for_status()
                     return resp
 
@@ -249,7 +255,15 @@ class EtsyApiClient:
             "state": "draft",
         }
         if tags:
-            body["tags"] = ",".join(tags[:13])  # Etsy max 13 tags
+            # Etsy: max 13 tags, each ≤20 chars. Drop over-length tags.
+            clean_tags = [t.strip() for t in tags if t and len(t.strip()) <= 20]
+            if len(clean_tags) != len(tags):
+                logger.warning(
+                    "create_draft_listing dropped %d tag(s) > 20 chars",
+                    len(tags) - len(clean_tags),
+                )
+            if clean_tags:
+                body["tags"] = ",".join(clean_tags[:13])
         body.update(extra)
 
         # Etsy v3 wants form-encoded for create
@@ -331,6 +345,63 @@ class EtsyApiClient:
             data=data,
         ).json()
 
+    def set_variation_images(
+        self,
+        shop_id: str | int,
+        listing_id: str | int,
+        property_id: int,
+        value_to_image_id: dict[int, int],
+    ) -> dict:
+        """Map variation values to listing images for a single property.
+
+        Etsy ref: POST /shops/{shop_id}/listings/{listing_id}/variation-images.
+        ``value_to_image_id`` maps each value_id to the etsy_image_id that should
+        represent it in the storefront (e.g. colour swatch → mockup image).
+        Returns the full variation-images response from Etsy.
+        """
+        if settings.etsy_dry_run:
+            from app.clients import etsy_dry_run_fixtures
+            return etsy_dry_run_fixtures.dispatch(
+                settings.etsy_dry_run_scenario,
+                "set_variation_images",
+                {
+                    "shop_id": shop_id,
+                    "listing_id": listing_id,
+                    "property_id": property_id,
+                    "value_to_image_id": value_to_image_id,
+                },
+            )
+
+        body = {
+            "variation_images": [
+                {"property_id": property_id, "value_id": value_id, "image_id": image_id}
+                for value_id, image_id in value_to_image_id.items()
+            ]
+        }
+        result = self._request(
+            "POST",
+            f"/shops/{shop_id}/listings/{listing_id}/variation-images",
+            json=body,
+        ).json()
+
+        missing = len(value_to_image_id) - len(result.get("results", []))
+        if missing > 0:
+            logger.warning(
+                "set_variation_images: sent %d mappings but got %d back (listing_id=%s property_id=%s)",
+                len(value_to_image_id),
+                len(result.get("results", [])),
+                listing_id,
+                property_id,
+            )
+        else:
+            logger.info(
+                "set_variation_images: linked %d image(s) for listing_id=%s property_id=%s",
+                len(value_to_image_id),
+                listing_id,
+                property_id,
+            )
+        return result
+
     # ------------------------------------------------------------------
     # Taxonomy
     # ------------------------------------------------------------------
@@ -342,8 +413,11 @@ class EtsyApiClient:
     ) -> dict:
         """List allowed value_ids for a property within a taxonomy node.
 
-        Etsy ref: GET /seller-taxonomy/nodes/{taxonomy_id}/properties/{property_id}.
-        Returns Etsy response dict with `possible_values` array.
+        Etsy ref: GET /seller-taxonomy/nodes/{taxonomy_id}/properties — returns
+        every property for the node. Etsy has no per-property-id sub-endpoint,
+        so we fetch the full list and filter for ``property_id`` locally.
+        Returns a dict shaped ``{"possible_values": [...]}`` for the match
+        (empty list when the property is absent).
         """
         if settings.etsy_dry_run:
             from app.clients import etsy_dry_run_fixtures
@@ -352,7 +426,15 @@ class EtsyApiClient:
                 "get_taxonomy_property_values",
                 {"taxonomy_id": taxonomy_id, "property_id": property_id},
             )
-        return self._request(
+        payload = self._request(
             "GET",
-            f"/seller-taxonomy/nodes/{taxonomy_id}/properties/{property_id}",
+            f"/seller-taxonomy/nodes/{taxonomy_id}/properties",
         ).json()
+        for prop in payload.get("results", []) or []:
+            if int(prop.get("property_id", -1)) == int(property_id):
+                return {
+                    "name": prop.get("name") or "",
+                    "scales": prop.get("scales") or [],
+                    "possible_values": prop.get("possible_values") or [],
+                }
+        return {"name": "", "scales": [], "possible_values": []}

@@ -43,6 +43,23 @@ Zone = RectZone | QuadZone
 # Maximum zones per template — soft cap for sanity / cache size
 MAX_ZONES = 4
 
+# Maximum zones allowed per image in the image pool (stricter cap)
+MAX_ZONES_PER_IMAGE = 2
+
+
+def validate_for_image(raw: str | None) -> list[Zone]:
+    """Parse anchor JSON and enforce MAX_ZONES_PER_IMAGE limit.
+
+    Raises:
+        ValueError: If zone count exceeds MAX_ZONES_PER_IMAGE.
+    """
+    zones = parse_anchor(raw)
+    if len(zones) > MAX_ZONES_PER_IMAGE:
+        raise ValueError(
+            f"Image anchor has {len(zones)} zones; maximum is {MAX_ZONES_PER_IMAGE}"
+        )
+    return zones
+
 
 def parse_anchor(raw: str | None) -> list[Zone]:
     """Parse a ``composite_anchor_json`` string into a list of normalized zones.

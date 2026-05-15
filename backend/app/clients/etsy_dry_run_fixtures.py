@@ -43,17 +43,40 @@ def _happy_image_upload(kw: dict) -> dict:
     return {"listing_image_id": 12345, "rank": kw.get("rank", 1)}
 
 
-def _happy_taxonomy(_kw: dict) -> dict:
+def _happy_variation_images(kw: dict) -> dict:
+    property_id = kw.get("property_id", 0)
+    value_to_image_id: dict = kw.get("value_to_image_id", {})
     return {
         "results": [
-            {"value_id": 1, "name": "White"},
-            {"value_id": 2, "name": "Black"},
-            {"value_id": 3, "name": "Sand"},
-            {"value_id": 100, "name": "S"},
-            {"value_id": 101, "name": "M"},
-            {"value_id": 102, "name": "L"},
-            {"value_id": 103, "name": "XL"},
-        ]
+            {"property_id": property_id, "value_id": vid, "image_id": img_id}
+            for vid, img_id in value_to_image_id.items()
+        ],
+        "count": len(value_to_image_id),
+    }
+
+
+def _happy_taxonomy(kw: dict) -> dict:
+    """Mimic the real client's filtered shape: name + scales + possible_values."""
+    pid = int(kw.get("property_id") or 0)
+    if pid == 200:
+        return {
+            "name": "Primary color",
+            "scales": [],
+            "possible_values": [
+                {"value_id": 1, "name": "White", "scale_id": None},
+                {"value_id": 2, "name": "Black", "scale_id": None},
+                {"value_id": 3, "name": "Sand", "scale_id": None},
+            ],
+        }
+    return {
+        "name": "Size",
+        "scales": [{"scale_id": 25, "display_name": "US letter"}],
+        "possible_values": [
+            {"value_id": 100, "name": "S", "scale_id": 25},
+            {"value_id": 101, "name": "M", "scale_id": 25},
+            {"value_id": 102, "name": "L", "scale_id": 25},
+            {"value_id": 103, "name": "XL", "scale_id": 25},
+        ],
     }
 
 
@@ -76,8 +99,8 @@ def _http_error(status: int, body: dict, method: str = "POST", path: str = "/x")
 
 
 def _taxonomy_error_lookup(_kw: dict) -> dict:
-    """Empty results — caller raises ValueError when no value matches."""
-    return {"results": []}
+    """Empty values — caller raises ValueError when no value matches."""
+    return {"name": "", "scales": [], "possible_values": []}
 
 
 # ---------------------------------------------------------------------------
@@ -91,6 +114,7 @@ _SCENARIOS: dict[str, dict[str, Callable[[dict], Any]]] = {
         "update_listing_inventory": _happy_inventory,
         "upload_listing_image_bytes": _happy_image_upload,
         "upload_listing_image": _happy_image_upload,
+        "set_variation_images": _happy_variation_images,
         "get_taxonomy_property_values": _happy_taxonomy,
     },
     "rate_limit": {

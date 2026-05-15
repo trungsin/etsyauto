@@ -14,7 +14,13 @@ class Settings(BaseSettings):
     etsy_api_key: str = ""
     etsy_shared_secret: str = ""
     etsy_redirect_uri: str = "http://localhost:8787/auth/etsy/callback"
-    etsy_scope: str = "listings_r listings_w"
+    etsy_scope: str = "listings_r listings_w shops_r"
+    # Fallback shipping_profile_id used when template doesn't override.
+    # Etsy requires it for physical listings. List via `GET /shops/{id}/shipping-profiles`.
+    etsy_default_shipping_profile_id: int = 0
+    # Etsy processing profile (readiness_state_id) — required for physical listings.
+    # List via `GET /shops/{id}/readiness-state-definitions`.
+    etsy_default_readiness_state_id: int = 0
 
     # AI providers
     removebg_api_key: str = ""

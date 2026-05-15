@@ -10,6 +10,7 @@ from app.models.listing import Listing  # noqa: F401
 from app.models.mockup_variant import MockupVariant  # noqa: F401
 from app.models.reference import Reference  # noqa: F401
 from app.models.template import Template  # noqa: F401
+from app.models.template_image import TemplateImage  # noqa: F401
 from app.models.template_variation import TemplateVariation  # noqa: F401
 from app.models.title_variant import TitleVariant  # noqa: F401
 from app.models.idea import Idea  # noqa: F401

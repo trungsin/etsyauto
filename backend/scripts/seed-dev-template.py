@@ -105,8 +105,8 @@ def upsert_template(white_url: str, black_url: str) -> None:
             ],
             "colors": ["White", "Black"],
             "primary_color": "White",
-            # NOTE: placeholder Etsy taxonomy; pick a real one before publishing.
-            "etsy_taxonomy_id": 1209,
+            # Women's Tops & Tees > T-shirts (verified 2026-05-14).
+            "etsy_taxonomy_id": 559,
         })
         tmpl.color_base_images_json = json.dumps({
             "White": white_url,

@@ -21,7 +21,7 @@ class Template(Base):
     default_price_cents: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # JSON convention:
     # {"sizes":[{"name":"S","price_cents":1900},...], "colors":[...],
-    #  "primary_color":"Sand", "etsy_taxonomy_id":1209}
+    #  "primary_color":"Sand", "etsy_taxonomy_id":559}
     variation_options_json: Mapped[str] = mapped_column(String(500), nullable=False, default="{}")
     # JSON map color name → R2 URL: {"White": "https://r2.../tpl-white.png", ...}
     # Keys must match colors listed in variation_options_json.colors.
@@ -35,4 +35,8 @@ class Template(Base):
     )
     variations: Mapped[list["TemplateVariation"]] = relationship(  # noqa: F821
         "TemplateVariation", back_populates="template", cascade="all, delete-orphan"
+    )
+    images: Mapped[list["TemplateImage"]] = relationship(  # noqa: F821
+        "TemplateImage", back_populates="template", cascade="all, delete-orphan",
+        order_by="TemplateImage.rank"
     )

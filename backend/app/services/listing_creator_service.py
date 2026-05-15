@@ -3,11 +3,12 @@
 Steps (idempotent on Listing.template_id+design_id):
     1. Validate template + design + enabled_combos
     2. Idempotency check: existing Listing for (template_id, design_id) → return as-is
-    3. Render composites for all enabled colors (parallel via composite_service)
+    3. Render full image pool via composite_service.render_all_for_listing (parallel)
     4. Resolve Etsy property value IDs (color, size) via taxonomy lookup
     5. Etsy create draft listing
     6. Etsy PUT inventory with full variations matrix
-    7. Etsy POST listing images sequentially (200ms gap), primary_color → rank 1
+    7. Upload top-10 gallery images sorted by rank (200ms gap), capture etsy_image_id
+    7b. Bind per-color variation hero images via set_variation_images (single call)
     8. Persist Listing(etsy_listing_id, template_id, design_id, status='created')
 """
 from __future__ import annotations
@@ -15,13 +16,13 @@ from __future__ import annotations
 import json
 import logging
 import time
-from typing import Any
 
 import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.clients.etsy_api_client import EtsyApiClient
+from app.config import settings
 from app.models.design import Design
 from app.models.listing import Listing
 from app.models.template import Template
@@ -96,24 +97,6 @@ def _size_price_map(template: Template) -> dict[str, int]:
     return out
 
 
-def _ordered_colors_for_images(template: Template, used_colors: set[str]) -> list[str]:
-    """Return colors in image-rank order: primary first, then template-defined order, all from used set."""
-    try:
-        opts = json.loads(template.variation_options_json or "{}")
-    except (json.JSONDecodeError, TypeError):
-        opts = {}
-    primary = (opts.get("primary_color") or "").strip().title()
-    template_order = [c.strip().title() for c in opts.get("colors", [])]
-
-    ordered: list[str] = []
-    if primary and primary in used_colors:
-        ordered.append(primary)
-    for c in template_order:
-        if c in used_colors and c not in ordered:
-            ordered.append(c)
-    return ordered
-
-
 def create_from_template(
     session: Session,
     *,
@@ -134,7 +117,8 @@ def create_from_template(
             "listing_id": int,            # local Listing.id
             "etsy_listing_id": str,
             "draft_url": str,
-            "composite_urls": [{"color": str, "url": str}, ...]
+            "composite_urls": [{"rank": int, "color": str|None, "url": str, "etsy_image_id": int}, ...],
+            "variation_images_bound": int,  # count of color→image bindings sent (0 if none)
         }
 
     Raises:
@@ -178,16 +162,17 @@ def create_from_template(
     if issues:
         raise listing_pre_check.PreCheckFailed(issues)
 
-    # 3. Render composites (parallel)
-    used_colors = {c["color"] for c in enabled}
-    composites_by_color: dict[str, str] = {}
-    for color in used_colors:
-        url, _cached = composite_service.get_or_create_composite(
-            session, template_id, design_id, color, zone_designs=zone_designs
-        )
-        composites_by_color[color] = url
+    # 3. Render full image pool (parallel); errors per-image are caught inside
+    rendered = composite_service.render_all_for_listing(
+        session, template_id, design_id, zone_designs=zone_designs
+    )
+    # Gallery: successful renders only, sorted by rank, capped at 10
+    gallery = sorted(
+        [r for r in rendered if r["url"] is not None],
+        key=lambda r: r["rank"],
+    )[:10]
 
-    # 4. Etsy taxonomy lookup
+    # 4. Etsy taxonomy lookup — resolve colors present in gallery
     try:
         opts = json.loads(template.variation_options_json or "{}")
     except (json.JSONDecodeError, TypeError):
@@ -195,17 +180,18 @@ def create_from_template(
     taxonomy_id = int(opts.get("etsy_taxonomy_id") or etsy_taxonomy.TAXONOMY_APPAREL_TSHIRT)
 
     distinct_sizes = sorted({c["size"] for c in enabled})
-    distinct_colors = sorted(used_colors)
+    distinct_colors = sorted({c["color"] for c in enabled})
 
     with EtsyApiClient(session) as client:
-        size_value_ids = etsy_taxonomy.resolve_property_values(
-            client, taxonomy_id, etsy_taxonomy.PROPERTY_SIZE, distinct_sizes
+        size_entries = etsy_taxonomy.resolve_property_inventory_entries(
+            client, taxonomy_id, etsy_taxonomy.PROPERTY_SIZE, distinct_sizes,
+            preferred_scale_id=etsy_taxonomy.DEFAULT_SIZE_SCALE_ID,
         )
-        color_value_ids = etsy_taxonomy.resolve_property_values(
-            client, taxonomy_id, etsy_taxonomy.PROPERTY_PRIMARY_COLOR, distinct_colors
+        color_entries = etsy_taxonomy.resolve_property_inventory_entries(
+            client, taxonomy_id, etsy_taxonomy.PROPERTY_PRIMARY_COLOR, distinct_colors,
         )
-        size_to_value = dict(zip(distinct_sizes, size_value_ids))
-        color_to_value = dict(zip(distinct_colors, color_value_ids))
+        size_to_entry = dict(zip(distinct_sizes, size_entries))
+        color_to_entry = dict(zip(distinct_colors, color_entries))
 
         # 5. Etsy create draft
         size_price = _size_price_map(template)
@@ -215,6 +201,38 @@ def create_from_template(
             )
         primary_size_price = next(iter(size_price.values())) / 100.0  # USD float
 
+        shipping_profile_id = (
+            opts.get("shipping_profile_id")
+            or settings.etsy_default_shipping_profile_id
+        )
+        if not shipping_profile_id:
+            raise ValueError(
+                "Etsy requires shipping_profile_id for physical listings — "
+                "set template.variation_options.shipping_profile_id or "
+                "ETSY_DEFAULT_SHIPPING_PROFILE_ID in .env."
+            )
+        readiness_state_id = (
+            opts.get("readiness_state_id")
+            or settings.etsy_default_readiness_state_id
+        )
+        if not readiness_state_id:
+            raise ValueError(
+                "Etsy requires readiness_state_id for physical listings — "
+                "set template.variation_options.readiness_state_id or "
+                "ETSY_DEFAULT_READINESS_STATE_ID in .env."
+            )
+
+        # Calculated shipping profiles need package weight + dimensions on the
+        # listing. POD t-shirt defaults; template can override per-field.
+        dims = {
+            "item_weight": float(opts.get("item_weight", 6.0)),
+            "item_weight_unit": opts.get("item_weight_unit", "oz"),
+            "item_length": float(opts.get("item_length", 12.0)),
+            "item_width": float(opts.get("item_width", 10.0)),
+            "item_height": float(opts.get("item_height", 1.0)),
+            "item_dimensions_unit": opts.get("item_dimensions_unit", "in"),
+        }
+
         draft_resp = client.create_draft_listing(
             shop_id,
             title=title,
@@ -223,6 +241,9 @@ def create_from_template(
             quantity=quantity_per_variant,
             taxonomy_id=taxonomy_id,
             tags=tags,
+            shipping_profile_id=int(shipping_profile_id),
+            readiness_state_id=int(readiness_state_id),
+            **dims,
         )
         etsy_listing_id = str(draft_resp.get("listing_id") or draft_resp.get("results", [{}])[0].get("listing_id"))
         if not etsy_listing_id or etsy_listing_id == "None":
@@ -236,21 +257,14 @@ def create_from_template(
             products.append({
                 "sku": f"T{template_id}-D{design_id}-{size}-{color}",
                 "property_values": [
-                    {
-                        "property_id": etsy_taxonomy.PROPERTY_SIZE,
-                        "value_ids": [size_to_value[size]],
-                        "values": [size],
-                    },
-                    {
-                        "property_id": etsy_taxonomy.PROPERTY_PRIMARY_COLOR,
-                        "value_ids": [color_to_value[color]],
-                        "values": [color],
-                    },
+                    size_to_entry[size],
+                    color_to_entry[color],
                 ],
                 "offerings": [{
                     "price": price,
                     "quantity": quantity_per_variant,
                     "is_enabled": True,
+                    "readiness_state_id": int(readiness_state_id),
                 }],
             })
         client.update_listing_inventory(
@@ -258,33 +272,76 @@ def create_from_template(
             products,
             price_on_property=[etsy_taxonomy.PROPERTY_SIZE],
             quantity_on_property=[],
-            sku_on_property=[],
+            sku_on_property=[
+                etsy_taxonomy.PROPERTY_SIZE,
+                etsy_taxonomy.PROPERTY_PRIMARY_COLOR,
+            ],
         )
 
-        # 7. Sequential image uploads (primary first)
-        ordered = _ordered_colors_for_images(template, used_colors)
-        composite_urls_list: list[dict] = []
-        for rank, color in enumerate(ordered, start=1):
-            comp_url = composites_by_color.get(color)
-            if not comp_url:
-                continue
+        # 7. Sequential image uploads sorted by rank, top-10
+        uploaded: list[dict] = []
+        for rank, item in enumerate(gallery, start=1):
             try:
                 with httpx.Client(timeout=30, follow_redirects=True) as h:
-                    img_bytes = h.get(comp_url).content
-                client.upload_listing_image_bytes(
+                    img_bytes = h.get(item["url"]).content
+                resp = client.upload_listing_image_bytes(
                     shop_id,
                     etsy_listing_id,
                     img_bytes,
-                    filename=f"mockup-{color}.png",
+                    filename=f"img-{item.get('id') or rank}.png",
                     rank=rank,
                 )
-                composite_urls_list.append({"color": color, "url": comp_url, "rank": rank})
+                etsy_image_id = int(
+                    resp.get("listing_image_id") or resp.get("image_id") or 0
+                )
+                if etsy_image_id == 0:
+                    logger.warning(
+                        "upload_listing_image_bytes returned no image id for listing=%s rank=%d",
+                        etsy_listing_id, rank,
+                    )
+                uploaded.append({
+                    "rank": rank,
+                    "color": item["color"],
+                    "url": item["url"],
+                    "etsy_image_id": etsy_image_id,
+                })
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
-                    "Etsy image upload failed for listing=%s color=%s rank=%d: %s",
-                    etsy_listing_id, color, rank, exc,
+                    "Etsy image upload failed for listing=%s rank=%d: %s",
+                    etsy_listing_id, rank, exc,
                 )
             time.sleep(IMAGE_UPLOAD_GAP_SEC)
+
+        # 7b. Bind per-color variation hero images (single call; failure non-fatal)
+        color_to_etsy_image_id: dict[str, int] = {}
+        for u in uploaded:
+            if u["color"] and u["etsy_image_id"] and u["color"] not in color_to_etsy_image_id:
+                color_to_etsy_image_id[u["color"]] = u["etsy_image_id"]
+        variation_images_bound = 0
+        if color_to_etsy_image_id:
+            try:
+                value_to_image_id = {
+                    int(color_to_entry[c]["value_ids"][0]): img_id
+                    for c, img_id in color_to_etsy_image_id.items()
+                    if c in color_to_entry
+                }
+                if value_to_image_id:
+                    client.set_variation_images(
+                        shop_id,
+                        etsy_listing_id,
+                        property_id=etsy_taxonomy.PROPERTY_PRIMARY_COLOR,
+                        value_to_image_id=value_to_image_id,
+                    )
+                    variation_images_bound = len(value_to_image_id)
+                    logger.info(
+                        "Variation images bound for %d color(s) on listing=%s",
+                        variation_images_bound, etsy_listing_id,
+                    )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "Variation images bind failed (listing=%s): %s", etsy_listing_id, exc
+                )
+        composite_urls_list = uploaded
 
     # 8. Persist Listing
     listing = Listing(
@@ -306,10 +363,11 @@ def create_from_template(
         "etsy_listing_id": etsy_listing_id,
         "draft_url": _draft_url(etsy_listing_id),
         "composite_urls": composite_urls_list,
+        "variation_images_bound": variation_images_bound,
         "idempotent": False,
     }
 
 
 def _draft_url(etsy_listing_id: str) -> str:
-    """Build the seller's draft-edit URL for a listing."""
-    return f"https://www.etsy.com/your/shops/me/listings/draft/{etsy_listing_id}"
+    """Build the seller's edit URL for a listing in Shop Manager."""
+    return f"https://www.etsy.com/your/shops/me/tools/listings/{etsy_listing_id}"

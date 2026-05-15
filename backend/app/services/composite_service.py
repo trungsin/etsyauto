@@ -28,12 +28,7 @@ def _multi_zone_cache_key(
     color: str | None,
     zone_designs: dict[str, int] | None,
 ) -> str:
-    """Cache key for multi-zone composites.
-
-    Single-design (zone_designs empty/None or 1 entry that matches design_id) →
-    legacy single-zone key shape so existing R2 cache stays valid.
-    Multi-zone with distinct designs → ``composites/{tid}-{hash}-{Color}-multi.png``.
-    """
+    """Legacy cache key (color-based) — kept for backward-compat callers."""
     distinct_dids = set((zone_designs or {}).values())
     is_multi = (
         zone_designs is not None
@@ -48,60 +43,71 @@ def _multi_zone_cache_key(
     return f"{_CACHE_PREFIX}{template_id}-{compound_hash}{suffix}-multi.png"
 
 
-def get_or_create_composite(
+def _cache_key_v3(
+    template_id: int,
+    image_id: int | str,
+    design_id: int,
+    zone_designs: dict[str, int] | None,
+) -> str:
+    """New cache key using image_id instead of color.
+
+    Single-zone: composites/{tid}-{img_id}-{did}.png
+    Multi-zone:  composites/{tid}-{img_id}-{hash10}-multi.png
+    """
+    distinct_dids = set((zone_designs or {}).values())
+    is_multi = (
+        zone_designs is not None
+        and len(zone_designs) > 0
+        and (len(distinct_dids) > 1 or design_id not in distinct_dids)
+    )
+    if not is_multi:
+        return f"{_CACHE_PREFIX}{template_id}-{image_id}-{design_id}.png"
+    compound = "_".join(f"{k}-{v}" for k, v in sorted(zone_designs.items()))
+    h = hashlib.sha1(compound.encode()).hexdigest()[:10]
+    return f"{_CACHE_PREFIX}{template_id}-{image_id}-{h}-multi.png"
+
+
+def _fetch_bytes(url: str) -> bytes:
+    """Fetch URL bytes with browser-ish UA to avoid Cloudflare R2 403."""
+    import urllib.request
+    req = urllib.request.Request(
+        url, headers={"User-Agent": "Mozilla/5.0 (EtsyAuto-Composite/1.0)"}
+    )
+    with urllib.request.urlopen(req) as resp:  # noqa: S310
+        return resp.read()
+
+
+def _render_with_view(
     session: Session,
     template_id: int,
     design_id: int,
-    color: str | None = None,
-    zone_designs: dict[str, int] | None = None,
+    view: dict,
+    zone_designs: dict[str, int] | None,
+    cache_key: str,
 ) -> tuple[str, bool]:
-    """Return composite URL, creating and caching if needed.
+    """Core render pipeline — shared by get_or_create_composite and render_all_for_listing.
 
-    Args:
-        session: Active SQLAlchemy session.
-        template_id: Template to use as base.
-        design_id: Default design used when a zone has no explicit override.
-            Must not be ``source_type='reference_only'``.
-        color: Optional color key — selects per-color base image and namespaces
-            the cache key.
-        zone_designs: Optional ``{zone_name: design_id}`` map. Each zone in the
-            template's anchor uses its mapped design when present; zones without
-            an entry fall back to ``design_id``.
-
-    Returns:
-        (composite_url, cached) — cached=True if R2 object already existed.
-
-    Raises:
-        ValueError: If template/design not found, any referenced design is
-            reference_only, or template has no zones (anchor empty).
+    Expects caller to have already resolved ``view`` and computed ``cache_key``.
+    Does NOT handle lifestyle_no_fill short-circuit (caller does that before calling here).
     """
     from app.clients.r2_storage_client import R2StorageClient
     from app.models.design import Design
-    from app.models.template import Template
     from app.services import anchor_schema
     from app.services.image_composite import composite_zones
 
-    # Validate template
-    template = session.get(Template, template_id)
-    if template is None:
-        raise ValueError(f"Template {template_id} not found")
-
-    # Validate default design (used when a zone has no override)
+    # Validate default design
     default_design = session.get(Design, design_id)
     if default_design is None:
         raise ValueError(f"Design {design_id} not found")
     if default_design.source_type == "reference_only":
         raise ValueError("reference_only designs cannot be used in composite preview")
 
-    # Resolve zones; legacy v1 templates auto-upcast to a single 'main' rect zone.
-    zones = anchor_schema.parse_anchor(template.composite_anchor_json)
+    # Parse zones from the image view's anchor
+    zones = anchor_schema.parse_anchor(view["anchor_json"])
     if not zones:
-        # Legacy fall-through — treat as full-canvas rect for backwards compat
-        zones = [{"name": "main", "kind": "rect", "x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0}]
+        raise ValueError(f"template_image {view['id']!r} has no fill zones")
 
-    # Validate per-zone designs *up front* (cheap DB lookup) but defer the
-    # network download until after the cache-hit check, so a cache hit costs
-    # nothing extra.
+    # Validate per-zone designs up front (cheap DB lookup, defer network until after cache check)
     zone_design_rows: dict[str, "Design"] = {}
     for zone in zones:
         zone_design_id = (zone_designs or {}).get(zone["name"], design_id)
@@ -111,16 +117,147 @@ def get_or_create_composite(
             else session.get(Design, zone_design_id)
         )
         if d is None:
-            raise ValueError(
-                f"Design {zone_design_id} (zone {zone['name']!r}) not found"
-            )
+            raise ValueError(f"Design {zone_design_id} (zone {zone['name']!r}) not found")
         if d.source_type == "reference_only":
             raise ValueError(
                 f"reference_only design {d.id} cannot be used in zone {zone['name']!r}"
             )
         zone_design_rows[zone["name"]] = d
 
-    # Resolve base image URL: per-color → fallback to template default.
+    r2 = R2StorageClient()
+    if r2.object_exists(cache_key):
+        url = r2.get_public_url(cache_key)
+        logger.info("Composite cache hit: %s", cache_key)
+        return url, True
+
+    try:
+        base_bytes = _fetch_bytes(view["image_url"])
+    except Exception as exc:
+        raise ValueError(f"Failed to download template base image: {exc}") from exc
+
+    designs_by_name: dict[str, bytes] = {}
+    for name, d in zone_design_rows.items():
+        try:
+            designs_by_name[name] = _fetch_bytes(d.file_url)
+        except Exception as exc:
+            raise ValueError(f"Failed to download design image: {exc}") from exc
+
+    output_bytes = composite_zones(base_bytes, zones, designs_by_name)
+    url = r2.upload_image(output_bytes, cache_key)
+    logger.info(
+        "Composite created and cached: %s (%d bytes, %d zone(s))",
+        cache_key, len(output_bytes), len(zones),
+    )
+    return url, False
+
+
+def _virtual_image_id(view: dict) -> str:
+    """Stable pseudo-id for virtual rows (id=None): 'v{rank}'."""
+    return f"v{view['rank']}"
+
+
+def get_or_create_composite(
+    session: Session,
+    template_id: int,
+    design_id: int,
+    color: str | None = None,
+    zone_designs: dict[str, int] | None = None,
+    template_image_id: int | None = None,
+) -> tuple[str, bool]:
+    """Return composite URL, creating and caching if needed.
+
+    Args:
+        session: Active SQLAlchemy session.
+        template_id: Template to use as base.
+        design_id: Default design (must not be reference_only).
+        color: DEPRECATED. Selects per-color base image via legacy path. Preserved for
+            backward compat — produces OLD cache key shape (composites/{tid}-{did}-Color.png).
+        zone_designs: Optional {zone_name: design_id} overrides per zone.
+        template_image_id: NEW preferred input. Routes through image-id-based pipeline with
+            new cache key shape (composites/{tid}-{img_id}-{did}.png).
+
+    Returns:
+        (composite_url, cached) — cached=True if R2 object already existed.
+
+    Raises:
+        ValueError: If template/design not found, any referenced design is reference_only,
+            or template image has no zones.
+    """
+    from app.services import template_image_service
+
+    # --- New path: template_image_id explicitly provided ---
+    if template_image_id is not None:
+        view = template_image_service.get(session, template_image_id)
+        if view is None or view["template_id"] != template_id:
+            raise ValueError(
+                f"template_image {template_image_id} not in template {template_id}"
+            )
+        if view["role"] == "lifestyle_no_fill":
+            return view["image_url"], True
+        img_id = view["id"]  # real row, never None here
+        key = _cache_key_v3(template_id, img_id, design_id, zone_designs)
+        return _render_with_view(session, template_id, design_id, view, zone_designs, key)
+
+    # --- Back-compat path: color= (or neither) ---
+    # Attempt to resolve via template_image_service for new-style templates;
+    # fall back to legacy Template fields if not found.
+    if color is not None or True:  # always try image service first for new templates
+        view = template_image_service.get_view_by_color(session, template_id, color)
+        if view is not None:
+            if view["role"] == "lifestyle_no_fill":
+                return view["image_url"], True
+            # Use old cache key shape so existing R2 cache and tests stay valid
+            key = _multi_zone_cache_key(template_id, design_id, color, zone_designs)
+            return _render_with_view(session, template_id, design_id, view, zone_designs, key)
+
+    # Pure legacy fallback: template has no image pool rows — use Template model directly
+    return _legacy_composite(session, template_id, design_id, color, zone_designs)
+
+
+def _legacy_composite(
+    session: Session,
+    template_id: int,
+    design_id: int,
+    color: str | None,
+    zone_designs: dict[str, int] | None,
+) -> tuple[str, bool]:
+    """Original composite pipeline using Template ORM fields directly."""
+    from app.clients.r2_storage_client import R2StorageClient
+    from app.models.design import Design
+    from app.models.template import Template
+    from app.services import anchor_schema
+    from app.services.image_composite import composite_zones
+
+    template = session.get(Template, template_id)
+    if template is None:
+        raise ValueError(f"Template {template_id} not found")
+
+    default_design = session.get(Design, design_id)
+    if default_design is None:
+        raise ValueError(f"Design {design_id} not found")
+    if default_design.source_type == "reference_only":
+        raise ValueError("reference_only designs cannot be used in composite preview")
+
+    zones = anchor_schema.parse_anchor(template.composite_anchor_json)
+    if not zones:
+        zones = [{"name": "main", "kind": "rect", "x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0}]
+
+    zone_design_rows: dict[str, "Design"] = {}
+    for zone in zones:
+        zone_design_id = (zone_designs or {}).get(zone["name"], design_id)
+        d = (
+            default_design
+            if zone_design_id == design_id
+            else session.get(Design, zone_design_id)
+        )
+        if d is None:
+            raise ValueError(f"Design {zone_design_id} (zone {zone['name']!r}) not found")
+        if d.source_type == "reference_only":
+            raise ValueError(
+                f"reference_only design {d.id} cannot be used in zone {zone['name']!r}"
+            )
+        zone_design_rows[zone["name"]] = d
+
     if color is None:
         base_image_url = template.base_image_url
     else:
@@ -139,46 +276,69 @@ def get_or_create_composite(
     key = _multi_zone_cache_key(template_id, design_id, color, zone_designs)
     r2 = R2StorageClient()
 
-    # Cache hit check — return before any network downloads
     if r2.object_exists(key):
         url = r2.get_public_url(key)
         logger.info("Composite cache hit: %s", key)
         return url, True
 
-    # Download template base + per-zone designs.
-    # Cloudflare R2 public buckets 403 the default python-urllib User-Agent,
-    # so we set a browser-ish UA on every fetch.
-    import urllib.request
-
-    def _fetch(url: str) -> bytes:
-        req = urllib.request.Request(
-            url, headers={"User-Agent": "Mozilla/5.0 (EtsyAuto-Composite/1.0)"}
-        )
-        with urllib.request.urlopen(req) as resp:  # noqa: S310
-            return resp.read()
-
     try:
-        base_bytes = _fetch(base_image_url)
+        base_bytes = _fetch_bytes(base_image_url)
     except Exception as exc:
         raise ValueError(f"Failed to download template base image: {exc}") from exc
 
     designs_by_name: dict[str, bytes] = {}
     for name, d in zone_design_rows.items():
         try:
-            designs_by_name[name] = _fetch(d.file_url)
+            designs_by_name[name] = _fetch_bytes(d.file_url)
         except Exception as exc:
             raise ValueError(f"Failed to download design image: {exc}") from exc
 
-    # Composite all zones in array order
     output_bytes = composite_zones(base_bytes, zones, designs_by_name)
-
-    # Upload to R2 cache
     url = r2.upload_image(output_bytes, key)
     logger.info(
         "Composite created and cached: %s (%d bytes, %d zone(s))",
         key, len(output_bytes), len(zones),
     )
     return url, False
+
+
+def render_all_for_listing(
+    session: Session,
+    template_id: int,
+    design_id: int,
+    zone_designs: dict[str, int] | None = None,
+) -> list[dict]:
+    """Render composites for every template_image in parallel.
+
+    Returns one entry per image ordered by rank (same as list_for_template output):
+        {id, template_id, image_url, color, rank, role, is_virtual, url, cached, error}
+
+    Per-image errors are caught and returned in the ``error`` field; never re-raised.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+    from app.services import template_image_service
+
+    images = template_image_service.list_for_template(session, template_id)
+
+    def _one(view: dict) -> dict:
+        try:
+            if view["role"] == "lifestyle_no_fill":
+                return {**view, "url": view["image_url"], "cached": True, "error": None}
+            img_id = view["id"] if view["id"] is not None else _virtual_image_id(view)
+            key = _cache_key_v3(template_id, img_id, design_id, zone_designs)
+            url, cached = _render_with_view(
+                session, template_id, design_id, view, zone_designs, key
+            )
+            return {**view, "url": url, "cached": cached, "error": None}
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "render_all_for_listing failed tid=%d img_id=%s: %s",
+                template_id, view.get("id"), exc,
+            )
+            return {**view, "url": None, "cached": False, "error": str(exc)}
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        return list(pool.map(_one, images))
 
 
 def get_or_create_composites_all_colors(
@@ -189,23 +349,14 @@ def get_or_create_composites_all_colors(
 ) -> list[dict]:
     """Render composites for every color listed in template.variation_options.colors in parallel.
 
-    Args:
-        session: Active SQLAlchemy session.
-        template_id: Template id.
-        design_id: Design id (must not be reference_only).
-        max_workers: ThreadPoolExecutor cap (default 5).
-
-    Returns:
-        List of dicts: `{color, composite_url, cached, error}` per color. `error` is
-        a string if that color's render failed (eg missing base image), else None.
+    Returns list of {color, composite_url, cached, error} per color.
 
     Raises:
-        ValueError: If template/design not found, design is reference_only, or
-            template has no colors defined.
+        ValueError: If template/design not found, design is reference_only, or no colors defined.
     """
     from concurrent.futures import ThreadPoolExecutor
-    from app.models.template import Template
     from app.models.design import Design
+    from app.models.template import Template
 
     template = session.get(Template, template_id)
     if template is None:
@@ -247,11 +398,7 @@ def get_or_create_composites_all_colors(
 def invalidate_composites_for_template(template_id: int) -> int:
     """Delete all cached composites for a template from R2.
 
-    Args:
-        template_id: Template whose composites should be invalidated.
-
-    Returns:
-        Number of objects deleted.
+    Returns number of objects deleted.
     """
     from app.clients.r2_storage_client import R2StorageClient
     r2 = R2StorageClient()
@@ -266,24 +413,65 @@ def invalidate_composites_for_template(template_id: int) -> int:
     return count
 
 
+def invalidate_composites_for_image(template_image_id: int) -> int:
+    """Delete all cached composites for a specific template_image from R2.
+
+    Returns number of objects deleted.
+    """
+    from app.clients.r2_storage_client import R2StorageClient
+    from app.services import template_image_service
+    from sqlalchemy.orm import Session as _Session
+
+    # template_image_service.get needs a session — but we only have the id here.
+    # We must create one. Use a thin import to avoid circular deps.
+    from app.database import SessionLocal
+    with SessionLocal() as session:
+        view = template_image_service.get(session, template_image_id)
+
+    if view is None:
+        logger.warning("invalidate_composites_for_image: id=%d not found", template_image_id)
+        return 0
+
+    r2 = R2StorageClient()
+    prefix = f"{_CACHE_PREFIX}{view['template_id']}-{template_image_id}-"
+    keys = r2.list_objects(prefix)
+    count = 0
+    for key in keys:
+        r2.delete_object(key)
+        count += 1
+    if count:
+        logger.info(
+            "Invalidated %d composite(s) for template_image %d (template %d)",
+            count, template_image_id, view["template_id"],
+        )
+    return count
+
+
 def invalidate_composites_for_design(design_id: int) -> int:
     """Delete all cached composites involving a design from R2.
 
-    Args:
-        design_id: Design whose composites should be invalidated.
-
-    Returns:
-        Number of objects deleted.
+    Returns number of objects deleted.
     """
-    from app.clients.r2_storage_client import R2StorageClient
     import re
+    from app.clients.r2_storage_client import R2StorageClient
+
     r2 = R2StorageClient()
-    # Match cache keys for this design across both single and per-color variants:
-    #   composites/{tid}-{did}.png            (color=None)
-    #   composites/{tid}-{did}-{Color}.png    (color set; alphanumeric/dash token)
-    pattern = re.compile(rf"^{re.escape(_CACHE_PREFIX)}\d+-{design_id}(-[\w-]+)?\.png$")
+    # Match both legacy key shapes (color-based) and new image-id-based shapes:
+    #   Legacy:  composites/{tid}-{did}.png
+    #            composites/{tid}-{did}-{Color}.png
+    #            composites/{tid}-{hash}-{Color}-multi.png  (legacy multi-zone)
+    #   New:     composites/{tid}-{img_id}-{did}.png
+    #            composites/{tid}-{img_id}-{hash10}-multi.png
+    legacy_pattern = re.compile(
+        rf"^{re.escape(_CACHE_PREFIX)}\d+-{design_id}(-[\w-]+)?\.png$"
+    )
+    new_pattern = re.compile(
+        rf"^{re.escape(_CACHE_PREFIX)}\d+-[\w]+-{design_id}(\.png|-[\w-]+-multi\.png)$"
+    )
     all_keys = r2.list_objects(_CACHE_PREFIX)
-    keys_to_delete = [k for k in all_keys if pattern.match(k)]
+    keys_to_delete = [
+        k for k in all_keys if legacy_pattern.match(k) or new_pattern.match(k)
+    ]
     count = 0
     for key in keys_to_delete:
         r2.delete_object(key)
