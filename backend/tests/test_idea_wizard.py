@@ -295,10 +295,10 @@ def test_step3_returns_error_when_no_template_id(client, db):
 # Submit — POST /admin/ideas/{id}/create-listing/submit
 # ---------------------------------------------------------------------------
 
-_MOCK_RESULT = {
+# v0.10: wizard now calls save_draft (no Etsy call) and redirects to /admin/listings/{id}.
+_MOCK_DRAFT_RESULT = {
     "listing_id": 42,
-    "etsy_listing_id": "9001",
-    "draft_url": "https://www.etsy.com/your/shops/me/listings/draft/9001",
+    "status": "new",
     "composite_urls": [],
     "idempotent": False,
 }
@@ -310,21 +310,22 @@ def test_submit_requires_auth(client, db):
     assert resp.status_code == 401
 
 
-def test_submit_happy_path_creates_listing_and_marks_drafted(client, db):
+def test_submit_happy_path_saves_draft_and_redirects(client, db):
+    """v0.10: wizard calls save_draft, listing has status='new' + etsy_listing_id=None,
+    response is 303 redirect to /admin/listings/{id}."""
     idea = _seed_idea(db, title="Happy Tee", slid="SUBHAPPY")
     tmpl = _seed_template(db)
     design = _seed_design(db)
 
-    # Pre-create the Listing row that the mock will return (listing_id=42 must exist
-    # for idea_service.link_to_listing to create an IdeaToListing row with valid FK)
+    # Pre-create listing id=42 for the mocked save_draft return + idea_to_listing FK
     listing = Listing(
         id=42,
-        etsy_listing_id="9001",
+        etsy_listing_id=None,
         original_title="Happy Tee",
         original_desc="desc",
         original_tags="[]",
         original_images="[]",
-        status="created",
+        status="new",
         template_id=tmpl.id,
         design_id=design.id,
     )
@@ -332,8 +333,8 @@ def test_submit_happy_path_creates_listing_and_marks_drafted(client, db):
     db.commit()
 
     with patch(
-        "app.routes.idea_wizard.listing_creator_service.create_from_template",
-        return_value=_MOCK_RESULT,
+        "app.routes.idea_wizard.listing_creator_service.save_draft",
+        return_value=_MOCK_DRAFT_RESULT,
     ):
         resp = client.post(
             f"/admin/ideas/{idea.id}/create-listing/submit",
@@ -346,10 +347,17 @@ def test_submit_happy_path_creates_listing_and_marks_drafted(client, db):
                 "tags_csv": "custom, tee",
                 "shop_id": "12345678",
             },
+            follow_redirects=False,
         )
 
-    assert resp.status_code == 200
-    assert "9001" in resp.text  # etsy_listing_id in success page
+    # 303 See Other → /admin/listings/42 (no Etsy push happens here)
+    assert resp.status_code == 303
+    assert "/admin/listings/42" in resp.headers["location"]
+
+    # Listing left in draft state — no Etsy call made
+    db.refresh(listing)
+    assert listing.status == "new"
+    assert listing.etsy_listing_id is None
 
     # idea_to_listing row created
     link = db.get(IdeaToListing, (idea.id, 42))
@@ -366,7 +374,7 @@ def test_submit_service_error_renders_error_template(client, db):
     design = _seed_design(db)
 
     with patch(
-        "app.routes.idea_wizard.listing_creator_service.create_from_template",
+        "app.routes.idea_wizard.listing_creator_service.save_draft",
         side_effect=ValueError("Template not found"),
     ):
         resp = client.post(
@@ -408,8 +416,9 @@ def test_submit_validation_empty_title(client, db):
     assert "Title" in resp.text
 
 
-def test_submit_idempotent_result_rendered_as_success(client, db):
-    """When service returns idempotent=True, success page shows the warning banner."""
+def test_submit_idempotent_existing_live_listing_redirects(client, db):
+    """When save_draft returns idempotent=True (existing live listing),
+    wizard still redirects to /admin/listings/{id} of that listing."""
     idea = _seed_idea(db, slid="SUBIDEMP")
     tmpl = _seed_template(db)
     design = _seed_design(db)
@@ -429,10 +438,15 @@ def test_submit_idempotent_result_rendered_as_success(client, db):
     db.add(listing)
     db.commit()
 
-    idempotent_result = {**_MOCK_RESULT, "listing_id": 99, "etsy_listing_id": "8888", "idempotent": True}
+    idempotent_result = {
+        "listing_id": 99,
+        "status": "created",
+        "composite_urls": [],
+        "idempotent": True,
+    }
 
     with patch(
-        "app.routes.idea_wizard.listing_creator_service.create_from_template",
+        "app.routes.idea_wizard.listing_creator_service.save_draft",
         return_value=idempotent_result,
     ):
         resp = client.post(
@@ -446,9 +460,8 @@ def test_submit_idempotent_result_rendered_as_success(client, db):
                 "tags_csv": "",
                 "shop_id": "12345678",
             },
+            follow_redirects=False,
         )
 
-    assert resp.status_code == 200
-    # Idempotent warning shown
-    assert "already existed" in resp.text or "existing" in resp.text.lower()
-    assert "8888" in resp.text
+    assert resp.status_code == 303
+    assert "/admin/listings/99" in resp.headers["location"]

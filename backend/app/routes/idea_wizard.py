@@ -405,9 +405,12 @@ async def wizard_submit(
             status_code=422,
         )
 
-    # --- Call listing_creator_service ---
+    # --- v0.10: save_draft only — wizard no longer pushes to Etsy here.
+    # User reviews the rendered composite on /admin/listings/{id} then clicks
+    # the Upload button to call upload_to_etsy. shop_id is therefore irrelevant
+    # at this stage (passed through only for legacy back-compat callers).
     try:
-        result = listing_creator_service.create_from_template(
+        result = listing_creator_service.save_draft(
             session=db,
             template_id=template_id,
             design_id=design_id,
@@ -415,11 +418,10 @@ async def wizard_submit(
             description=description,
             tags=tags,
             enabled_combos=enabled_combos,
-            shop_id=shop_id,
         )
     except Exception as exc:  # noqa: BLE001
         logger.exception(
-            "Wizard listing creation failed for idea=%d template=%d design=%d",
+            "Wizard save_draft failed for idea=%d template=%d design=%d",
             idea_id, template_id, design_id,
         )
         return _get_jinja().TemplateResponse(
@@ -430,29 +432,22 @@ async def wizard_submit(
         )
 
     listing_id: int = result["listing_id"]
-    is_idempotent: bool = result.get("idempotent", False)
 
     # --- Post-creation: link idea to listing + mark drafted ---
     try:
         idea_service.link_to_listing(db, idea_id, listing_id)
         idea_service.mark_drafted(db, idea_id)
     except Exception as exc:  # noqa: BLE001
-        # Non-fatal: listing was created; just log and continue
         logger.warning(
-            "Post-creation idea link/status update failed for idea=%d listing=%d: %s",
+            "Post-save idea link/status update failed for idea=%d listing=%d: %s",
             idea_id, listing_id, exc,
         )
 
-    return _get_jinja().TemplateResponse(
-        request,
-        "wizard/success.html",
-        {
-            "idea": idea,
-            "listing_id": listing_id,
-            "etsy_listing_id": result.get("etsy_listing_id"),
-            "draft_url": result.get("draft_url"),
-            "idempotent": is_idempotent,
-        },
+    # Redirect to detail page where user can preview + Upload
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(
+        url=f"/admin/listings/{listing_id}?flash=Draft+saved.+Click+Upload+to+push+to+Etsy.",
+        status_code=303,
     )
 
 
