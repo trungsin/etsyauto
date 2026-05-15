@@ -55,6 +55,26 @@ def _happy_variation_images(kw: dict) -> dict:
     }
 
 
+def _happy_delete_listing(_kw: dict) -> None:
+    """delete_listing returns nothing on success (Etsy soft-deletes to inactive)."""
+    return None
+
+
+def _happy_get_listing(kw: dict) -> dict:
+    """Sample Etsy listing payload — covers fields needed by sync."""
+    return {
+        "listing_id": int(kw.get("listing_id", 9001)),
+        "state": "active",
+        "title": "Sample Etsy Title (from dry-run)",
+        "description": "Sample description body.",
+        "tags": ["sample", "draft", "tee"],
+        "price": {"amount": 1900, "divisor": 100, "currency_code": "USD"},
+        "quantity": 100,
+        "num_favorers": 0,
+        "views": 0,
+    }
+
+
 def _happy_taxonomy(kw: dict) -> dict:
     """Mimic the real client's filtered shape: name + scales + possible_values."""
     pid = int(kw.get("property_id") or 0)
@@ -116,6 +136,8 @@ _SCENARIOS: dict[str, dict[str, Callable[[dict], Any]]] = {
         "upload_listing_image": _happy_image_upload,
         "set_variation_images": _happy_variation_images,
         "get_taxonomy_property_values": _happy_taxonomy,
+        "delete_listing": _happy_delete_listing,
+        "get_listing": _happy_get_listing,
     },
     "rate_limit": {
         "create_draft_listing": _http_error(429, {"error": "rate_limited"}),

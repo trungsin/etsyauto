@@ -176,6 +176,51 @@ class EtsyApiClient:
             raise ValueError("update_listing requires at least one field to update")
         return self._request("PATCH", f"/listings/{listing_id}", json=fields).json()
 
+    def delete_listing(self, shop_id: str | int, listing_id: str | int) -> None:
+        """DELETE /shops/{shop_id}/listings/{listing_id}.
+
+        Etsy soft-deletes the listing (state becomes 'inactive', does not vanish).
+        Idempotent: 404 (already gone) is treated as success.
+        Ref: https://developers.etsy.com/documentation/reference#operation/deleteListing
+        """
+        if settings.etsy_dry_run:
+            from app.clients import etsy_dry_run_fixtures
+            etsy_dry_run_fixtures.dispatch(
+                settings.etsy_dry_run_scenario,
+                "delete_listing",
+                {"shop_id": shop_id, "listing_id": listing_id},
+            )
+            return
+        try:
+            self._request("DELETE", f"/shops/{shop_id}/listings/{listing_id}")
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:
+                logger.info("delete_listing %s: already gone (404)", listing_id)
+                return
+            raise
+
+    def get_listing(
+        self,
+        listing_id: str | int,
+        *,
+        includes: tuple[str, ...] = ("Images", "Inventory"),
+    ) -> dict:
+        """GET /listings/{listing_id}?includes=...
+
+        Returns full Etsy payload for sync — title, description, tags, state,
+        plus optional Images + Inventory sub-resources.
+        Ref: https://developers.etsy.com/documentation/reference#operation/getListing
+        """
+        if settings.etsy_dry_run:
+            from app.clients import etsy_dry_run_fixtures
+            return etsy_dry_run_fixtures.dispatch(
+                settings.etsy_dry_run_scenario,
+                "get_listing",
+                {"listing_id": listing_id},
+            )
+        params = {"includes": ",".join(includes)} if includes else {}
+        return self._request("GET", f"/listings/{listing_id}", params=params).json()
+
     # ------------------------------------------------------------------
     # Image upload
     # ------------------------------------------------------------------
