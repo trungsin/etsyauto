@@ -151,6 +151,7 @@ app.add_middleware(
         "http://172.16.10.168:8787",
         "https://etsy.datxanhmientrung.ai",
         "https://etsy.datxanhmientrung.ai:4333",
+        "https://etsy.leesun.space",
     ],
     allow_origin_regex=r"chrome-extension://.*",
     allow_credentials=False,

@@ -130,7 +130,7 @@ async function handleGetListing(sendResponse) {
 async function handleSendToOptimizer(payload, sendResponse) {
   try {
     const result = await chrome.storage.local.get(['backendUrl']);
-    const base = result.backendUrl || 'http://172.16.10.168:8787';
+    const base = result.backendUrl || 'https://etsy.leesun.space';
 
     const body = {
       listing_id: parseInt(payload.listing_id, 10),
@@ -167,7 +167,7 @@ async function handleSendToOptimizer(payload, sendResponse) {
 async function handleApiCall(method, path, body, _unused, sendResponse) {
   try {
     const stored = await chrome.storage.local.get(['backendUrl', 'adminToken']);
-    const base = stored.backendUrl || 'http://172.16.10.168:8787';
+    const base = stored.backendUrl || 'https://etsy.leesun.space';
     const token = stored.adminToken || '';
 
     const headers = { 'Content-Type': 'application/json' };
