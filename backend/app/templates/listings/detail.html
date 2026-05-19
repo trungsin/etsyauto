@@ -2,6 +2,7 @@
 {% block title %}{{ listing.title or 'Listing' }} — EtsyAuto Admin{% endblock %}
 {% block extra_head %}
 <link rel="stylesheet" href="/admin/static/listings-admin.css">
+<link rel="stylesheet" href="/admin/static/processing-modal.css">
 {% endblock %}
 {% block content %}
 {% if request.query_params.get('flash') %}
@@ -58,12 +59,28 @@
   <section class="lst-card">
     <h2>Edit</h2>
     <form id="lst-edit-form" onsubmit="return false;">
-      <label>Title
-        <input type="text" name="title" value="{{ listing.title or '' }}" maxlength="140" required>
-      </label>
-      <label>Description
-        <textarea name="description" rows="8">{{ listing.description or '' }}</textarea>
-      </label>
+      <div class="lst-field-row">
+        <label class="lst-field-label" for="lst-title-input">Title</label>
+        <div class="lst-ai-btn-wrap">
+          <button type="button" class="btn-ai" id="btn-ai-title" title="Optimize for Etsy SEO with AI">
+            <span class="ai-icon">✨</span> AI
+          </button>
+          <button type="button" class="btn-ai-undo" id="btn-undo-title" title="Undo AI change" hidden>↶ Undo</button>
+        </div>
+      </div>
+      <input type="text" id="lst-title-input" name="title" value="{{ listing.title or '' }}" maxlength="140" required>
+
+      <div class="lst-field-row">
+        <label class="lst-field-label" for="lst-desc-input">Description</label>
+        <div class="lst-ai-btn-wrap">
+          <button type="button" class="btn-ai" id="btn-ai-desc" title="Optimize for Etsy SEO with AI">
+            <span class="ai-icon">✨</span> AI
+          </button>
+          <button type="button" class="btn-ai-undo" id="btn-undo-desc" title="Undo AI change" hidden>↶ Undo</button>
+        </div>
+      </div>
+      <textarea id="lst-desc-input" name="description" rows="8">{{ listing.description or '' }}</textarea>
+
       <label>Tags <span class="muted">(comma-separated, max 13)</span>
         <input type="text" name="tags" value="{{ listing.tags | join(', ') }}">
       </label>
@@ -73,21 +90,85 @@
       </span>
     </form>
 
-    <details class="lst-meta">
-      <summary>Variations &amp; pricing ({{ listing.enabled_combos|length }} combos)</summary>
-      {% if listing.enabled_combos %}
-      <table class="vo-table">
-        <thead><tr><th>Size</th><th>Color</th></tr></thead>
-        <tbody>
-          {% for c in listing.enabled_combos %}
-          <tr><td>{{ c.size }}</td><td>{{ c.color }}</td></tr>
+    {# ----- Variations & pricing (template-driven preview) ----- #}
+    <details class="lst-meta" open>
+      <summary>
+        Variations &amp; pricing
+        <span class="muted" id="vp-summary-counts">
+          {% if template_preview %}
+          ({{ template_preview.n_sizes }} sizes × {{ template_preview.n_colors }} colors
+          = {{ template_preview.total_combos }}/{{ template_preview.etsy_cap }} rows)
+          {% endif %}
+        </span>
+      </summary>
+
+      <div class="vp-template-switch">
+        <label for="vp-template-select" class="muted">Template:</label>
+        <select id="vp-template-select" data-current="{{ listing.template_id or '' }}">
+          {% for t in all_templates %}
+          <option value="{{ t.id }}" {% if t.id == listing.template_id %}selected{% endif %}>
+            {{ t.name }} ({{ t.category }})
+          </option>
           {% endfor %}
-        </tbody>
-      </table>
-      {% endif %}
-      <p class="muted">To change sizes/colors/prices, edit the template at
-        <a href="/admin/templates/{{ listing.template_id }}">{{ listing.template_name }}</a>
-        and re-render here.</p>
+        </select>
+        <label class="vp-rerender-check">
+          <input type="checkbox" id="vp-rerender-check"> also re-render images
+        </label>
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-apply-template" disabled>Apply</button>
+        <span id="vp-template-msg" class="muted"></span>
+      </div>
+
+      <div id="vp-preview">
+        {% if template_preview %}
+        <div class="vp-section">
+          <h4>Sizes &amp; pricing</h4>
+          <table class="vp-table">
+            <thead><tr><th>Size</th><th>Price</th></tr></thead>
+            <tbody id="vp-sizes-tbody">
+              {% for s in template_preview.sizes %}
+              <tr><td>{{ s.name }}</td><td>{{ s.price_display }}</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="vp-section">
+          <h4>Colors <span class="muted">({{ template_preview.n_colors }})</span></h4>
+          <div id="vp-colors-list" class="vp-color-chips">
+            {% for c in template_preview.colors %}
+            <span class="vp-chip">{{ c }}</span>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="vp-section">
+          <h4>Enabled combos <span class="muted">({{ listing.enabled_combos|length }})</span></h4>
+          {% if listing.enabled_combos %}
+          <table class="vp-table">
+            <thead><tr><th>Size</th><th>Color</th></tr></thead>
+            <tbody id="vp-combos-tbody">
+              {% for c in listing.enabled_combos %}
+              <tr><td>{{ c.size }}</td><td>{{ c.color }}</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          {% else %}
+          <p class="muted">No enabled combos.</p>
+          {% endif %}
+        </div>
+
+        {% if template_preview.exceeds_cap %}
+        <p class="banner-warn-inline">
+          ⚠ {{ template_preview.total_combos }} rows exceeds Etsy cap of {{ template_preview.etsy_cap }}.
+        </p>
+        {% endif %}
+        {% else %}
+        <p class="muted">No template linked.</p>
+        {% endif %}
+      </div>
+
+      <p class="muted">To edit prices/sizes/colors, modify the template at
+        <a href="/admin/templates/{{ listing.template_id }}">{{ listing.template_name }}</a>.</p>
     </details>
   </section>
 </div>
@@ -95,5 +176,6 @@
 <script>
   window.__listingId = {{ listing.id }};
 </script>
+<script src="/admin/static/processing-modal.js" defer></script>
 <script src="/admin/static/listings-admin.js" defer></script>
 {% endblock %}

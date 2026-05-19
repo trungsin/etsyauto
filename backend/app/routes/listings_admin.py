@@ -19,6 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.clients.etsy_api_client import EtsyApiClient
+from app.clients.gemini_text_client import GeminiTextClient
 from app.config import settings
 from app.database import get_db
 from app.models.listing import Listing
@@ -85,6 +86,58 @@ def _resolve_shop_id() -> int:
                 return int(cred.shop_id)
         raise HTTPException(status_code=503, detail="Etsy shop_id not configured")
     return int(shop_id)
+
+
+def _template_preview_dict(template: Template) -> dict:
+    """Shape a Template into a UI-friendly preview dict: sizes+prices, colors, counts."""
+    try:
+        opts = json.loads(template.variation_options_json or "{}")
+    except (json.JSONDecodeError, TypeError):
+        opts = {}
+    fallback_cents = int(template.default_price_cents or 0)
+    sizes_out = []
+    for s in opts.get("sizes", []) or []:
+        if isinstance(s, dict):
+            name = s.get("name", "")
+            cents = int(s.get("price_cents", fallback_cents) or fallback_cents)
+        else:
+            name = str(s)
+            cents = fallback_cents
+        sizes_out.append({
+            "name": name,
+            "price_cents": cents,
+            "price_display": f"${cents / 100:.2f}",
+        })
+    colors = [str(c) for c in (opts.get("colors") or [])]
+    n_sizes = len(sizes_out)
+    n_colors = len(colors)
+    total = n_sizes * n_colors
+    return {
+        "id": template.id,
+        "name": template.name,
+        "category": template.category,
+        "sizes": sizes_out,
+        "colors": colors,
+        "n_sizes": n_sizes,
+        "n_colors": n_colors,
+        "total_combos": total,
+        "etsy_cap": 30,
+        "exceeds_cap": total > 30,
+        "default_price_cents": fallback_cents,
+    }
+
+
+def _all_combos_from_template(template: Template) -> list[dict]:
+    """Build full size×color matrix from template variation_options for enabled_combos reset."""
+    try:
+        opts = json.loads(template.variation_options_json or "{}")
+    except (json.JSONDecodeError, TypeError):
+        opts = {}
+    sizes = []
+    for s in opts.get("sizes", []) or []:
+        sizes.append(s.get("name") if isinstance(s, dict) else str(s))
+    colors = [str(c).strip().title() for c in (opts.get("colors") or [])]
+    return [{"size": sz, "color": cl} for sz in sizes for cl in colors if sz and cl]
 
 
 def _row_to_view(row: Listing, template: Template | None) -> dict:
@@ -196,6 +249,13 @@ def listing_detail_ui(
         except (json.JSONDecodeError, TypeError):
             opts = {}
 
+    # Full preview of current template + lightweight list for combobox
+    template_preview = _template_preview_dict(template) if template else None
+    all_templates = [
+        {"id": t.id, "name": t.name, "category": t.category}
+        for t in db.scalars(select(Template).order_by(Template.name)).all()
+    ]
+
     return get_jinja().TemplateResponse(
         request,
         "listings/detail.html",
@@ -203,6 +263,8 @@ def listing_detail_ui(
             "listing": listing,
             "template": template,
             "template_opts": opts,
+            "template_preview": template_preview,
+            "all_templates": all_templates,
             "draft_url": (
                 listing_creator_service._draft_url(row.etsy_listing_id)
                 if row.etsy_listing_id else None
@@ -473,3 +535,192 @@ def delete_listing(
     row.status = "deleted"
     db.commit()
     return JSONResponse({"deleted": True})
+
+
+# ---------------------------------------------------------------------------
+# AI optimization — returns suggested text WITHOUT persisting it.
+# Frontend applies result to input; user must click "Save changes" to persist.
+# ---------------------------------------------------------------------------
+
+
+def _ai_listing_context(row: Listing) -> dict:
+    """Build listing_data payload for GeminiTextClient from a Listing row."""
+    try:
+        payload = json.loads(row.local_payload_json or "{}")
+    except (json.JSONDecodeError, TypeError):
+        payload = {}
+    try:
+        tags_list = json.loads(row.original_tags or "[]")
+    except (json.JSONDecodeError, TypeError):
+        tags_list = []
+    tags_str = ", ".join(tags_list) if isinstance(tags_list, list) else ""
+    title = payload.get("title") or row.original_title or ""
+    desc = payload.get("description") or row.original_desc or ""
+    return {
+        "original_title": title,
+        "original_description": desc,
+        "description": desc,
+        "tags": tags_str,
+        "category": "",
+    }
+
+
+@router.post("/{listing_id}/ai/title")
+def ai_optimize_title(
+    listing_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    x_admin_token: str | None = Header(default=None),
+    admin_token: str | None = Cookie(default=None),
+) -> JSONResponse:
+    """Generate a single SEO-optimized title via Gemini. Does NOT persist."""
+    _check_token(x_admin_token, request, admin_token)
+    row = db.get(Listing, listing_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Listing not found")
+    if row.deleted_at is not None:
+        raise HTTPException(status_code=410, detail="Listing was deleted")
+    try:
+        client = GeminiTextClient()
+        result = client.generate_optimized_title(
+            _ai_listing_context(row), model=settings.gemini_ai_button_model,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail=f"AI title failed: {exc}") from exc
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("ai_optimize_title failed for listing %d", listing_id)
+        raise HTTPException(status_code=502, detail=f"AI title failed: {exc}") from exc
+    return JSONResponse({"ok": True, **result})
+
+
+@router.post("/{listing_id}/ai/description")
+def ai_optimize_description(
+    listing_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    x_admin_token: str | None = Header(default=None),
+    admin_token: str | None = Cookie(default=None),
+) -> JSONResponse:
+    """Generate a single SEO-optimized description via Gemini. Does NOT persist."""
+    _check_token(x_admin_token, request, admin_token)
+    row = db.get(Listing, listing_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Listing not found")
+    if row.deleted_at is not None:
+        raise HTTPException(status_code=410, detail="Listing was deleted")
+    try:
+        client = GeminiTextClient()
+        result = client.generate_optimized_description(
+            _ai_listing_context(row), model=settings.gemini_ai_button_model,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail=f"AI description failed: {exc}") from exc
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("ai_optimize_description failed for listing %d", listing_id)
+        raise HTTPException(status_code=502, detail=f"AI description failed: {exc}") from exc
+    return JSONResponse({"ok": True, **result})
+
+
+# ---------------------------------------------------------------------------
+# Template preview + switch
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{listing_id}/template-preview")
+def template_preview(
+    listing_id: int,
+    request: Request,
+    template_id: int,
+    db: Session = Depends(get_db),
+    x_admin_token: str | None = Header(default=None),
+    admin_token: str | None = Cookie(default=None),
+) -> JSONResponse:
+    """Return preview dict for a candidate template (sizes+prices, colors, counts)."""
+    _check_token(x_admin_token, request, admin_token)
+    if db.get(Listing, listing_id) is None:
+        raise HTTPException(status_code=404, detail="Listing not found")
+    tmpl = db.get(Template, template_id)
+    if tmpl is None:
+        raise HTTPException(status_code=404, detail="Template not found")
+    return JSONResponse(_template_preview_dict(tmpl))
+
+
+@router.post("/{listing_id}/change-template")
+def change_listing_template(
+    listing_id: int,
+    request: Request,
+    body: dict = Body(...),
+    db: Session = Depends(get_db),
+    x_admin_token: str | None = Header(default=None),
+    admin_token: str | None = Cookie(default=None),
+) -> JSONResponse:
+    """Swap listing.template_id, reset enabled_combos to new template's full matrix.
+
+    Body: {"template_id": int, "rerender": bool}
+    Clears zone_designs (zone keys are template-specific). Optionally re-renders gallery.
+    Live listings (status=created) are NOT pushed to Etsy here — caller decides next.
+    """
+    _check_token(x_admin_token, request, admin_token)
+    row = db.get(Listing, listing_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Listing not found")
+    if row.deleted_at is not None:
+        raise HTTPException(status_code=410, detail="Listing was deleted")
+
+    new_template_id = body.get("template_id")
+    rerender = bool(body.get("rerender", False))
+    if not isinstance(new_template_id, int):
+        raise HTTPException(status_code=400, detail="template_id (int) required")
+
+    new_tmpl = db.get(Template, new_template_id)
+    if new_tmpl is None:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    new_combos = _all_combos_from_template(new_tmpl)
+    if not new_combos:
+        raise HTTPException(
+            status_code=422,
+            detail="New template has no sizes×colors combinations defined",
+        )
+
+    try:
+        payload = json.loads(row.local_payload_json or "{}")
+    except (json.JSONDecodeError, TypeError):
+        payload = {}
+
+    row.template_id = new_template_id
+    payload["enabled_combos"] = new_combos
+    payload["zone_designs"] = {}
+
+    if rerender:
+        if not row.design_id:
+            raise HTTPException(status_code=400, detail="Listing has no design_id; cannot re-render")
+        try:
+            composite_service.invalidate_composites_for_template(new_template_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("invalidate_composites failed (non-fatal): %s", exc)
+        rendered = composite_service.render_all_for_listing(
+            db, new_template_id, row.design_id, zone_designs=None,
+        )
+        gallery = sorted(
+            [r for r in rendered if r["url"] is not None],
+            key=lambda r: r["rank"],
+        )[:10]
+        payload["gallery_snapshot"] = [
+            {"rank": g["rank"], "color": g.get("color"), "url": g["url"], "id": g.get("id")}
+            for g in gallery
+        ]
+        row.original_images = json.dumps([g["url"] for g in gallery])
+
+    row.local_payload_json = json.dumps(payload)
+    db.commit()
+    db.refresh(row)
+
+    return JSONResponse({
+        "ok": True,
+        "template_id": new_template_id,
+        "template_name": new_tmpl.name,
+        "enabled_combos": new_combos,
+        "rerendered": rerender,
+        "gallery_count": len(payload.get("gallery_snapshot") or []) if rerender else None,
+    })

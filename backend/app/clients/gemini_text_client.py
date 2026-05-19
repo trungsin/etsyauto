@@ -10,9 +10,11 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "title_seo_prompt.md"
+DESC_PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "description_seo_prompt.md"
 PROMPT_VERSION = "v1"
 MODEL_ID = "gemini-2.5-flash"
 MAX_TITLE_CHARS = 140
+MAX_DESC_CHARS = 10000  # Etsy hard limit per description field
 
 # Structured output schema for Gemini response_schema — enforces JSON shape
 _TITLE_VARIANT_SCHEMA = {
@@ -86,11 +88,12 @@ class GeminiTextClient:
         self._prompt_path = prompt_path or PROMPT_PATH
         self._prompt_template = self._prompt_path.read_text(encoding="utf-8")
 
-    def generate_title_variants(self, listing_data: dict) -> list[dict]:
+    def generate_title_variants(self, listing_data: dict, model: str | None = None) -> list[dict]:
         """Call Gemini and return validated title variants.
 
         Args:
             listing_data: dict with keys original_title, description, tags, category.
+            model: override model id (default: gemini-2.5-flash for background jobs).
 
         Returns:
             List of variant dicts: {text, char_count, rationale, target_keywords}.
@@ -111,8 +114,9 @@ class GeminiTextClient:
             material=listing_data.get("material", ""),
         )
 
+        model_id = model or MODEL_ID
         response = self._client.models.generate_content(
-            model=MODEL_ID,
+            model=model_id,
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
@@ -127,7 +131,7 @@ class GeminiTextClient:
                 "Gemini token usage — input: %s, output: %s, model: %s",
                 getattr(usage, "prompt_token_count", "?"),
                 getattr(usage, "candidates_token_count", "?"),
-                MODEL_ID,
+                model_id,
             )
 
         import json  # noqa: PLC0415 — deferred to avoid top-level import ordering noise
@@ -148,3 +152,73 @@ class GeminiTextClient:
             raise ValueError("No valid variants after validation")
 
         return validated
+
+    def generate_optimized_title(self, listing_data: dict, model: str | None = None) -> dict:
+        """Return a single SEO-optimized title — reuses the variants prompt and picks variant #1.
+
+        Args:
+            listing_data: see generate_title_variants.
+            model: override model id (admin AI button passes Pro).
+
+        Returns: {"text": str, "char_count": int, "rationale": str, "target_keywords": list[str]}
+        """
+        variants = self.generate_title_variants(listing_data, model=model)
+        return variants[0]
+
+    def generate_optimized_description(self, listing_data: dict, model: str | None = None) -> dict:
+        """Call Gemini with the description SEO prompt and return rewritten description.
+
+        Args:
+            listing_data: dict with keys original_title, original_description (or description),
+                          tags, category.
+            model: override model id (admin AI button passes Pro).
+
+        Returns:
+            {"text": str, "char_count": int}
+        """
+        prompt_template = DESC_PROMPT_PATH.read_text(encoding="utf-8")
+        desc = listing_data.get("original_description") or listing_data.get("description") or ""
+        prompt = prompt_template.format(
+            original_title=listing_data.get("original_title", ""),
+            original_description=desc,
+            tags=listing_data.get("tags", ""),
+            category=listing_data.get("category", ""),
+        )
+
+        schema = {
+            "type": "object",
+            "properties": {"description": {"type": "string"}},
+            "required": ["description"],
+        }
+        model_id = model or MODEL_ID
+        response = self._client.models.generate_content(
+            model=model_id,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=schema,
+            ),
+        )
+        usage = response.usage_metadata
+        if usage:
+            logger.info(
+                "Gemini description token usage — input: %s, output: %s, model: %s",
+                getattr(usage, "prompt_token_count", "?"),
+                getattr(usage, "candidates_token_count", "?"),
+                model_id,
+            )
+
+        import json  # noqa: PLC0415
+        try:
+            parsed = json.loads(response.text)
+        except (json.JSONDecodeError, TypeError) as exc:
+            raise ValueError(
+                f"Gemini description response is not valid JSON: {exc}\n{response.text!r}"
+            ) from exc
+
+        text = (parsed.get("description") or "").strip()
+        if not text:
+            raise ValueError("Gemini returned empty description")
+        if len(text) > MAX_DESC_CHARS:
+            text = text[:MAX_DESC_CHARS].rstrip()
+        return {"text": text, "char_count": len(text)}
