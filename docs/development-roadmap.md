@@ -169,6 +169,41 @@
 
 ---
 
+## v0.11.0 — Cloden Design (POD Artwork Pipeline)
+
+### Scope
+
+| Sub-feature | Title | Status | Completed |
+|-------------|-------|--------|-----------|
+| — | [Cloden Design — POD Artwork Pipeline](../plans/260520-1400-cloden-design-pod-artwork-pipeline/plan.md) | **Complete** | 2026-05-20 |
+
+### v0.11.0 Success Metrics
+
+- [x] Standalone admin page `/admin/artwork` with 4-step interactive workflow
+- [x] Step 1: Upload + canvas crop to region of interest (fractional coords)
+- [x] Step 2: GPT-Image-1 refinement (AI content-aware cleanup)
+- [x] Step 3: remove.bg transparent background cutout
+- [x] Step 4: Real-ESRGAN 4x upscale (async BackgroundTask with HTMX polling)
+- [x] Artwork table with per-step status tracking + URL fields
+- [x] OpenaiImagenClient wrapper for GPT-Image-1 edits endpoint
+- [x] ArtworkService orchestrating 4-step pipeline with error handling
+- [x] Canvas crop UI ported from extension (consistent UX)
+- [x] HTMX integration for async upscale polling
+- [x] Alembic migration for artworks table
+- [x] Config: `openai_api_key`, `enable_artwork` flag
+- [x] `pyproject.toml` updated: `openai>=1.82.0`
+- [x] Docs updated: system-architecture, project-changelog, development-roadmap
+
+### Deferred (post-v0.11.0)
+
+- Batch artwork processing (queue multiple images)
+- Advanced crop modes (polygon, ellipse)
+- Real-ESRGAN timeout + fallback strategy
+- GPT-Image-1 prompt A/B testing / variants
+- Per-artwork cost tracking
+
+---
+
 ## v1.0.0 — POD Catalog Integration (Planned)
 
 ### Scope

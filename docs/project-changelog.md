@@ -4,6 +4,71 @@ All notable changes to EtsyAuto. Format: [Keep a Changelog](https://keepachangel
 
 ---
 
+## [0.11.0] — 2026-05-20
+
+Cloden Design — POD Artwork Pipeline. Standalone admin page (`/admin/artwork`) for converting raw mockup images into clean, print-ready POD artwork through a step-by-step AI pipeline: upload + canvas crop → GPT-Image-1 refine/clean → remove.bg transparent cutout → Real-ESRGAN 4x upscale.
+
+### Added
+
+#### Backend — Database
+- `Artwork` model — new table tracking each pipeline step: `source_url`, `cropped_url`, `refined_url`, `removebg_url`, `upscaled_url`, `status` ∈ {uploaded, cropped, refined, removebg, upscaled, failed}, timestamps
+- Alembic migration `81fe2ec1dc2b_add_artworks_table.py` — creates `artworks` table with status tracking
+
+#### Backend — Clients
+- `OpenaiImagenClient` (`app/clients/openai_imagen_client.py`) — wraps OpenAI GPT-Image-1 `POST /v1/images/edits` for content-aware image refinement (smooth, clean via AI mask+prompt)
+
+#### Backend — Services
+- `ArtworkService` (`app/services/artwork_service.py`) — orchestrates 4-step pipeline:
+  - `crop_image()` — PIL crop to fractional coordinates [x, y, w, h]
+  - `refine_with_gpt_image_1()` — calls OpenaiImagenClient with cleanup prompt; returns PNG
+  - `remove_background()` — calls RemoveBgClient; returns transparent PNG
+  - `upscale_with_realesrgan()` — subprocess Real-ESRGAN 4x upscaler via BackgroundTask; polls status via `is_upscaling_complete()`
+
+#### Backend — API Routes
+- `GET  /admin/artwork` — renders Jinja2 admin page with 4-step workflow UI
+- `POST /admin/artwork` — multipart upload (file, crop coords) → returns `{id, cropped_url}`
+- `POST /admin/artwork/{id}/refine` — calls `refine_with_gpt_image_1()` → returns `{refined_url}`
+- `POST /admin/artwork/{id}/removebg` — calls `remove_background()` → returns `{removebg_url}`
+- `POST /admin/artwork/{id}/upscale` — triggers Real-ESRGAN in background → returns `{upscaling: true}`
+- `GET  /admin/artwork/{id}/upscale-status` — HTMX polling endpoint → returns `{upscaled_url, is_complete}`
+
+#### Frontend — Admin UI
+- `templates/artwork/index.html` — 4 sequential panels with canvas drag-crop UI
+  - Panel 1: File upload + preview + drag-select crop region (ported from extension)
+  - Panel 2: Cropped preview + "Refine with AI" button
+  - Panel 3: Refined preview + "Remove Background" button
+  - Panel 4: Transparent PNG preview + "Upscale ×4" button
+  - Download button after upscale complete
+- HTMX polling for async upscale status (BackgroundTask-safe)
+- Static assets: CSS + inline JS for canvas interaction
+
+#### Configuration
+- `config.py` — new `openai_api_key` setting field (required), `enable_artwork` boolean flag (default: true)
+- `pyproject.toml` — added `openai>=1.82.0` dependency
+
+#### Integration
+- `main.py` — wired `artwork_admin_router` into app
+- `models/__init__.py` — exported `Artwork` model
+- `templates/base.html` — added "Artwork" nav link in admin sidebar
+
+### Architecture Decisions
+
+- **Single admin page (not scheduler job)** — artwork pipeline is interactive, not batch; user-triggered steps
+- **Async upscale via BackgroundTask** — Real-ESRGAN CPU-bound; doesn't block FastAPI event loop
+- **Fractional crop coordinates** — canvas returns [x,y,w,h] in 0–1 range; Pillow handles pixel conversion
+- **Canvas crop UI ported from extension** — reuse existing crop-modal.js logic; consistent UX
+- **Real-ESRGAN subprocess, not library** — avoids GPU memory overhead; CPU-only fallback for production
+- **Per-step error handling** — each step can fail independently; user can retry or skip
+
+### Known Limitations
+
+- Real-ESRGAN upscaling time varies (~30–120s depending on image size); no timeout yet
+- No batch artwork processing (one image at a time)
+- Canvas crop only supports rectangle drag; no polygon or ellipse
+- OpenAI GPT-Image-1 API requires valid paid account; preview API usage incurs cost
+
+---
+
 ## [0.10.0] — 2026-05-15
 
 Listing Management — local draft + 2-phase upload. Wizard no longer pushes to Etsy directly: it saves a local draft. Users review the rendered composite gallery + edit text/pricing on `/admin/listings/{id}` then click **Upload** to push to Etsy. Sync / Edit (write-through) / Delete are wired through to the Etsy API for live listings.

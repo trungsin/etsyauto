@@ -461,6 +461,38 @@ etsyauto/
 └── README.md
 ```
 
+## Cloden Design — POD Artwork Pipeline
+
+**New in v0.11.0** — Standalone admin page (`/admin/artwork`) for converting raw mockup images into clean, POD-ready artwork through a step-by-step AI pipeline.
+
+```
+User Workflow:
+├── Step 1: Upload mockup image → canvas crop to region of interest
+├── Step 2: GPT-Image-1 refine (clean/smooth via AI edit API)
+├── Step 3: remove.bg transparent cutout
+└── Step 4: Real-ESRGAN upscale (CPU background job, ×4 resolution)
+           ↓
+        Download POD-ready PNG
+```
+
+**Database:** `artworks` table (id, source_url, cropped_url, refined_url, removebg_url, upscaled_url, status, ...).
+
+**Key Services:**
+- `OpenaiImagenClient` — GPT-Image-1 `POST /v1/images/edits` wrapper; crops + prompts for refinement
+- `ArtworkService` — Orchestrates 4-step pipeline; handles failures gracefully with per-step retry
+- `artwork_admin.py` — Jinja2 admin page + 5 JSON endpoints (upload, refine, remove-bg, upscale, status)
+
+**Tech Stack:**
+- `openai >= 1.82.0` — GPT-Image-1 API (multi-modal edit endpoint)
+- `realesrgan` (CPU subprocess) — Real-ESRGAN 4x upscaler; runs async via `BackgroundTask`
+- `remove.bg` REST API — transparent background cutout
+
+**Admin UI:**
+- 4 sequential panels: Upload+Crop → Refine → Remove BG → Upscale
+- Canvas drag-select crop (ported from extension; fractional coords)
+- HTMX polling for async upscale status
+- Download button once complete
+
 ## Scheduler Job Timing
 
 | Job | Interval | Trigger Condition | Max Instances |

@@ -66,6 +66,11 @@ class Settings(BaseSettings):
     etsy_dry_run: bool = False
     etsy_dry_run_scenario: str = "happy"
 
+    # OpenAI — used by Cloden Design artwork pipeline (GPT-Image-1 edit)
+    openai_api_key: str = ""
+    # Feature flag — disable artwork pipeline if OpenAI key not configured
+    enable_artwork: bool = False
+
     # v0.8.0 — Idea miner: Etsy public API keyword search + signal collection.
     # etsy_miner_interval_sec: scheduler interval between full mining runs (default 1h).
     # etsy_miner_per_keyword_limit: max listings fetched per keyword per run (Etsy max 100).
