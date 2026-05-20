@@ -221,21 +221,48 @@ def save_draft(
         listing = existing
         logger.info("save_draft updated existing draft listing %d", listing.id)
     else:
-        listing = Listing(
-            etsy_listing_id=None,
-            original_title=title,
-            original_desc=description,
-            original_tags=json.dumps(tags),
-            original_images=json.dumps([g["url"] for g in gallery]),
-            status="new",
-            template_id=template_id,
-            design_id=design_id,
-            local_payload_json=json.dumps(payload),
-        )
-        session.add(listing)
-        session.commit()
-        session.refresh(listing)
-        logger.info("save_draft created new draft listing %d", listing.id)
+        # DB-level UNIQUE(template_id, design_id) doesn't honor soft-delete.
+        # If a soft-deleted row exists with same combo, resurrect it instead of
+        # inserting (which would hit IntegrityError).
+        deleted_row = session.scalars(
+            select(Listing).where(
+                Listing.template_id == template_id,
+                Listing.design_id == design_id,
+                Listing.deleted_at.is_not(None),
+            )
+        ).first()
+        if deleted_row is not None:
+            deleted_row.deleted_at = None
+            deleted_row.etsy_listing_id = None
+            deleted_row.pushed_at = None
+            deleted_row.push_attempts = 0
+            deleted_row.original_title = title
+            deleted_row.original_desc = description
+            deleted_row.original_tags = json.dumps(tags)
+            deleted_row.original_images = json.dumps([g["url"] for g in gallery])
+            deleted_row.local_payload_json = json.dumps(payload)
+            deleted_row.status = "new"
+            deleted_row.last_push_error = None
+            session.commit()
+            session.refresh(deleted_row)
+            listing = deleted_row
+            logger.info("save_draft resurrected soft-deleted listing %d", listing.id)
+        else:
+            listing = Listing(
+                etsy_listing_id=None,
+                original_title=title,
+                original_desc=description,
+                original_tags=json.dumps(tags),
+                original_images=json.dumps([g["url"] for g in gallery]),
+                status="new",
+                template_id=template_id,
+                design_id=design_id,
+                local_payload_json=json.dumps(payload),
+            )
+            session.add(listing)
+            session.commit()
+            session.refresh(listing)
+            logger.info("save_draft created new draft listing %d", listing.id)
 
     return {
         "listing_id": listing.id,

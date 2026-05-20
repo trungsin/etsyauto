@@ -12,11 +12,11 @@
   </div>
 
   <div style="display:flex;gap:.75rem;flex-wrap:wrap;">
-    {% if idea %}
-      <a href="/admin/ideas/{{ idea.id }}/create-listing" class="btn btn-primary">
+    {% if idea_id %}
+      <a href="/admin/ideas/{{ idea_id }}/create-listing" class="btn btn-primary">
         ← Retry Wizard
       </a>
-      <a href="/admin/ideas/{{ idea.id }}" class="btn btn-secondary">Back to Idea</a>
+      <a href="/admin/ideas/{{ idea_id }}" class="btn btn-secondary">Back to Idea</a>
     {% endif %}
     <a href="/admin/ideas" class="btn btn-secondary">All Ideas</a>
   </div>

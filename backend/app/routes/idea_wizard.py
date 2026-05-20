@@ -400,7 +400,7 @@ async def wizard_submit(
             {
                 "error": "Template has no size/color combinations configured. "
                          "Please add sizes and colors to the template first.",
-                "idea": idea,
+                "idea_id": idea_id,
             },
             status_code=422,
         )
@@ -424,10 +424,11 @@ async def wizard_submit(
             "Wizard save_draft failed for idea=%d template=%d design=%d",
             idea_id, template_id, design_id,
         )
+        db.rollback()
         return _get_jinja().TemplateResponse(
             request,
             "wizard/_error.html",
-            {"error": str(exc), "idea": idea},
+            {"error": str(exc), "idea_id": idea_id},
             status_code=500,
         )
 
