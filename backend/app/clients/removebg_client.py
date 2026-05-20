@@ -22,8 +22,12 @@ class RemoveBgClient:
 
     def __init__(self, api_keys: list[str] | None = None) -> None:
         if api_keys is None:
-            # Build key list from config — filter out empty strings
-            api_keys = [k for k in [settings.removebg_api_key, settings.removebg_api_key_backup] if k]
+            if settings.removebg_api_keys:
+                # Multi-key list takes precedence (managed via /admin/settings)
+                api_keys = [k.strip() for k in settings.removebg_api_keys.split(",") if k.strip()]
+            else:
+                # Legacy: primary + optional backup
+                api_keys = [k for k in [settings.removebg_api_key, settings.removebg_api_key_backup] if k]
         if not api_keys:
             raise ValueError("REMOVEBG_API_KEY is not configured")
         self._api_keys = api_keys

@@ -3,50 +3,74 @@
 
 {% block content %}
 <h2>API Settings</h2>
-<p class="hint">Leave a field blank to keep the current value. Secrets are stored in <code>.env</code> and applied immediately without restart.</p>
 
 {% if saved %}
 <div class="banner banner-ok">✓ Settings saved.</div>
 {% endif %}
 
-<form method="post" action="/admin/settings" class="settings-form">
-  {% for field in fields %}
-  <div class="settings-row">
-    <label for="{{ field.attr }}" class="settings-label">
-      {{ field.label }}
-      {% if field.has_value %}
-        <span class="badge badge-ok">set</span>
-      {% else %}
-        <span class="badge badge-warn">not set</span>
-      {% endif %}
-    </label>
-    {% if field.is_secret %}
-      <div class="settings-input-wrap">
-        <input
-          type="password"
-          id="{{ field.attr }}"
-          name="{{ field.attr }}"
-          class="settings-input"
-          placeholder="{{ field.display or 'Enter new value…' }}"
-          autocomplete="off"
-        />
-        <button type="button" class="btn btn-ghost btn-sm toggle-secret" data-target="{{ field.attr }}">Show</button>
+<form method="post" action="/admin/settings" id="settings-form">
+
+  <!-- ── Remove.bg Keys ─────────────────────────────────────────── -->
+  <section class="settings-section">
+    <h3>Remove.bg API Keys <span class="hint">(tried in order — rotates on quota/rate limit)</span></h3>
+
+    <div id="rbg-key-list">
+      {% for key in rbg_keys %}
+      <div class="rbg-row" data-index="{{ loop.index0 }}">
+        <input type="password" name="rbg_key" class="settings-input rbg-input"
+               placeholder="{{ rbg_key_masks[loop.index0] }}"
+               autocomplete="off" />
+        <button type="button" class="btn btn-ghost btn-sm toggle-pw">Show</button>
+        <button type="button" class="btn btn-ghost btn-sm check-credit"
+                data-index="{{ loop.index0 }}">Check Credits</button>
+        <button type="button" class="btn btn-ghost btn-sm remove-rbg-row">✕</button>
+        <span class="credit-result" id="credit-{{ loop.index0 }}"></span>
       </div>
-      {% if field.has_value %}
-        <span class="settings-current">Current: <code>{{ field.display }}</code></span>
-      {% endif %}
-    {% else %}
-      <input
-        type="text"
-        id="{{ field.attr }}"
-        name="{{ field.attr }}"
-        class="settings-input"
-        value="{{ field.display }}"
-        placeholder="e.g. gemini-2.5-pro"
-      />
-    {% endif %}
-  </div>
-  {% endfor %}
+      {% else %}
+      <div class="rbg-row" data-index="0">
+        <input type="password" name="rbg_key" class="settings-input rbg-input"
+               placeholder="Enter API key…" autocomplete="off" />
+        <button type="button" class="btn btn-ghost btn-sm toggle-pw">Show</button>
+        <button type="button" class="btn btn-ghost btn-sm check-credit" data-index="0">Check Credits</button>
+        <button type="button" class="btn btn-ghost btn-sm remove-rbg-row">✕</button>
+        <span class="credit-result" id="credit-0"></span>
+      </div>
+      {% endfor %}
+    </div>
+
+    <button type="button" id="add-rbg-key" class="btn btn-ghost btn-sm" style="margin-top:.5rem">+ Add Key</button>
+    <p class="hint">Leave all fields blank to keep existing keys. Fill any field to replace the full list.</p>
+  </section>
+
+  <!-- ── Gemini ─────────────────────────────────────────────────── -->
+  <section class="settings-section">
+    <h3>Gemini API</h3>
+
+    <div class="settings-row">
+      <label class="settings-label">
+        API Key
+        {% if gemini_api_key_set %}<span class="badge badge-ok">set</span>
+        {% else %}<span class="badge badge-warn">not set</span>{% endif %}
+      </label>
+      <div class="settings-input-wrap">
+        <input type="password" id="gemini_api_key" name="gemini_api_key"
+               class="settings-input" placeholder="{{ gemini_api_key_mask or 'Enter new key…' }}"
+               autocomplete="off" />
+        <button type="button" class="btn btn-ghost btn-sm toggle-pw">Show</button>
+      </div>
+    </div>
+
+    <div class="settings-row">
+      <label class="settings-label">Model (AI buttons)</label>
+      <input type="text" name="gemini_ai_button_model" class="settings-input"
+             value="{{ gemini_model }}" placeholder="gemini-2.5-pro" />
+    </div>
+
+    <div style="margin-top:.5rem;display:flex;align-items:center;gap:.75rem">
+      <button type="button" id="test-gemini" class="btn btn-ghost btn-sm">Test Gemini</button>
+      <span id="gemini-result" style="font-size:.85rem"></span>
+    </div>
+  </section>
 
   <div class="settings-actions">
     <button type="submit" class="btn btn-primary">Save Settings</button>
@@ -54,27 +78,124 @@
 </form>
 
 <style>
-.settings-form { max-width: 600px; margin-top: 1.5rem; }
-.settings-row { margin-bottom: 1.25rem; }
+.settings-section { margin-bottom: 2rem; border-bottom: 1px solid #eee; padding-bottom: 1.5rem; }
+.settings-section h3 { margin-bottom: .75rem; }
+.settings-row { margin-bottom: 1rem; }
 .settings-label { display: flex; align-items: center; gap: .5rem; font-weight: 600; margin-bottom: .35rem; }
+.settings-input { padding: .45rem .6rem; border: 1px solid #ccc; border-radius: 4px; font-family: monospace; font-size: .9rem; }
 .settings-input-wrap { display: flex; gap: .5rem; align-items: center; }
-.settings-input { width: 100%; padding: .45rem .6rem; border: 1px solid #ccc; border-radius: 4px; font-family: monospace; font-size: .9rem; }
 .settings-input-wrap .settings-input { flex: 1; }
-.settings-current { font-size: .8rem; color: #666; margin-top: .2rem; display: block; }
 .settings-actions { margin-top: 1.5rem; }
 .badge { font-size: .7rem; font-weight: 600; padding: .15rem .4rem; border-radius: 3px; }
 .badge-ok   { background: #d4edda; color: #155724; }
 .badge-warn { background: #fff3cd; color: #856404; }
 .banner-ok  { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; border-radius: 4px; padding: .6rem 1rem; margin-bottom: 1rem; }
+.hint { font-size: .8rem; color: #888; }
+.rbg-row { display: flex; align-items: center; gap: .4rem; margin-bottom: .5rem; flex-wrap: wrap; }
+.rbg-row .rbg-input { flex: 1; min-width: 220px; }
+.credit-result { font-size: .82rem; font-weight: 600; }
+.credit-ok   { color: #155724; }
+.credit-err  { color: #721c24; }
 </style>
 
 <script>
-document.querySelectorAll('.toggle-secret').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const input = document.getElementById(btn.dataset.target);
-    if (input.type === 'password') { input.type = 'text'; btn.textContent = 'Hide'; }
-    else { input.type = 'password'; btn.textContent = 'Show'; }
-  });
+// ── Toggle show/hide password fields ───────────────────────────────────────
+document.addEventListener('click', e => {
+  if (!e.target.classList.contains('toggle-pw')) return;
+  const row = e.target.closest('.rbg-row, .settings-input-wrap');
+  const input = row.querySelector('input[type=password], input[type=text]');
+  if (!input) return;
+  if (input.type === 'password') { input.type = 'text';  e.target.textContent = 'Hide'; }
+  else                           { input.type = 'password'; e.target.textContent = 'Show'; }
+});
+
+// ── Add new Remove.bg key row ──────────────────────────────────────────────
+document.getElementById('add-rbg-key').addEventListener('click', () => {
+  const list = document.getElementById('rbg-key-list');
+  const idx  = list.querySelectorAll('.rbg-row').length;
+  const div  = document.createElement('div');
+  div.className = 'rbg-row';
+  div.dataset.index = idx;
+  div.innerHTML = `
+    <input type="password" name="rbg_key" class="settings-input rbg-input"
+           placeholder="Enter API key…" autocomplete="off" />
+    <button type="button" class="btn btn-ghost btn-sm toggle-pw">Show</button>
+    <button type="button" class="btn btn-ghost btn-sm check-credit" data-index="${idx}">Check Credits</button>
+    <button type="button" class="btn btn-ghost btn-sm remove-rbg-row">✕</button>
+    <span class="credit-result" id="credit-${idx}"></span>`;
+  list.appendChild(div);
+});
+
+// ── Remove a key row ───────────────────────────────────────────────────────
+document.addEventListener('click', e => {
+  if (!e.target.classList.contains('remove-rbg-row')) return;
+  const rows = document.querySelectorAll('#rbg-key-list .rbg-row');
+  if (rows.length <= 1) { alert('Need at least one key slot.'); return; }
+  e.target.closest('.rbg-row').remove();
+});
+
+// ── Check credits for a single key ────────────────────────────────────────
+document.addEventListener('click', async e => {
+  if (!e.target.classList.contains('check-credit')) return;
+  const row   = e.target.closest('.rbg-row');
+  const input = row.querySelector('input[name=rbg_key]');
+  const key   = input.value.trim();
+  const span  = row.querySelector('.credit-result');
+
+  if (!key) { span.textContent = 'Enter a key first'; span.className = 'credit-result credit-err'; return; }
+
+  e.target.disabled = true;
+  e.target.textContent = '…';
+  span.textContent = '';
+
+  try {
+    const resp = await fetch('/admin/settings/removebg-credit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key }),
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      span.textContent = `✓ ${data.paid_total} paid + ${data.free_calls} free calls`;
+      span.className = 'credit-result credit-ok';
+    } else {
+      span.textContent = `✗ ${data.error}`;
+      span.className = 'credit-result credit-err';
+    }
+  } catch (err) {
+    span.textContent = `✗ ${err.message}`;
+    span.className = 'credit-result credit-err';
+  } finally {
+    e.target.disabled = false;
+    e.target.textContent = 'Check Credits';
+  }
+});
+
+// ── Test Gemini ────────────────────────────────────────────────────────────
+document.getElementById('test-gemini').addEventListener('click', async () => {
+  const btn    = document.getElementById('test-gemini');
+  const result = document.getElementById('gemini-result');
+  btn.disabled = true;
+  btn.textContent = 'Testing…';
+  result.textContent = '';
+
+  try {
+    const resp = await fetch('/admin/settings/gemini-test');
+    const data = await resp.json();
+    if (data.ok) {
+      result.textContent = `✓ ${data.model} — "${data.sample}"`;
+      result.style.color = '#155724';
+    } else {
+      result.textContent = `✗ ${data.error}`;
+      result.style.color = '#721c24';
+    }
+  } catch (err) {
+    result.textContent = `✗ ${err.message}`;
+    result.style.color = '#721c24';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Test Gemini';
+  }
 });
 </script>
 {% endblock %}

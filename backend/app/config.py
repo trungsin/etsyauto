@@ -23,8 +23,11 @@ class Settings(BaseSettings):
     etsy_default_readiness_state_id: int = 0
 
     # AI providers
-    removebg_api_key: str = ""
-    removebg_api_key_backup: str = ""
+    # removebg_api_keys: comma-separated list of keys (tried in order on 402/429).
+    # If set, takes precedence over legacy removebg_api_key + removebg_api_key_backup.
+    removebg_api_keys: str = ""
+    removebg_api_key: str = ""        # legacy primary — used when removebg_api_keys is empty
+    removebg_api_key_backup: str = "" # legacy backup  — used when removebg_api_keys is empty
     gemini_api_key: str = ""
     # Model for admin AI buttons (on-demand, higher quality). Background workers use Flash.
     gemini_ai_button_model: str = "gemini-2.5-pro"
