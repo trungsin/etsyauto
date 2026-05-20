@@ -129,24 +129,37 @@ function renderListing(listing) {
 
 function resetActionArea() {
   btnSend.disabled = false;
-  btnSend.textContent = 'Send to Optimizer';
+  btnSend.textContent = 'Save as Idea';
   actionMsg.className = 'action-msg hidden';
   actionMsg.textContent = '';
 }
 
 // ---------------------------------------------------------------------------
-// Admin mode: send to optimizer
+// Admin mode: save listing as idea
 // ---------------------------------------------------------------------------
 
-async function sendToOptimizer() {
+async function saveAsIdea() {
   if (!currentListing) return;
 
   btnSend.disabled = true;
-  btnSend.textContent = 'Sending…';
+  btnSend.textContent = 'Saving…';
   actionMsg.className = 'action-msg hidden';
 
+  const ideaPayload = {
+    source_listing_id: String(currentListing.listing_id),
+    title: currentListing.title || '',
+    description: currentListing.description || null,
+    tags: [],
+    materials: [],
+    reference_image_url: Array.isArray(currentListing.images) && currentListing.images.length > 0
+      ? currentListing.images[0]
+      : null,
+    num_favorers: null,
+    views_all_time: null,
+  };
+
   chrome.runtime.sendMessage(
-    { type: 'SEND_TO_OPTIMIZER', payload: currentListing },
+    { type: 'LOG_EXTENSION_IDEA', payload: ideaPayload },
     (response) => {
       if (chrome.runtime.lastError) {
         showActionMsg(`Error: ${chrome.runtime.lastError.message}`, 'error');
@@ -155,9 +168,10 @@ async function sendToOptimizer() {
         return;
       }
       if (response.ok) {
-        const jobId = response.data?.job_id ?? '—';
-        showActionMsg(`Queued! Job ID: ${jobId}`, 'success');
-        btnSend.textContent = 'Sent';
+        const ideaId = response.data?.idea_id ?? '—';
+        const label = response.data?.created ? 'Saved!' : 'Already saved';
+        showActionMsg(`${label} Idea #${ideaId}`, 'success');
+        btnSend.textContent = 'Saved';
       } else {
         showActionMsg(`Failed: ${response.error || 'unknown error'}`, 'error');
         btnSend.disabled = false;
@@ -176,7 +190,7 @@ function showActionMsg(text, type) {
 // Event listeners
 // ---------------------------------------------------------------------------
 
-btnSend.addEventListener('click', sendToOptimizer);
+btnSend.addEventListener('click', saveAsIdea);
 
 btnRefresh.addEventListener('click', async () => {
   resetActionArea();
