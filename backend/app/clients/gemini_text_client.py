@@ -115,6 +115,10 @@ class GeminiTextClient:
                 )
                 if idx > 0:
                     logger.info("Gemini succeeded with key #%d after rotation", idx)
+                if response.text is None:
+                    candidates = response.candidates or []
+                    reason = getattr(candidates[0], "finish_reason", "UNKNOWN") if candidates else "UNKNOWN"
+                    raise ValueError(f"Gemini returned null response (finish_reason={reason})")
                 return response
             except Exception as exc:
                 if _is_rate_limited(exc):
@@ -157,6 +161,8 @@ class GeminiTextClient:
             types.GenerateContentConfig(
                 response_mime_type="application/json",
                 response_schema=_TITLE_VARIANT_SCHEMA,
+                # thinking_budget=0: disable thinking on 2.5-series to get clean JSON output
+                thinking_config=types.ThinkingConfig(thinking_budget=0) if "2.5" in model_id else None,
             ),
         )
 
@@ -233,6 +239,8 @@ class GeminiTextClient:
             types.GenerateContentConfig(
                 response_mime_type="application/json",
                 response_schema=schema,
+                # thinking_budget=0: disable thinking on 2.5-series to get clean JSON output
+                thinking_config=types.ThinkingConfig(thinking_budget=0) if "2.5" in model_id else None,
             ),
         )
         usage = response.usage_metadata

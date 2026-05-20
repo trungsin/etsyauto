@@ -30,8 +30,8 @@ class Settings(BaseSettings):
     removebg_api_key_backup: str = "" # legacy backup  — used when removebg_api_keys is empty
     gemini_api_keys: str = ""   # comma-separated; takes precedence over gemini_api_key
     gemini_api_key: str = ""    # legacy single key
-    # Model for admin AI buttons. Flash has 500 RPD free vs Pro's 25 RPD — sufficient quality for titles/descriptions.
-    gemini_ai_button_model: str = "gemini-2.5-flash"
+    # Model for admin AI buttons. 2.5-flash-lite: higher free-tier quota than 2.5-flash (20 RPD) — sufficient quality.
+    gemini_ai_button_model: str = "gemini-2.5-flash-lite"
 
     # Notion integration
     notion_api_key: str = ""
