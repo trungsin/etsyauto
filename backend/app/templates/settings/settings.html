@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}API Settings — EtsyAuto Admin{% endblock %}
+
+{% block content %}
+<h2>API Settings</h2>
+<p class="hint">Leave a field blank to keep the current value. Secrets are stored in <code>.env</code> and applied immediately without restart.</p>
+
+{% if saved %}
+<div class="banner banner-ok">✓ Settings saved.</div>
+{% endif %}
+
+<form method="post" action="/admin/settings" class="settings-form">
+  {% for field in fields %}
+  <div class="settings-row">
+    <label for="{{ field.attr }}" class="settings-label">
+      {{ field.label }}
+      {% if field.has_value %}
+        <span class="badge badge-ok">set</span>
+      {% else %}
+        <span class="badge badge-warn">not set</span>
+      {% endif %}
+    </label>
+    {% if field.is_secret %}
+      <div class="settings-input-wrap">
+        <input
+          type="password"
+          id="{{ field.attr }}"
+          name="{{ field.attr }}"
+          class="settings-input"
+          placeholder="{{ field.display or 'Enter new value…' }}"
+          autocomplete="off"
+        />
+        <button type="button" class="btn btn-ghost btn-sm toggle-secret" data-target="{{ field.attr }}">Show</button>
+      </div>
+      {% if field.has_value %}
+        <span class="settings-current">Current: <code>{{ field.display }}</code></span>
+      {% endif %}
+    {% else %}
+      <input
+        type="text"
+        id="{{ field.attr }}"
+        name="{{ field.attr }}"
+        class="settings-input"
+        value="{{ field.display }}"
+        placeholder="e.g. gemini-2.5-pro"
+      />
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  <div class="settings-actions">
+    <button type="submit" class="btn btn-primary">Save Settings</button>
+  </div>
+</form>
+
+<style>
+.settings-form { max-width: 600px; margin-top: 1.5rem; }
+.settings-row { margin-bottom: 1.25rem; }
+.settings-label { display: flex; align-items: center; gap: .5rem; font-weight: 600; margin-bottom: .35rem; }
+.settings-input-wrap { display: flex; gap: .5rem; align-items: center; }
+.settings-input { width: 100%; padding: .45rem .6rem; border: 1px solid #ccc; border-radius: 4px; font-family: monospace; font-size: .9rem; }
+.settings-input-wrap .settings-input { flex: 1; }
+.settings-current { font-size: .8rem; color: #666; margin-top: .2rem; display: block; }
+.settings-actions { margin-top: 1.5rem; }
+.badge { font-size: .7rem; font-weight: 600; padding: .15rem .4rem; border-radius: 3px; }
+.badge-ok   { background: #d4edda; color: #155724; }
+.badge-warn { background: #fff3cd; color: #856404; }
+.banner-ok  { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; border-radius: 4px; padding: .6rem 1rem; margin-bottom: 1rem; }
+</style>
+
+<script>
+document.querySelectorAll('.toggle-secret').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const input = document.getElementById(btn.dataset.target);
+    if (input.type === 'password') { input.type = 'text'; btn.textContent = 'Hide'; }
+    else { input.type = 'password'; btn.textContent = 'Show'; }
+  });
+});
+</script>
+{% endblock %}
