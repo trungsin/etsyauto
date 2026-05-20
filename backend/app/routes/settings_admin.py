@@ -1,7 +1,7 @@
 """Admin settings page — manage API keys and model settings at runtime.
 
-- Remove.bg: unlimited key slots, per-key credit checker.
-- Gemini: key + model, live connection test.
+- Remove.bg: unlimited key slots, per-key credit checker (existing keys checked server-side).
+- Gemini: unlimited key slots, per-key connection test, rotation on 429.
 
 Changes written to .env and applied in-memory (no restart needed).
 Protected by X-Admin-Token / cookie / ?token= auth.
@@ -13,7 +13,7 @@ import os
 
 import httpx
 from dotenv import set_key
-from fastapi import APIRouter, Cookie, Form, Header, HTTPException, Request
+from fastapi import APIRouter, Cookie, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from app.config import settings
@@ -52,7 +52,6 @@ def _mask(value: str) -> str:
 
 
 def _current_removebg_keys() -> list[str]:
-    """Return ordered list of configured remove.bg keys."""
     if settings.removebg_api_keys:
         return [k.strip() for k in settings.removebg_api_keys.split(",") if k.strip()]
     keys = []
@@ -61,6 +60,32 @@ def _current_removebg_keys() -> list[str]:
     if settings.removebg_api_key_backup:
         keys.append(settings.removebg_api_key_backup)
     return keys
+
+
+def _current_gemini_keys() -> list[str]:
+    if settings.gemini_api_keys:
+        return [k.strip() for k in settings.gemini_api_keys.split(",") if k.strip()]
+    if settings.gemini_api_key:
+        return [settings.gemini_api_key]
+    return []
+
+
+async def _check_removebg_key(api_key: str) -> dict:
+    """Call remove.bg account endpoint, return parsed credit info."""
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(_REMOVEBG_ACCOUNT_URL, headers={"X-Api-Key": api_key})
+    data = resp.json()
+    if not resp.is_success:
+        err = data.get("errors", [{}])[0].get("title", f"HTTP {resp.status_code}")
+        return {"ok": False, "error": err}
+    attrs = data.get("data", {}).get("attributes", {})
+    credits = attrs.get("credits", {})
+    api_info = attrs.get("api", {})
+    return {
+        "ok": True,
+        "paid_total": credits.get("total", 0),
+        "free_calls": api_info.get("free_calls", 0),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -78,15 +103,16 @@ def settings_ui(
     _check_token(x_admin_token, request, admin_token)
 
     rbg_keys = _current_removebg_keys()
+    gem_keys = _current_gemini_keys()
 
     return _get_jinja().TemplateResponse(
         request,
         "settings/settings.html",
         {
-            "rbg_keys": rbg_keys,
+            "rbg_key_count": max(len(rbg_keys), 1),
             "rbg_key_masks": [_mask(k) for k in rbg_keys],
-            "gemini_api_key_mask": _mask(settings.gemini_api_key),
-            "gemini_api_key_set": bool(settings.gemini_api_key),
+            "gem_key_count": max(len(gem_keys), 1),
+            "gem_key_masks": [_mask(k) for k in gem_keys],
             "gemini_model": settings.gemini_ai_button_model,
             "saved": saved == "1",
         },
@@ -109,49 +135,79 @@ async def save_settings(
     form = await request.form()
     env_path = os.path.abspath(_ENV_FILE)
 
-    # Remove.bg keys: collect all rbg_key_* fields, filter blanks
+    # Remove.bg keys
     rbg_keys = [
         v.strip()
         for k, v in form.multi_items()
         if k == "rbg_key" and isinstance(v, str) and v.strip()
     ]
-
     if rbg_keys:
         joined = ",".join(rbg_keys)
         set_key(env_path, "REMOVEBG_API_KEYS", joined)
         settings.removebg_api_keys = joined
-        # Clear legacy fields so client picks up the new list
         settings.removebg_api_key = rbg_keys[0]
         settings.removebg_api_key_backup = rbg_keys[1] if len(rbg_keys) > 1 else ""
         logger.info("settings: updated REMOVEBG_API_KEYS (%d keys)", len(rbg_keys))
 
-    gemini_key = str(form.get("gemini_api_key", "")).strip()
-    if gemini_key:
-        set_key(env_path, "GEMINI_API_KEY", gemini_key)
-        settings.gemini_api_key = gemini_key
-        logger.info("settings: updated GEMINI_API_KEY")
+    # Gemini keys
+    gem_keys = [
+        v.strip()
+        for k, v in form.multi_items()
+        if k == "gem_key" and isinstance(v, str) and v.strip()
+    ]
+    if gem_keys:
+        joined = ",".join(gem_keys)
+        set_key(env_path, "GEMINI_API_KEYS", joined)
+        set_key(env_path, "GEMINI_API_KEY", gem_keys[0])
+        settings.gemini_api_keys = joined
+        settings.gemini_api_key = gem_keys[0]
+        logger.info("settings: updated GEMINI_API_KEYS (%d keys)", len(gem_keys))
 
     gemini_model = str(form.get("gemini_ai_button_model", "")).strip()
     if gemini_model:
         set_key(env_path, "GEMINI_AI_BUTTON_MODEL", gemini_model)
         settings.gemini_ai_button_model = gemini_model
-        logger.info("settings: updated GEMINI_AI_BUTTON_MODEL=%s", gemini_model)
 
     return RedirectResponse(url="/admin/settings?saved=1", status_code=303)
 
 
 # ---------------------------------------------------------------------------
-# POST /admin/settings/removebg-credit — check credits for one key
+# GET /admin/settings/removebg-credit/{idx} — check existing configured key by index
 # ---------------------------------------------------------------------------
 
 
-@router.post("/removebg-credit")
-async def check_removebg_credit(
+@router.get("/removebg-credit/{idx}")
+async def check_removebg_credit_by_index(
+    idx: int,
     request: Request,
     x_admin_token: str | None = Header(default=None),
     admin_token: str | None = Cookie(default=None),
 ) -> JSONResponse:
-    """Check remaining credits for a remove.bg API key."""
+    """Check credits for the Nth currently-configured remove.bg key (no key in request)."""
+    _check_token(x_admin_token, request, admin_token)
+
+    keys = _current_removebg_keys()
+    if idx < 0 or idx >= len(keys):
+        return JSONResponse({"ok": False, "error": "Key index out of range"}, status_code=404)
+
+    try:
+        return JSONResponse(await _check_removebg_key(keys[idx]))
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=502)
+
+
+# ---------------------------------------------------------------------------
+# POST /admin/settings/removebg-credit — check an arbitrary (newly entered) key
+# ---------------------------------------------------------------------------
+
+
+@router.post("/removebg-credit")
+async def check_removebg_credit_arbitrary(
+    request: Request,
+    x_admin_token: str | None = Header(default=None),
+    admin_token: str | None = Cookie(default=None),
+) -> JSONResponse:
+    """Check credits for a key value passed in the request body (for unsaved keys)."""
     _check_token(x_admin_token, request, admin_token)
 
     body = await request.json()
@@ -160,53 +216,74 @@ async def check_removebg_credit(
         return JSONResponse({"ok": False, "error": "No key provided"}, status_code=400)
 
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(
-                _REMOVEBG_ACCOUNT_URL,
-                headers={"X-Api-Key": api_key},
-            )
-        data = resp.json()
-        if not resp.is_success:
-            err = data.get("errors", [{}])[0].get("title", f"HTTP {resp.status_code}")
-            return JSONResponse({"ok": False, "error": err})
-
-        attrs = data.get("data", {}).get("attributes", {})
-        credits = attrs.get("credits", {})
-        api_info = attrs.get("api", {})
-        return JSONResponse({
-            "ok": True,
-            "paid_total": credits.get("total", 0),
-            "free_calls": api_info.get("free_calls", 0),
-        })
+        return JSONResponse(await _check_removebg_key(api_key))
     except Exception as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=502)
 
 
 # ---------------------------------------------------------------------------
-# GET /admin/settings/gemini-test — verify Gemini key is working
+# GET /admin/settings/gemini-test/{idx} — test existing key by index
 # ---------------------------------------------------------------------------
 
 
-@router.get("/gemini-test")
-def test_gemini(
+@router.get("/gemini-test/{idx}")
+def test_gemini_by_index(
+    idx: int,
     request: Request,
     x_admin_token: str | None = Header(default=None),
     admin_token: str | None = Cookie(default=None),
 ) -> JSONResponse:
-    """Quick smoke-test: generate a tiny title with current Gemini config."""
+    """Test Nth configured Gemini key."""
     _check_token(x_admin_token, request, admin_token)
 
-    if not settings.gemini_api_key:
-        return JSONResponse({"ok": False, "error": "GEMINI_API_KEY not set"})
+    keys = _current_gemini_keys()
+    if idx < 0 or idx >= len(keys):
+        return JSONResponse({"ok": False, "error": "Key index out of range"}, status_code=404)
 
+    return _run_gemini_test(keys[idx])
+
+
+# ---------------------------------------------------------------------------
+# POST /admin/settings/gemini-test — test arbitrary (newly entered) key
+# ---------------------------------------------------------------------------
+
+
+@router.post("/gemini-test")
+async def test_gemini_arbitrary(
+    request: Request,
+    x_admin_token: str | None = Header(default=None),
+    admin_token: str | None = Cookie(default=None),
+) -> JSONResponse:
+    """Test a Gemini key passed in the request body."""
+    _check_token(x_admin_token, request, admin_token)
+
+    body = await request.json()
+    api_key = (body.get("key") or "").strip()
+    if not api_key:
+        return JSONResponse({"ok": False, "error": "No key provided"}, status_code=400)
+
+    return _run_gemini_test(api_key)
+
+
+def _run_gemini_test(api_key: str) -> JSONResponse:
     try:
         from app.clients.gemini_text_client import GeminiTextClient
-        client = GeminiTextClient()
+        client = GeminiTextClient(api_keys=[api_key])
         result = client.generate_optimized_title(
             {"title": "Test product", "description": "A simple test"},
             model=settings.gemini_ai_button_model,
         )
-        return JSONResponse({"ok": True, "model": settings.gemini_ai_button_model, "sample": result.get("text", "")[:80]})
+        return JSONResponse({
+            "ok": True,
+            "model": settings.gemini_ai_button_model,
+            "sample": result.get("text", "")[:80],
+        })
     except Exception as exc:
         logger.exception("gemini test failed")
-        return JSONResponse({"ok": False, "error": str(exc)[:300]})
+        err = str(exc)
+        is_quota = "429" in err or "RESOURCE_EXHAUSTED" in err.upper()
+        return JSONResponse({
+            "ok": False,
+            "error": "Quota/rate limit exceeded — try another key" if is_quota else err[:300],
+            "is_quota": is_quota,
+        })

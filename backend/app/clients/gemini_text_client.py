@@ -77,16 +77,52 @@ def _validate_variants(raw_variants: list[dict]) -> list[dict]:
     return validated
 
 
-class GeminiTextClient:
-    """Wraps google-genai SDK for structured text generation (title variants)."""
+_RATE_LIMIT_SIGNALS = ("429", "RESOURCE_EXHAUSTED", "quota")
 
-    def __init__(self, api_key: str | None = None, prompt_path: Path | None = None) -> None:
-        key = api_key or settings.gemini_api_key
-        if not key:
+
+def _is_rate_limited(exc: Exception) -> bool:
+    s = str(exc).upper()
+    return any(sig.upper() in s for sig in _RATE_LIMIT_SIGNALS)
+
+
+class GeminiTextClient:
+    """Wraps google-genai SDK for structured text generation with API key rotation.
+
+    On 429 / RESOURCE_EXHAUSTED, automatically retries with the next configured key.
+    Keys are read from GEMINI_API_KEYS (comma-separated) or the legacy GEMINI_API_KEY.
+    """
+
+    def __init__(self, api_keys: list[str] | None = None, prompt_path: Path | None = None) -> None:
+        if api_keys is None:
+            if settings.gemini_api_keys:
+                api_keys = [k.strip() for k in settings.gemini_api_keys.split(",") if k.strip()]
+            elif settings.gemini_api_key:
+                api_keys = [settings.gemini_api_key]
+        if not api_keys:
             raise ValueError("GEMINI_API_KEY is not configured")
-        self._client = genai.Client(api_key=key)
+        self._api_keys = api_keys
         self._prompt_path = prompt_path or PROMPT_PATH
         self._prompt_template = self._prompt_path.read_text(encoding="utf-8")
+
+    def _call(self, model_id: str, prompt: str, config: types.GenerateContentConfig):
+        """Call Gemini with automatic key rotation on rate-limit errors."""
+        last_error: Exception | None = None
+        for idx, key in enumerate(self._api_keys):
+            try:
+                client = genai.Client(api_key=key)
+                response = client.models.generate_content(
+                    model=model_id, contents=prompt, config=config
+                )
+                if idx > 0:
+                    logger.info("Gemini succeeded with key #%d after rotation", idx)
+                return response
+            except Exception as exc:
+                if _is_rate_limited(exc):
+                    logger.warning("Gemini key #%d rate-limited — rotating to next key", idx)
+                    last_error = exc
+                    continue
+                raise
+        raise last_error  # type: ignore[misc]
 
     def generate_title_variants(self, listing_data: dict, model: str | None = None) -> list[dict]:
         """Call Gemini and return validated title variants.
@@ -115,10 +151,10 @@ class GeminiTextClient:
         )
 
         model_id = model or MODEL_ID
-        response = self._client.models.generate_content(
-            model=model_id,
-            contents=prompt,
-            config=types.GenerateContentConfig(
+        response = self._call(
+            model_id,
+            prompt,
+            types.GenerateContentConfig(
                 response_mime_type="application/json",
                 response_schema=_TITLE_VARIANT_SCHEMA,
             ),
@@ -191,10 +227,10 @@ class GeminiTextClient:
             "required": ["description"],
         }
         model_id = model or MODEL_ID
-        response = self._client.models.generate_content(
-            model=model_id,
-            contents=prompt,
-            config=types.GenerateContentConfig(
+        response = self._call(
+            model_id,
+            prompt,
+            types.GenerateContentConfig(
                 response_mime_type="application/json",
                 response_schema=schema,
             ),

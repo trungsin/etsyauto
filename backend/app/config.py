@@ -28,7 +28,8 @@ class Settings(BaseSettings):
     removebg_api_keys: str = ""
     removebg_api_key: str = ""        # legacy primary — used when removebg_api_keys is empty
     removebg_api_key_backup: str = "" # legacy backup  — used when removebg_api_keys is empty
-    gemini_api_key: str = ""
+    gemini_api_keys: str = ""   # comma-separated; takes precedence over gemini_api_key
+    gemini_api_key: str = ""    # legacy single key
     # Model for admin AI buttons (on-demand, higher quality). Background workers use Flash.
     gemini_ai_button_model: str = "gemini-2.5-pro"
 
