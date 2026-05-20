@@ -24,6 +24,7 @@ class Settings(BaseSettings):
 
     # AI providers
     removebg_api_key: str = ""
+    removebg_api_key_backup: str = ""
     gemini_api_key: str = ""
     # Model for admin AI buttons (on-demand, higher quality). Background workers use Flash.
     gemini_ai_button_model: str = "gemini-2.5-pro"
