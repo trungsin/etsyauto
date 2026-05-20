@@ -24,7 +24,7 @@
 
 {# Action bar #}
 <div class="lst-actions">
-  {% if listing.status in ('new', 'failed') %}
+  {% if listing.status in ('new', 'failed', 'review') %}
   <button type="button" class="btn btn-primary" id="btn-upload">Upload to Etsy</button>
   {% endif %}
   {% if listing.etsy_listing_id %}

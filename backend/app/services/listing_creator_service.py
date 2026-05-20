@@ -321,16 +321,18 @@ def upload_to_etsy(
             "idempotent": True,
         }
 
-    # CAS lock: status new|failed → uploading. Atomic per-row UPDATE.
+    # CAS lock: status new|failed|review → uploading. Atomic per-row UPDATE.
+    # 'review' listings come from the old ingest pipeline and can be manually uploaded.
+    _UPLOADABLE = ("new", "failed", "review")
     cas = session.execute(
         update(Listing)
-        .where(Listing.id == listing_id, Listing.status.in_(("new", "failed")))
+        .where(Listing.id == listing_id, Listing.status.in_(_UPLOADABLE))
         .values(status="uploading")
     )
     session.commit()
     if cas.rowcount == 0:
         raise ConflictError(
-            f"Listing {listing_id} not in uploadable state (need 'new' or 'failed', "
+            f"Listing {listing_id} not in uploadable state (need one of {_UPLOADABLE}, "
             f"got '{listing.status}'). Possibly another upload in progress."
         )
     session.refresh(listing)
