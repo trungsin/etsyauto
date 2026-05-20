@@ -32,6 +32,7 @@ function _upgradeEtsyUrl(url) {
 }
 
 let _referenceId = null;
+let _sourceListingId = null;   // original Etsy listing ID from payload
 let _images = [];      // [{url, selected}]
 let _activeTags = new Set();
 let _status = null;
@@ -70,6 +71,7 @@ async function initReferenceMode(payload) {
   _resetState();
   _renderTags();
 
+  _sourceListingId = String(payload.listing_id || '');
   _dom.sourceUrl.textContent = payload.source_url || '';
   _dom.originalTitle.textContent = payload.title || '(no title extracted)';
   _dom.editedTitle.value = payload.title || '';
@@ -158,46 +160,37 @@ function onImageClick(idx) {
 }
 
 async function onSaveReference() {
-  if (!_referenceId) { _showToast('Still scraping — please wait.', 'warn'); return; }
+  if (!_sourceListingId) { _showToast('Missing listing ID — please refresh.', 'warn'); return; }
   _dom.btnSave.disabled = true;
   _dom.btnSave.textContent = 'Saving…';
   _setStatus('saving');
 
-  const selectedIdx = _images.findIndex((img) => img.selected);
-  const keptIndices = selectedIdx >= 0 ? [selectedIdx] : [];
+  const selectedImg = _images.find((img) => img.selected);
+  const selectedImageUrl = selectedImg ? selectedImg.url : null;
 
-  const updateBody = {
-    edited_title: _dom.editedTitle.value.trim() || null,
-    notes: _dom.notes.value.trim() || null,
+  const ideaPayload = {
+    source_listing_id: _sourceListingId,
+    title: _dom.editedTitle.value.trim() || _dom.originalTitle.textContent || '',
+    description: null,
     tags: Array.from(_activeTags),
-    kept_image_indices: keptIndices,
+    materials: [],
+    reference_image_url: selectedImageUrl,
+    num_favorers: null,
+    views_all_time: null,
   };
 
   chrome.runtime.sendMessage(
-    { type: 'UPDATE_REFERENCE', referenceId: _referenceId, body: updateBody },
-    (updResp) => {
-      if (chrome.runtime.lastError || !updResp.ok) {
-        _dom.btnSave.disabled = false;
-        _dom.btnSave.textContent = 'Save Reference';
-        _showToast('Update failed: ' + ((updResp && updResp.error) || ''), 'error');
-        _setStatus('enriched');
+    { type: 'LOG_EXTENSION_IDEA', payload: ideaPayload },
+    (resp) => {
+      _dom.btnSave.disabled = false;
+      _dom.btnSave.textContent = 'Save Reference';
+      if (chrome.runtime.lastError || !resp.ok) {
+        _showToast('Save failed: ' + ((resp && resp.error) || ''), 'error');
+        _setStatus('error');
         return;
       }
-
-      chrome.runtime.sendMessage(
-        { type: 'SAVE_REFERENCE', referenceId: _referenceId },
-        (saveResp) => {
-          _dom.btnSave.disabled = false;
-          _dom.btnSave.textContent = 'Save Reference';
-          if (chrome.runtime.lastError || !saveResp.ok) {
-            _showToast('Save failed: ' + ((saveResp && saveResp.error) || ''), 'error');
-            _setStatus('enriched');
-            return;
-          }
-          _setStatus('saved');
-          _showToast('đã lấy idea thành công', 'success');
-        }
-      );
+      _setStatus('saved');
+      _showToast('đã lấy idea thành công', 'success');
     }
   );
 }
@@ -290,6 +283,7 @@ function _showToast(html, type = 'info', isHTML = false) {
 
 function _resetState() {
   _referenceId = null;
+  _sourceListingId = null;
   _images = [];
   _activeTags = new Set();
   _status = null;
