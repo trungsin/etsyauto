@@ -98,10 +98,21 @@
     <p class="banner-error" id="err-2"></p>
   </div>
 
-  <!-- ── STEP 3: Upscale ───────────────────────────────────────────── -->
+  <!-- ── STEP 3: Remove BG ─────────────────────────────────────────── -->
   <div class="step-card disabled" id="step-3">
-    <h2><span class="step-num">3</span> Upscale <small style="font-weight:400;color:#6b7280">(Upscayl · CPU · ~2-4 min)</small></h2>
+    <h2><span class="step-num">3</span> Remove Background <small style="font-weight:400;color:#6b7280">(remove.bg HD)</small></h2>
     <img id="refined-img" class="preview-img" alt="refined">
+    <div class="step-actions">
+      <button id="btn-removebg" class="btn btn-primary">Remove Background →</button>
+      <span class="spinner" id="removebg-spinner" style="display:none">⏳ Processing…</span>
+    </div>
+    <p class="banner-error" id="err-3"></p>
+  </div>
+
+  <!-- ── STEP 4: Upscale ───────────────────────────────────────────── -->
+  <div class="step-card disabled" id="step-4">
+    <h2><span class="step-num">4</span> Upscale <small style="font-weight:400;color:#6b7280">(Upscayl · CPU · ~2-4 min)</small></h2>
+    <img id="removebg-img" class="preview-img checkerboard" alt="transparent">
     <div style="font-size:.8rem;color:#6b7280;margin:.45rem 0 0" id="img-size-info"></div>
     <div style="margin:.75rem 0 0">
       <div style="font-size:.875rem;font-weight:600;color:#374151;margin-bottom:.5rem">Mức phóng to:</div>
@@ -134,19 +145,11 @@
       </div>
     </div>
     <div class="step-actions">
-      <button id="btn-upscale" class="btn btn-primary">Upscale →</button>
+      <button id="btn-upscale" class="btn btn-primary">Upscale for POD →</button>
       <span class="spinner" id="upscale-spinner" style="display:none">⏳ Upscayl đang chạy trên CPU… kiểm tra mỗi 5s</span>
     </div>
-    <p class="banner-error" id="err-3"></p>
-  </div>
-
-  <!-- ── STEP 4: Remove BG ─────────────────────────────────────────── -->
-  <div class="step-card disabled" id="step-4">
-    <h2><span class="step-num">4</span> Remove Background <small style="font-weight:400;color:#6b7280">(remove.bg · trên ảnh đã upscale)</small></h2>
-    <img id="upscaled-img" class="preview-img" alt="upscaled">
-    <div class="step-actions">
-      <button id="btn-removebg" class="btn btn-primary">Remove Background →</button>
-      <span class="spinner" id="removebg-spinner" style="display:none">⏳ Processing…</span>
+    <div class="download-box" id="download-box">
+      ✅ Upscale xong! &nbsp;<a id="download-link" download>⬇ Download Upscaled</a>
     </div>
     <p class="banner-error" id="err-4"></p>
   </div>
@@ -154,7 +157,7 @@
   <!-- ── STEP 5: Canvas Fill ──────────────────────────────────────── -->
   <div class="step-card disabled" id="step-5">
     <h2><span class="step-num">5</span> Canvas Fill <small style="font-weight:400;color:#6b7280">(POD Template)</small></h2>
-    <img id="removebg-img" class="preview-img checkerboard" alt="transparent">
+    <img id="final-img" class="preview-img checkerboard" alt="upscaled">
     <div style="margin:.85rem 0 0;display:flex;gap:2rem;flex-wrap:wrap">
       <div>
         <div style="font-size:.85rem;font-weight:600;color:#374151;margin-bottom:.45rem">Kích thước canvas:</div>
@@ -301,22 +304,36 @@ document.getElementById('btn-skip-refine').addEventListener('click', async () =>
   }
 });
 
-// When refined image loads, compute capped input size and show output dims per scale
-document.getElementById('refined-img').addEventListener('load', function() {
+// ── Step 3: Remove BG ─────────────────────────────────────────────────────
+document.getElementById('btn-removebg').addEventListener('click', async () => {
+  setLoading('btn-removebg', 'removebg-spinner', true);
+  try {
+    const res = await api('POST', `/admin/artwork/${artworkId}/removebg`);
+    showImg('removebg-img', res.removebg_url);
+    doneStep('step-3');
+    enableStep('step-4');
+  } catch(err) {
+    showErr('err-3', err);
+    setLoading('btn-removebg', 'removebg-spinner', false);
+  }
+});
+
+// When removebg image loads, compute capped input size and show output dims per scale
+document.getElementById('removebg-img').addEventListener('load', function() {
   const CAP = 512;
   const maxDim = Math.max(this.naturalWidth, this.naturalHeight);
   const ratio = maxDim > CAP ? CAP / maxDim : 1;
   const inW = Math.round(this.naturalWidth * ratio);
   const inH = Math.round(this.naturalHeight * ratio);
   const sizeEl = document.getElementById('img-size-info');
-  if (sizeEl) sizeEl.textContent = `Ảnh refine: ${this.naturalWidth}×${this.naturalHeight}px · Input upscale (capped): ${inW}×${inH}px`;
+  if (sizeEl) sizeEl.textContent = `Ảnh gốc: ${this.naturalWidth}×${this.naturalHeight}px · Input upscale (capped): ${inW}×${inH}px`;
   [2, 3, 4, 5, 6].forEach(s => {
     const el = document.getElementById('scale-out-' + s);
     if (el) el.textContent = `→ output ${inW * s}×${inH * s}px`;
   });
 });
 
-// ── Step 3: Upscale + poll ────────────────────────────────────────────────
+// ── Step 4: Upscale + poll ────────────────────────────────────────────────
 document.getElementById('btn-upscale').addEventListener('click', async () => {
   const scaleVal = document.querySelector('input[name="upscale-scale"]:checked')?.value || '4';
   const fd = new FormData();
@@ -327,7 +344,7 @@ document.getElementById('btn-upscale').addEventListener('click', async () => {
     await api('POST', `/admin/artwork/${artworkId}/upscale`, fd);
     pollTimer = setInterval(pollStatus, 5000);
   } catch(err) {
-    showErr('err-3', err);
+    showErr('err-4', err);
     setLoading('btn-upscale', 'upscale-spinner', false);
   }
 });
@@ -336,16 +353,20 @@ async function pollStatus() {
   try {
     const res = await api('GET', `/admin/artwork/${artworkId}/status`);
     pollFailCount = 0;
-    if (res.status === 'upscaled') {
+    if (res.status === 'done') {
       clearInterval(pollTimer); pollTimer = null;
       document.getElementById('upscale-spinner').style.display = 'none';
-      showImg('upscaled-img', res.final_url);
-      doneStep('step-3');
-      enableStep('step-4');
+      const dl = document.getElementById('download-link');
+      dl.href = res.final_url;
+      dl.textContent = '⬇ Download Upscaled (' + res.final_url.split('/').pop() + ')';
+      document.getElementById('download-box').style.display = 'block';
+      showImg('final-img', res.final_url);
+      doneStep('step-4');
+      enableStep('step-5');
     } else if (res.status === 'failed') {
       clearInterval(pollTimer); pollTimer = null;
       setLoading('btn-upscale', 'upscale-spinner', false);
-      showErr('err-3', res.error_message || 'Upscale failed — xem server logs');
+      showErr('err-4', res.error_message || 'Upscale failed — xem server logs');
     } else {
       const sp = document.getElementById('upscale-spinner');
       if (sp) sp.textContent = `⏳ Upscayl đang chạy (${res.status})… kiểm tra mỗi 5s`;
@@ -355,24 +376,10 @@ async function pollStatus() {
     if (pollFailCount >= 3) {
       clearInterval(pollTimer); pollTimer = null;
       setLoading('btn-upscale', 'upscale-spinner', false);
-      showErr('err-3', `Không thể lấy trạng thái upscale (${pollFailCount} lần thất bại): ${err?.detail || JSON.stringify(err)}`);
+      showErr('err-4', `Không thể lấy trạng thái upscale (${pollFailCount} lần thất bại): ${err?.detail || JSON.stringify(err)}`);
     }
   }
 }
-
-// ── Step 4: Remove BG ─────────────────────────────────────────────────────
-document.getElementById('btn-removebg').addEventListener('click', async () => {
-  setLoading('btn-removebg', 'removebg-spinner', true);
-  try {
-    const res = await api('POST', `/admin/artwork/${artworkId}/removebg`);
-    showImg('removebg-img', res.removebg_url);
-    doneStep('step-4');
-    enableStep('step-5');
-  } catch(err) {
-    showErr('err-4', err);
-    setLoading('btn-removebg', 'removebg-spinner', false);
-  }
-});
 
 // ── Step 5: Canvas Fill ───────────────────────────────────────────────────
 document.getElementById('btn-canvas').addEventListener('click', async () => {

@@ -303,28 +303,23 @@ class ChatGPTOAuthImageClient:
                 "ChatGPT OAuth token missing — run: python scripts/chatgpt_oauth_login.py"
             )
 
-        # Pad non-square images to square with white before sending.
-        # gpt-image-2 edit always outputs 1024×1024; padding ensures the full
-        # design is visible instead of the bottom being cropped.
+        # chatgpt.com/backend-api/codex/responses only supports "1024x1024" for edit.
+        # Pad portrait/landscape to square so the full design is always visible.
         try:
             src = Image.open(BytesIO(image_bytes)).convert("RGBA")
             orig_w, orig_h = src.size
             if orig_w != orig_h:
                 side = max(orig_w, orig_h)
                 canvas = Image.new("RGBA", (side, side), (255, 255, 255, 255))
-                # centre horizontally, top-align vertically so design reads naturally
-                canvas.paste(src, ((side - orig_w) // 2, 0), src)
+                canvas.paste(src, ((side - orig_w) // 2, 0), src)  # centre-x, top-align
                 buf = BytesIO()
                 canvas.save(buf, format="PNG")
                 padded_bytes = buf.getvalue()
-                logger.info(
-                    "ChatGPT OAuth: padded %dx%d → %dx%d square before edit",
-                    orig_w, orig_h, side, side,
-                )
+                logger.info("ChatGPT OAuth: padded %dx%d → %dx%d square", orig_w, orig_h, side, side)
             else:
                 padded_bytes = image_bytes
         except Exception as exc:
-            logger.warning("ChatGPT OAuth: could not pad image (%s), sending as-is", exc)
+            logger.warning("ChatGPT OAuth: padding failed (%s), sending as-is", exc)
             padded_bytes = image_bytes
 
         instruction = prompt or ARTWORK_REFINE_PROMPT
