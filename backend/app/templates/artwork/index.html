@@ -95,7 +95,7 @@
 
   <!-- ── STEP 4: Upscale ───────────────────────────────────────────── -->
   <div class="step-card disabled" id="step-4">
-    <h2><span class="step-num">4</span> Upscale <small style="font-weight:400;color:#6b7280">(Real-ESRGAN · CPU · ~2-4 min)</small></h2>
+    <h2><span class="step-num">4</span> Upscale <small style="font-weight:400;color:#6b7280">(Upscayl · CPU · ~2-4 min)</small></h2>
     <img id="removebg-img" class="preview-img checkerboard" alt="transparent">
     <div style="margin:.75rem 0 0;display:flex;gap:1rem;align-items:center;flex-wrap:wrap">
       <span style="font-size:.875rem;font-weight:600;color:#374151">Mức phóng to:</span>
@@ -111,12 +111,49 @@
     </div>
     <div class="step-actions">
       <button id="btn-upscale" class="btn btn-primary">Upscale for POD →</button>
-      <span class="spinner" id="upscale-spinner" style="display:none">⏳ Upscaling trên CPU… kiểm tra mỗi 5s</span>
+      <span class="spinner" id="upscale-spinner" style="display:none">⏳ Upscayl đang chạy trên CPU… kiểm tra mỗi 5s</span>
     </div>
     <div class="download-box" id="download-box">
-      ✅ Done! &nbsp;<a id="download-link" download>⬇ Download POD Artwork</a>
+      ✅ Upscale xong! &nbsp;<a id="download-link" download>⬇ Download Upscaled</a>
     </div>
     <p class="banner-error" id="err-4"></p>
+  </div>
+
+  <!-- ── STEP 5: Canvas Fill ──────────────────────────────────────── -->
+  <div class="step-card disabled" id="step-5">
+    <h2><span class="step-num">5</span> Canvas Fill <small style="font-weight:400;color:#6b7280">(POD Template)</small></h2>
+    <img id="final-img" class="preview-img checkerboard" alt="upscaled">
+    <div style="margin:.85rem 0 0;display:flex;gap:2rem;flex-wrap:wrap">
+      <div>
+        <div style="font-size:.85rem;font-weight:600;color:#374151;margin-bottom:.45rem">Kích thước canvas:</div>
+        <label style="display:block;margin-bottom:.3rem;font-size:.9rem;cursor:pointer">
+          <input type="radio" name="canvas-size" value="4500x5400" checked> 4500 × 5400 px
+        </label>
+        <label style="display:block;font-size:.9rem;cursor:pointer">
+          <input type="radio" name="canvas-size" value="4200x4800"> 4200 × 4800 px
+        </label>
+      </div>
+      <div>
+        <div style="font-size:.85rem;font-weight:600;color:#374151;margin-bottom:.45rem">Căn chỉnh:</div>
+        <label style="display:block;margin-bottom:.3rem;font-size:.9rem;cursor:pointer">
+          <input type="radio" name="fit-mode" value="width" checked> Vừa chiều rộng
+          <span style="color:#6b7280;font-size:.78rem">(artwork width = canvas width)</span>
+        </label>
+        <label style="display:block;font-size:.9rem;cursor:pointer">
+          <input type="radio" name="fit-mode" value="height"> Fill top → bottom
+          <span style="color:#6b7280;font-size:.78rem">(artwork height = canvas height)</span>
+        </label>
+      </div>
+    </div>
+    <div class="step-actions">
+      <button id="btn-canvas" class="btn btn-primary">Apply Canvas →</button>
+      <span class="spinner" id="canvas-spinner" style="display:none">⏳ Generating…</span>
+    </div>
+    <div class="download-box" id="canvas-download-box">
+      <img id="canvas-preview-img" class="preview-img" style="margin-bottom:.75rem;max-height:260px" alt="canvas preview">
+      ✅ Canvas xong! &nbsp;<a id="canvas-download-link" download>⬇ Download Canvas Artwork</a>
+    </div>
+    <p class="banner-error" id="err-5"></p>
   </div>
 
 </div>
@@ -260,8 +297,11 @@ async function pollStatus() {
       document.getElementById('upscale-spinner').style.display = 'none';
       const dl = document.getElementById('download-link');
       dl.href = res.final_url;
-      dl.textContent = '⬇ Download POD Artwork (' + res.final_url.split('/').pop() + ')';
+      dl.textContent = '⬇ Download Upscaled (' + res.final_url.split('/').pop() + ')';
       document.getElementById('download-box').style.display = 'block';
+      // Enable step 5 and show the upscaled image there
+      showImg('final-img', res.final_url);
+      enableStep('step-5');
     } else if (res.status === 'failed') {
       clearInterval(pollTimer); pollTimer = null;
       setLoading('btn-upscale', 'upscale-spinner', false);
@@ -269,6 +309,29 @@ async function pollStatus() {
     }
   } catch(_) { /* network blip — keep polling */ }
 }
+
+// ── Step 5: Canvas Fill ───────────────────────────────────────────────────
+document.getElementById('btn-canvas').addEventListener('click', async () => {
+  const canvasSize = document.querySelector('input[name="canvas-size"]:checked')?.value || '4500x5400';
+  const fitMode   = document.querySelector('input[name="fit-mode"]:checked')?.value   || 'width';
+  const fd = new FormData();
+  fd.append('canvas_size', canvasSize);
+  fd.append('fit_mode', fitMode);
+  setLoading('btn-canvas', 'canvas-spinner', true);
+  document.getElementById('canvas-download-box').style.display = 'none';
+  try {
+    const res = await api('POST', `/admin/artwork/${artworkId}/canvas`, fd);
+    showImg('canvas-preview-img', res.canvas_url);
+    const dl = document.getElementById('canvas-download-link');
+    dl.href = res.canvas_url;
+    dl.textContent = `⬇ Download Canvas (${res.canvas_size})`;
+    document.getElementById('canvas-download-box').style.display = 'block';
+    setLoading('btn-canvas', 'canvas-spinner', false);
+  } catch(err) {
+    showErr('err-5', err);
+    setLoading('btn-canvas', 'canvas-spinner', false);
+  }
+});
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 function enableStep(id) {

@@ -71,6 +71,12 @@ class Settings(BaseSettings):
     # Feature flag — disable artwork pipeline if OpenAI key not configured
     enable_artwork: bool = False
 
+    # Upscayl — path to upscayl-bin CLI (https://github.com/upscayl/upscayl)
+    # Set UPSCAYL_BIN in .env to the full path of the binary, e.g. /opt/upscayl-bin
+    # Leave empty to search PATH. Set UPSCAYL_MODELS to override models directory.
+    upscayl_bin: str = "upscayl-bin"
+    upscayl_models: str = ""  # if empty, binary uses its bundled/default models
+
     # v0.8.0 — Idea miner: Etsy public API keyword search + signal collection.
     # etsy_miner_interval_sec: scheduler interval between full mining runs (default 1h).
     # etsy_miner_per_keyword_limit: max listings fetched per keyword per run (Etsy max 100).

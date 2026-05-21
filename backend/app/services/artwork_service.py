@@ -1,10 +1,12 @@
-"""Artwork service — Cloden Design POD pipeline: crop, refine, removebg, upscale.
+"""Artwork service — Cloden Design POD pipeline: crop, refine, removebg, upscale, canvas.
 
 Each public function corresponds to one pipeline step. All steps update
-Artwork.status in DB so the frontend can poll progress. Real-ESRGAN upscale
-runs as a FastAPI BackgroundTask (CPU, ~2-4 min for 4x scale).
+Artwork.status in DB. Upscale runs via upscayl-bin CLI as a BackgroundTask.
 """
 import logging
+import shutil
+import subprocess
+import tempfile
 from io import BytesIO
 from pathlib import Path
 
@@ -204,7 +206,7 @@ def run_upscale_job(artwork_id: int, scale: int = 4) -> None:
             return
 
         input_bytes = _load_image_bytes(artwork.removebg_url)
-        output_bytes = _upscale_realesrgan(input_bytes, scale=scale)
+        output_bytes = _upscale_with_upscayl(input_bytes, scale=scale)
 
         final_url = _save_and_upload(output_bytes)
         artwork.final_url = final_url
@@ -223,69 +225,101 @@ def run_upscale_job(artwork_id: int, scale: int = 4) -> None:
         db.close()
 
 
-def _upscale_realesrgan(image_bytes: bytes, scale: int = 4) -> bytes:
-    """Run Real-ESRGAN x4plus_anime_6B (CPU) with configurable outscale (2/3/4).
+def _upscale_with_upscayl(image_bytes: bytes, scale: int = 4) -> bytes:
+    """Upscale via upscayl-bin CLI. Caps input at 1024px, passes -g -1 for CPU.
 
-    The model internally runs 4x; outscale controls final output size.
-    Caps input at 1024px to avoid OOM.
+    Binary path: settings.upscayl_bin (default "upscayl-bin" on PATH).
+    Models dir: settings.upscayl_models (optional; uses binary's bundled default if empty).
 
     Raises:
-        ImportError: Propagated if realesrgan/basicsr/torch are not installed.
-        ValueError: On any upscaling failure.
+        RuntimeError: Binary not found, non-zero exit code, or no output produced.
     """
-    try:
-        import numpy as np
-        import torch
-        from basicsr.archs.rrdbnet_arch import RRDBNet
-        from realesrgan import RealESRGANer
-    except ImportError as exc:
-        raise ImportError(
-            "Real-ESRGAN is not installed. Run:\n"
-            "  uv pip install realesrgan basicsr torch "
-            "--index-url https://download.pytorch.org/whl/cpu\n"
-            f"(original error: {exc})"
-        ) from exc
+    bin_path = settings.upscayl_bin or "upscayl-bin"
+    if not (Path(bin_path).is_file() or shutil.which(bin_path)):
+        raise RuntimeError(
+            f"upscayl-bin not found at '{bin_path}'. "
+            "Install Upscayl from https://github.com/upscayl/upscayl then set "
+            "UPSCAYL_BIN=/path/to/upscayl-bin in .env"
+        )
 
-    # Cap input to avoid OOM on CPU
+    # Cap input to avoid memory issues
     img = Image.open(BytesIO(image_bytes)).convert("RGBA")
     if max(img.width, img.height) > _UPSCALE_MAX_INPUT_PX:
         ratio = _UPSCALE_MAX_INPUT_PX / max(img.width, img.height)
-        new_size = (int(img.width * ratio), int(img.height * ratio))
-        img = img.resize(new_size, Image.LANCZOS)
+        img = img.resize(
+            (int(img.width * ratio), int(img.height * ratio)), Image.LANCZOS
+        )
         logger.info("Capped upscale input to %dx%d", img.width, img.height)
 
-    # RealESRGAN_x4plus_anime_6B — best for flat design/digital art, ~17MB model
-    model = RRDBNet(
-        num_in_ch=3, num_out_ch=3, num_feat=64,
-        num_block=6, num_grow_ch=32, scale=4,
-    )
-    model_url = (
-        "https://github.com/xinntao/Real-ESRGAN/releases/download/"
-        "v0.2.2.4/RealESRGAN_x4plus_anime_6B.pth"
-    )
+    input_buf = BytesIO()
+    img.save(input_buf, format="PNG")
 
-    upsampler = RealESRGANer(
-        scale=4,
-        model_path=model_url,  # auto-downloads to ~/.cache/realesrgan/ on first run
-        model=model,
-        device=torch.device("cpu"),
-        half=False,            # FP32 required on CPU (FP16 is for CUDA only)
-    )
+    with tempfile.TemporaryDirectory() as tmpdir:
+        inp = Path(tmpdir) / "input.png"
+        out = Path(tmpdir) / "output.png"
+        inp.write_bytes(input_buf.getvalue())
 
-    # RealESRGAN works on RGB; strip alpha, upscale, re-apply alpha
-    rgb = img.convert("RGB")
-    alpha = img.getchannel("A")
+        cmd = [bin_path, "-i", str(inp), "-o", str(out), "-s", str(scale), "-g", "-1"]
+        if settings.upscayl_models:
+            cmd += ["-m", settings.upscayl_models, "-n", "realesrgan-x4plus-anime"]
 
-    rgb_np = np.array(rgb)
-    output_np, _ = upsampler.enhance(rgb_np, outscale=scale)
-    output_rgb = Image.fromarray(output_np)
+        logger.info("Running upscayl-bin scale=%d: %s", scale, " ".join(cmd))
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError("upscayl-bin timed out after 600s") from exc
 
-    # Upscale alpha channel separately (simple bicubic — sufficient for masks)
-    output_alpha = alpha.resize(
-        (output_rgb.width, output_rgb.height), Image.LANCZOS
-    )
-    output_rgb.putalpha(output_alpha)
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"upscayl-bin exited {result.returncode}. stderr: {result.stderr[:500]}"
+            )
+        if not out.exists():
+            raise RuntimeError("upscayl-bin completed but produced no output file")
+
+        output_bytes = out.read_bytes()
+        logger.info(
+            "Upscayl done: input=%d bytes → output=%d bytes",
+            len(image_bytes), len(output_bytes),
+        )
+        return output_bytes
+
+
+def fill_canvas_artwork(db: Session, artwork_id: int, canvas_w: int, canvas_h: int, fit_mode: str) -> str:
+    """Place the upscaled artwork on a white print canvas. Returns canvas image URL.
+
+    Args:
+        fit_mode: "width" — scale so artwork width = canvas width;
+                  "height" — scale so artwork height = canvas height (fills top→bottom).
+    """
+    artwork = db.get(Artwork, artwork_id)
+    if not artwork:
+        raise ValueError(f"Artwork {artwork_id} not found")
+    if not artwork.final_url:
+        raise ValueError("Upscale step not complete — run Step 4 first")
+
+    image_bytes = _load_image_bytes(artwork.final_url)
+    canvas_bytes = _apply_canvas(image_bytes, canvas_w, canvas_h, fit_mode)
+    return _save_and_upload(canvas_bytes)
+
+
+def _apply_canvas(image_bytes: bytes, canvas_w: int, canvas_h: int, fit_mode: str) -> bytes:
+    """Resize artwork to fit canvas (width or height), paste top-center on white background."""
+    img = Image.open(BytesIO(image_bytes)).convert("RGBA")
+
+    if fit_mode == "width":
+        scale = canvas_w / img.width
+    else:  # height — fills top to bottom
+        scale = canvas_h / img.height
+
+    new_w = int(img.width * scale)
+    new_h = int(img.height * scale)
+    resized = img.resize((new_w, new_h), Image.LANCZOS)
+
+    # White canvas, artwork aligned top-center
+    canvas = Image.new("RGBA", (canvas_w, canvas_h), (255, 255, 255, 255))
+    x = (canvas_w - new_w) // 2
+    canvas.paste(resized, (x, 0), resized)
 
     buf = BytesIO()
-    output_rgb.save(buf, format="PNG")
+    canvas.convert("RGB").save(buf, format="PNG")  # RGB = white bg, POD-ready
     return buf.getvalue()

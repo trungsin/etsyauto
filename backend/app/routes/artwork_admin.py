@@ -131,6 +131,29 @@ def upscale(
     return {"id": artwork_id, "status": "upscaling", "scale": scale}
 
 
+@router.post("/{artwork_id}/canvas")
+def canvas_fill(
+    artwork_id: int,
+    canvas_size: str = Form(...),   # "4500x5400" or "4200x4800"
+    fit_mode: str = Form("width"),  # "width" or "height"
+    db: Session = Depends(get_db),
+    _: None = Depends(require_admin_token),
+) -> dict:
+    """Place upscaled artwork on a POD canvas. Returns canvas_url."""
+    _VALID_SIZES = {"4500x5400", "4200x4800"}
+    if canvas_size not in _VALID_SIZES:
+        raise HTTPException(status_code=400, detail=f"canvas_size must be one of {_VALID_SIZES}")
+    if fit_mode not in ("width", "height"):
+        raise HTTPException(status_code=400, detail="fit_mode must be 'width' or 'height'")
+    canvas_w, canvas_h = map(int, canvas_size.split("x"))
+    try:
+        canvas_url = artwork_service.fill_canvas_artwork(db, artwork_id, canvas_w, canvas_h, fit_mode)
+    except (ValueError, RuntimeError) as exc:
+        code = 404 if "not found" in str(exc).lower() else 400
+        raise HTTPException(status_code=code, detail=str(exc)) from exc
+    return {"canvas_url": canvas_url, "canvas_size": canvas_size}
+
+
 @router.get("/{artwork_id}/status")
 def status(
     artwork_id: int,
