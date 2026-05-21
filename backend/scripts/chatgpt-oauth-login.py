@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Run with: python3 scripts/chatgpt-oauth-login.py
 """ChatGPT OAuth login — one-time setup for gpt-image-2 via Plus subscription.
 
 Since this runs on a remote server, use SSH port forwarding so the OAuth
@@ -132,51 +133,8 @@ def _wait_for_callback(state: str, timeout: int) -> str:
         httpd.shutdown()
 
 
-def main() -> int:
-    p = argparse.ArgumentParser(description="ChatGPT OAuth login for artwork pipeline")
-    p.add_argument("--force", action="store_true", help="Re-login even if already logged in")
-    p.add_argument("--timeout", type=int, default=300, help="Seconds to wait for callback")
-    args = p.parse_args()
-
-    if not args.force and has_session():
-        s = load_session()
-        print("Already logged in!")
-        print(f"  Token: {_codex_auth_path()}")
-        if s and s.account_id:
-            print(f"  Account: {s.account_id}")
-        if s and s.plan_type:
-            print(f"  Plan: {s.plan_type}")
-        print("Use --force to re-login.")
-        return 0
-
-    verifier, challenge = _pkce()
-    state = base64.urlsafe_b64encode(secrets.token_bytes(16)).rstrip(b"=").decode("ascii")
-    url = _auth_url(challenge, state)
-
-    print("=" * 60)
-    print("ChatGPT OAuth Login")
-    print("=" * 60)
-    print()
-    print("IMPORTANT — this server has no browser.")
-    print("Use SSH port forwarding so the callback reaches this server:")
-    print()
-    print("  On your LOCAL machine, run:")
-    print("    ssh -R 1455:localhost:1455 lesin@<server-ip>")
-    print()
-    print("Then open this URL in your browser:")
-    print()
-    print(f"  {url}")
-    print()
-    print(f"Waiting for callback on http://127.0.0.1:{CALLBACK_PORT}/auth/callback ...")
-    print(f"(timeout: {args.timeout}s)")
-
-    try:
-        code = _wait_for_callback(state, args.timeout)
-    except (TimeoutError, RuntimeError) as e:
-        print(f"\nLogin failed: {e}", file=sys.stderr)
-        return 2
-
-    print("\nGot authorization code — exchanging for tokens...")
+def _exchange_and_save(code: str, verifier: str) -> int:
+    print("\nExchanging code for tokens...")
     resp = requests.post(
         OPENAI_TOKEN_URL,
         data={
@@ -213,6 +171,82 @@ def main() -> int:
     print()
     print("You can now use the artwork Refine step with gpt-image-2!")
     return 0
+
+
+def main() -> int:
+    p = argparse.ArgumentParser(description="ChatGPT OAuth login for artwork pipeline")
+    p.add_argument("--force", action="store_true", help="Re-login even if already logged in")
+    p.add_argument("--timeout", type=int, default=300, help="Seconds to wait for auto callback")
+    p.add_argument("--manual", action="store_true",
+                   help="Manual mode: no callback server — paste the redirect URL yourself")
+    args = p.parse_args()
+
+    if not args.force and has_session():
+        s = load_session()
+        print("Already logged in!")
+        print(f"  Token: {_codex_auth_path()}")
+        if s and s.account_id:
+            print(f"  Account: {s.account_id}")
+        if s and s.plan_type:
+            print(f"  Plan: {s.plan_type}")
+        print("Use --force to re-login.")
+        return 0
+
+    verifier, challenge = _pkce()
+    state = base64.urlsafe_b64encode(secrets.token_bytes(16)).rstrip(b"=").decode("ascii")
+    url = _auth_url(challenge, state)
+
+    print("=" * 60)
+    print("ChatGPT OAuth Login")
+    print("=" * 60)
+    print()
+    print("Open this URL in your browser:")
+    print()
+    print(f"  {url}")
+    print()
+
+    if args.manual:
+        # ── Manual mode: user pastes the redirect URL ──────────────────────
+        print("After login, the browser will redirect to:")
+        print("  http://localhost:1455/auth/callback?code=...&state=...")
+        print()
+        print("The page will show an error (no server) — that's OK.")
+        print("Copy the FULL URL from the browser's address bar and paste it here.")
+        print()
+        try:
+            redirect_url = input("Paste redirect URL: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\nCancelled.", file=sys.stderr)
+            return 2
+
+        parsed = urllib.parse.urlparse(redirect_url)
+        q = urllib.parse.parse_qs(parsed.query)
+        got_state = (q.get("state") or [""])[0]
+        if got_state != state:
+            print(f"State mismatch — expected {state!r}, got {got_state!r}.\n"
+                  "Make sure you pasted the URL from the correct login attempt.", file=sys.stderr)
+            return 2
+        code = (q.get("code") or [""])[0]
+        if not code:
+            err = (q.get("error") or ["no code in URL"])[0]
+            print(f"No auth code in URL: {err}", file=sys.stderr)
+            return 2
+
+        return _exchange_and_save(code, verifier)
+
+    else:
+        # ── Auto mode: local callback server ───────────────────────────────
+        print(f"Waiting for callback on http://127.0.0.1:{CALLBACK_PORT}/auth/callback ...")
+        print(f"(timeout: {args.timeout}s)")
+        print()
+        print("TIP: If you get 'Address already in use', run with --manual instead:")
+        print("  python3 scripts/chatgpt-oauth-login.py --manual")
+        try:
+            code = _wait_for_callback(state, args.timeout)
+        except (TimeoutError, RuntimeError) as e:
+            print(f"\nLogin failed: {e}", file=sys.stderr)
+            return 2
+        return _exchange_and_save(code, verifier)
 
 
 if __name__ == "__main__":
