@@ -21,8 +21,8 @@ from app.services.image_service import download_image, save_to_static, upload_to
 
 logger = logging.getLogger(__name__)
 
-# Cap input dimension before upscaling to avoid CPU OOM on very large crops
-_UPSCALE_MAX_INPUT_PX = 1024
+# Cap input before upscaling — SwiftShader CPU scales O(pixels); 512px → ~80s, 1024px → ~10min
+_UPSCALE_MAX_INPUT_PX = 512
 
 
 def _load_image_bytes(url: str) -> bytes:

@@ -97,17 +97,26 @@
   <div class="step-card disabled" id="step-4">
     <h2><span class="step-num">4</span> Upscale <small style="font-weight:400;color:#6b7280">(Upscayl · CPU · ~2-4 min)</small></h2>
     <img id="removebg-img" class="preview-img checkerboard" alt="transparent">
-    <div style="margin:.75rem 0 0;display:flex;gap:1rem;align-items:center;flex-wrap:wrap">
-      <span style="font-size:.875rem;font-weight:600;color:#374151">Mức phóng to:</span>
-      <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.9rem">
-        <input type="radio" name="upscale-scale" value="2"> 2× <span style="color:#6b7280;font-size:.8rem">(nhanh hơn, ~2× kích thước)</span>
-      </label>
-      <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.9rem">
-        <input type="radio" name="upscale-scale" value="3"> 3× <span style="color:#6b7280;font-size:.8rem">(cân bằng)</span>
-      </label>
-      <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.9rem">
-        <input type="radio" name="upscale-scale" value="4" checked> 4× <span style="color:#6b7280;font-size:.8rem">(chất lượng cao nhất, ~4× kích thước)</span>
-      </label>
+    <div style="font-size:.8rem;color:#6b7280;margin:.45rem 0 0" id="img-size-info"></div>
+    <div style="margin:.75rem 0 0">
+      <div style="font-size:.875rem;font-weight:600;color:#374151;margin-bottom:.5rem">Mức phóng to:</div>
+      <div style="display:flex;flex-direction:column;gap:.4rem">
+        <label style="display:flex;align-items:baseline;gap:.5rem;cursor:pointer;font-size:.9rem">
+          <input type="radio" name="upscale-scale" value="2">
+          <span>2× — nhanh (~80s)</span>
+          <span id="scale-out-2" style="color:#6b7280;font-size:.8rem"></span>
+        </label>
+        <label style="display:flex;align-items:baseline;gap:.5rem;cursor:pointer;font-size:.9rem">
+          <input type="radio" name="upscale-scale" value="3">
+          <span>3× — trung bình</span>
+          <span id="scale-out-3" style="color:#6b7280;font-size:.8rem"></span>
+        </label>
+        <label style="display:flex;align-items:baseline;gap:.5rem;cursor:pointer;font-size:.9rem">
+          <input type="radio" name="upscale-scale" value="4" checked>
+          <span>4× — chất lượng cao nhất (~4-5 phút)</span>
+          <span id="scale-out-4" style="color:#6b7280;font-size:.8rem"></span>
+        </label>
+      </div>
     </div>
     <div class="step-actions">
       <button id="btn-upscale" class="btn btn-primary">Upscale for POD →</button>
@@ -161,8 +170,9 @@
 <script>
 'use strict';
 // ── State ──────────────────────────────────────────────────────────────────
-let artworkId  = null;
-let pollTimer  = null;
+let artworkId    = null;
+let pollTimer    = null;
+let pollFailCount = 0;
 
 // ── Crop drag-select ───────────────────────────────────────────────────────
 const fileInput = document.getElementById('file-input');
@@ -274,11 +284,27 @@ document.getElementById('btn-removebg').addEventListener('click', async () => {
   }
 });
 
+// When removebg image loads, compute capped input size and show output dims per scale
+document.getElementById('removebg-img').addEventListener('load', function() {
+  const CAP = 512;
+  const maxDim = Math.max(this.naturalWidth, this.naturalHeight);
+  const ratio = maxDim > CAP ? CAP / maxDim : 1;
+  const inW = Math.round(this.naturalWidth * ratio);
+  const inH = Math.round(this.naturalHeight * ratio);
+  const sizeEl = document.getElementById('img-size-info');
+  if (sizeEl) sizeEl.textContent = `Ảnh gốc: ${this.naturalWidth}×${this.naturalHeight}px · Input upscale (capped): ${inW}×${inH}px`;
+  [2, 3, 4].forEach(s => {
+    const el = document.getElementById('scale-out-' + s);
+    if (el) el.textContent = `→ output ${inW * s}×${inH * s}px`;
+  });
+});
+
 // ── Step 4: Upscale + poll ────────────────────────────────────────────────
 document.getElementById('btn-upscale').addEventListener('click', async () => {
   const scaleVal = document.querySelector('input[name="upscale-scale"]:checked')?.value || '4';
   const fd = new FormData();
   fd.append('scale', scaleVal);
+  pollFailCount = 0;
   setLoading('btn-upscale', 'upscale-spinner', true);
   try {
     await api('POST', `/admin/artwork/${artworkId}/upscale`, fd);
@@ -292,6 +318,7 @@ document.getElementById('btn-upscale').addEventListener('click', async () => {
 async function pollStatus() {
   try {
     const res = await api('GET', `/admin/artwork/${artworkId}/status`);
+    pollFailCount = 0;
     if (res.status === 'done') {
       clearInterval(pollTimer); pollTimer = null;
       document.getElementById('upscale-spinner').style.display = 'none';
@@ -299,15 +326,25 @@ async function pollStatus() {
       dl.href = res.final_url;
       dl.textContent = '⬇ Download Upscaled (' + res.final_url.split('/').pop() + ')';
       document.getElementById('download-box').style.display = 'block';
-      // Enable step 5 and show the upscaled image there
       showImg('final-img', res.final_url);
       enableStep('step-5');
     } else if (res.status === 'failed') {
       clearInterval(pollTimer); pollTimer = null;
       setLoading('btn-upscale', 'upscale-spinner', false);
-      showErr('err-4', res.error_message || 'Upscale failed — check server logs');
+      showErr('err-4', res.error_message || 'Upscale failed — xem server logs');
+    } else {
+      // Still running — update spinner text
+      const sp = document.getElementById('upscale-spinner');
+      if (sp) sp.textContent = `⏳ Upscayl đang chạy (${res.status})… kiểm tra mỗi 5s`;
     }
-  } catch(_) { /* network blip — keep polling */ }
+  } catch(err) {
+    pollFailCount++;
+    if (pollFailCount >= 3) {
+      clearInterval(pollTimer); pollTimer = null;
+      setLoading('btn-upscale', 'upscale-spinner', false);
+      showErr('err-4', `Không thể lấy trạng thái upscale (${pollFailCount} lần thất bại): ${err?.detail || JSON.stringify(err)}`);
+    }
+  }
 }
 
 // ── Step 5: Canvas Fill ───────────────────────────────────────────────────
