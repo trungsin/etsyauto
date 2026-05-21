@@ -145,6 +145,21 @@ def refine_artwork(db: Session, artwork_id: int) -> Artwork:
     return artwork
 
 
+def skip_refine_artwork(db: Session, artwork_id: int) -> Artwork:
+    """Skip GPT refinement — copy cropped_url to refined_url. Transitions cropped→refined."""
+    artwork = db.get(Artwork, artwork_id)
+    if not artwork:
+        raise ValueError(f"Artwork {artwork_id} not found")
+    if artwork.status != "cropped":
+        raise ValueError(f"Artwork {artwork_id} has status '{artwork.status}', expected 'cropped'")
+    artwork.refined_url = artwork.cropped_url
+    artwork.status = "refined"
+    db.commit()
+    db.refresh(artwork)
+    logger.info("Artwork %d: refine skipped, using cropped_url as refined_url", artwork_id)
+    return artwork
+
+
 def removebg_artwork(db: Session, artwork_id: int) -> Artwork:
     """Remove background via remove.bg. Transitions refined→removebg_done.
 
@@ -170,8 +185,8 @@ def removebg_artwork(db: Session, artwork_id: int) -> Artwork:
     return artwork
 
 
-def run_upscale_job(artwork_id: int) -> None:
-    """BackgroundTask: Real-ESRGAN 4x upscale. Transitions removebg_done→upscaling→done|failed.
+def run_upscale_job(artwork_id: int, scale: int = 4) -> None:
+    """BackgroundTask: Real-ESRGAN upscale. Transitions removebg_done→upscaling→done|failed.
 
     Opens its own DB session (request session has already closed by the time
     this runs as a BackgroundTask). Requires realesrgan + basicsr + torch installed.
@@ -189,7 +204,7 @@ def run_upscale_job(artwork_id: int) -> None:
             return
 
         input_bytes = _load_image_bytes(artwork.removebg_url)
-        output_bytes = _upscale_realesrgan(input_bytes)
+        output_bytes = _upscale_realesrgan(input_bytes, scale=scale)
 
         final_url = _save_and_upload(output_bytes)
         artwork.final_url = final_url
@@ -208,8 +223,11 @@ def run_upscale_job(artwork_id: int) -> None:
         db.close()
 
 
-def _upscale_realesrgan(image_bytes: bytes) -> bytes:
-    """Run Real-ESRGAN x4plus_anime_6B (CPU). Caps input at 1024px to avoid OOM.
+def _upscale_realesrgan(image_bytes: bytes, scale: int = 4) -> bytes:
+    """Run Real-ESRGAN x4plus_anime_6B (CPU) with configurable outscale (2/3/4).
+
+    The model internally runs 4x; outscale controls final output size.
+    Caps input at 1024px to avoid OOM.
 
     Raises:
         ImportError: Propagated if realesrgan/basicsr/torch are not installed.
@@ -259,7 +277,7 @@ def _upscale_realesrgan(image_bytes: bytes) -> bytes:
     alpha = img.getchannel("A")
 
     rgb_np = np.array(rgb)
-    output_np, _ = upsampler.enhance(rgb_np, outscale=4)
+    output_np, _ = upsampler.enhance(rgb_np, outscale=scale)
     output_rgb = Image.fromarray(output_np)
 
     # Upscale alpha channel separately (simple bicubic — sufficient for masks)

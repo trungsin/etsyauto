@@ -67,9 +67,16 @@
   <!-- ── STEP 2: Refine ────────────────────────────────────────────── -->
   <div class="step-card disabled" id="step-2">
     <h2><span class="step-num">2</span> Refine with AI <small style="font-weight:400;color:#6b7280">(GPT-Image-1)</small></h2>
+    {% if not has_openai_key %}
+    <div style="background:#fffbeb;border:1px solid #fcd34d;color:#92400e;padding:.45rem .75rem;border-radius:4px;margin-bottom:.75rem;font-size:.875rem">
+      ⚠️ <strong>OPENAI_API_KEY</strong> chưa được cấu hình — thêm vào <code>.env</code> để dùng bước này,
+      hoặc bấm <strong>Skip</strong> để bỏ qua.
+    </div>
+    {% endif %}
     <img id="cropped-img" class="preview-img" alt="cropped">
     <div class="step-actions">
-      <button id="btn-refine" class="btn btn-primary">Refine →</button>
+      <button id="btn-refine" class="btn btn-primary"{% if not has_openai_key %} disabled title="OPENAI_API_KEY chưa cấu hình"{% endif %}>Refine →</button>
+      <button id="btn-skip-refine" class="btn" style="background:#f3f4f6;border:1px solid #d1d5db">Skip →</button>
       <span class="spinner" id="refine-spinner" style="display:none">⏳ Calling GPT-Image-1… (up to ~30s)</span>
     </div>
     <p class="banner-error" id="err-2"></p>
@@ -88,11 +95,23 @@
 
   <!-- ── STEP 4: Upscale ───────────────────────────────────────────── -->
   <div class="step-card disabled" id="step-4">
-    <h2><span class="step-num">4</span> Upscale 4× <small style="font-weight:400;color:#6b7280">(Real-ESRGAN · CPU · ~2-4 min)</small></h2>
+    <h2><span class="step-num">4</span> Upscale <small style="font-weight:400;color:#6b7280">(Real-ESRGAN · CPU · ~2-4 min)</small></h2>
     <img id="removebg-img" class="preview-img checkerboard" alt="transparent">
+    <div style="margin:.75rem 0 0;display:flex;gap:1rem;align-items:center;flex-wrap:wrap">
+      <span style="font-size:.875rem;font-weight:600;color:#374151">Mức phóng to:</span>
+      <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.9rem">
+        <input type="radio" name="upscale-scale" value="2"> 2× <span style="color:#6b7280;font-size:.8rem">(nhanh hơn, ~2× kích thước)</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.9rem">
+        <input type="radio" name="upscale-scale" value="3"> 3× <span style="color:#6b7280;font-size:.8rem">(cân bằng)</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.9rem">
+        <input type="radio" name="upscale-scale" value="4" checked> 4× <span style="color:#6b7280;font-size:.8rem">(chất lượng cao nhất, ~4× kích thước)</span>
+      </label>
+    </div>
     <div class="step-actions">
       <button id="btn-upscale" class="btn btn-primary">Upscale for POD →</button>
-      <span class="spinner" id="upscale-spinner" style="display:none">⏳ Upscaling on CPU… checking every 5s</span>
+      <span class="spinner" id="upscale-spinner" style="display:none">⏳ Upscaling trên CPU… kiểm tra mỗi 5s</span>
     </div>
     <div class="download-box" id="download-box">
       ✅ Done! &nbsp;<a id="download-link" download>⬇ Download POD Artwork</a>
@@ -179,6 +198,7 @@ btnCrop.addEventListener('click', async () => {
 // ── Step 2: Refine ────────────────────────────────────────────────────────
 document.getElementById('btn-refine').addEventListener('click', async () => {
   setLoading('btn-refine', 'refine-spinner', true);
+  document.getElementById('btn-skip-refine').style.display = 'none';
   try {
     const res = await api('POST', `/admin/artwork/${artworkId}/refine`);
     showImg('refined-img', res.refined_url);
@@ -186,6 +206,21 @@ document.getElementById('btn-refine').addEventListener('click', async () => {
   } catch(err) {
     showErr('err-2', err);
     setLoading('btn-refine', 'refine-spinner', false);
+    document.getElementById('btn-skip-refine').style.display = '';
+  }
+});
+
+document.getElementById('btn-skip-refine').addEventListener('click', async () => {
+  document.getElementById('btn-refine').style.display = 'none';
+  document.getElementById('btn-skip-refine').style.display = 'none';
+  try {
+    const res = await api('POST', `/admin/artwork/${artworkId}/skip-refine`);
+    showImg('refined-img', res.refined_url);
+    enableStep('step-3');
+  } catch(err) {
+    showErr('err-2', err);
+    document.getElementById('btn-refine').style.display = '';
+    document.getElementById('btn-skip-refine').style.display = '';
   }
 });
 
@@ -204,9 +239,12 @@ document.getElementById('btn-removebg').addEventListener('click', async () => {
 
 // ── Step 4: Upscale + poll ────────────────────────────────────────────────
 document.getElementById('btn-upscale').addEventListener('click', async () => {
+  const scaleVal = document.querySelector('input[name="upscale-scale"]:checked')?.value || '4';
+  const fd = new FormData();
+  fd.append('scale', scaleVal);
   setLoading('btn-upscale', 'upscale-spinner', true);
   try {
-    await api('POST', `/admin/artwork/${artworkId}/upscale`);
+    await api('POST', `/admin/artwork/${artworkId}/upscale`, fd);
     pollTimer = setInterval(pollStatus, 5000);
   } catch(err) {
     showErr('err-4', err);

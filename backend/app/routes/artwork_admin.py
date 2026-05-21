@@ -7,6 +7,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import get_db
 from app.dependencies import require_admin_token
 from app.models.artwork import Artwork
@@ -33,7 +34,10 @@ def artwork_page(
     _: None = Depends(require_admin_token),
 ):
     """Render the Cloden Design POD artwork pipeline admin page."""
-    return _get_jinja().TemplateResponse(request, "artwork/index.html", {})
+    return _get_jinja().TemplateResponse(
+        request, "artwork/index.html",
+        {"has_openai_key": bool(settings.openai_api_key)},
+    )
 
 
 @router.post("", status_code=201)
@@ -71,6 +75,21 @@ def refine(
     return {"id": artwork.id, "refined_url": artwork.refined_url, "status": artwork.status}
 
 
+@router.post("/{artwork_id}/skip-refine")
+def skip_refine(
+    artwork_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_admin_token),
+) -> dict:
+    """Skip GPT refinement — use cropped image directly as refined image."""
+    try:
+        artwork = artwork_service.skip_refine_artwork(db, artwork_id)
+    except ValueError as exc:
+        code = 404 if "not found" in str(exc).lower() else 400
+        raise HTTPException(status_code=code, detail=str(exc)) from exc
+    return {"id": artwork.id, "refined_url": artwork.refined_url, "status": artwork.status}
+
+
 @router.post("/{artwork_id}/removebg")
 def removebg(
     artwork_id: int,
@@ -90,10 +109,13 @@ def removebg(
 def upscale(
     artwork_id: int,
     background_tasks: BackgroundTasks,
+    scale: int = Form(4),
     db: Session = Depends(get_db),
     _: None = Depends(require_admin_token),
 ) -> dict:
-    """Start Real-ESRGAN 4x upscale as a background job. Poll /{id}/status for completion."""
+    """Start Real-ESRGAN upscale as a background job. scale=2|3|4. Poll /{id}/status."""
+    if scale not in (2, 3, 4):
+        raise HTTPException(status_code=400, detail="scale must be 2, 3, or 4")
     artwork = db.get(Artwork, artwork_id)
     if not artwork:
         raise HTTPException(status_code=404, detail=f"Artwork {artwork_id} not found")
@@ -105,8 +127,8 @@ def upscale(
     # Mark upscaling before returning to prevent duplicate job spawning
     artwork.status = "upscaling"
     db.commit()
-    background_tasks.add_task(artwork_service.run_upscale_job, artwork_id)
-    return {"id": artwork_id, "status": "upscaling"}
+    background_tasks.add_task(artwork_service.run_upscale_job, artwork_id, scale)
+    return {"id": artwork_id, "status": "upscaling", "scale": scale}
 
 
 @router.get("/{artwork_id}/status")
