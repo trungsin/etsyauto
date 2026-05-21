@@ -58,6 +58,12 @@
       <input type="text" name="gemini_ai_button_model" class="settings-input"
              value="{{ gemini_model }}" placeholder="gemini-2.5-pro" style="max-width:300px">
     </div>
+    <div class="settings-row" style="margin-top:1rem">
+      <label class="settings-label">Model (Artwork Refine)</label>
+      <input type="text" name="gemini_image_edit_model" class="settings-input"
+             value="{{ gemini_image_edit_model }}" placeholder="gemini-2.0-flash-preview-image-generation" style="max-width:400px">
+      <div class="s-hint" style="margin-top:.3rem">Model for artwork image editing step (must support image output modality).</div>
+    </div>
   </section>
 
   <!-- ── OpenAI Key ─────────────────────────────────────────────── -->

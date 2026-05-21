@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""    # legacy single key
     # Model for admin AI buttons. 2.5-flash-lite: higher free-tier quota than 2.5-flash (20 RPD) — sufficient quality.
     gemini_ai_button_model: str = "gemini-2.5-flash-lite"
+    # Model for artwork image editing (refine step). Must support image output modality.
+    gemini_image_edit_model: str = "gemini-2.5-flash-image"
 
     # Notion integration
     notion_api_key: str = ""

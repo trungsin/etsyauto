@@ -120,6 +120,7 @@ def settings_ui(
             "openai_key_mask": _mask(settings.openai_api_key),
             "has_openai_key": bool(settings.openai_api_key),
             "openai_image_model": settings.openai_image_model,
+            "gemini_image_edit_model": settings.gemini_image_edit_model,
             "saved": saved == "1",
         },
     )
@@ -190,6 +191,11 @@ async def save_settings(
     if openai_model:
         _save("OPENAI_IMAGE_MODEL", openai_model)
         settings.openai_image_model = openai_model
+
+    gemini_edit_model = str(form.get("gemini_image_edit_model", "")).strip()
+    if gemini_edit_model:
+        _save("GEMINI_IMAGE_EDIT_MODEL", gemini_edit_model)
+        settings.gemini_image_edit_model = gemini_edit_model
 
     return RedirectResponse(url="/admin/settings?saved=1", status_code=303)
 

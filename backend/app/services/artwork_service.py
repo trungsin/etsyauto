@@ -120,23 +120,43 @@ def process_upload_and_crop(
 
 
 def refine_artwork(db: Session, artwork_id: int) -> Artwork:
-    """Call GPT-Image-1 to clean/smooth the cropped image. Transitions cropped→refined.
+    """Refine cropped image using Gemini image editing (primary) or OpenAI GPT-Image-1 (fallback).
 
     Raises:
-        ValueError: If artwork not found, wrong status, or OpenAI call fails.
+        ValueError: If artwork not found, wrong status, or all refine attempts fail.
     """
-    from app.clients.openai_imagen_client import OpenaiImagenClient
-
     artwork = db.get(Artwork, artwork_id)
     if not artwork:
         raise ValueError(f"Artwork {artwork_id} not found")
     if artwork.status != "cropped":
         raise ValueError(f"Artwork {artwork_id} has status '{artwork.status}', expected 'cropped'")
 
-    logger.info("Artwork %d: calling GPT-Image-1 refine", artwork_id)
     cropped_bytes = _load_image_bytes(artwork.cropped_url)
-    client = OpenaiImagenClient()
-    refined_bytes = client.edit_image(cropped_bytes)
+    refined_bytes: bytes | None = None
+    last_err: str = ""
+
+    # Primary: Gemini image editing
+    if settings.gemini_api_key or settings.gemini_api_keys:
+        try:
+            from app.clients.gemini_imagen_client import GeminiImagenClient
+            logger.info("Artwork %d: calling Gemini image edit (refine)", artwork_id)
+            refined_bytes = GeminiImagenClient().edit_for_artwork(cropped_bytes)
+        except Exception as exc:
+            last_err = str(exc)
+            logger.warning("Artwork %d: Gemini refine failed, trying OpenAI fallback: %s", artwork_id, last_err)
+
+    # Fallback: OpenAI GPT-Image-1
+    if refined_bytes is None and settings.openai_api_key:
+        try:
+            from app.clients.openai_imagen_client import OpenaiImagenClient
+            logger.info("Artwork %d: calling GPT-Image-1 refine (fallback)", artwork_id)
+            refined_bytes = OpenaiImagenClient().edit_image(cropped_bytes)
+        except Exception as exc:
+            last_err = str(exc)
+            logger.error("Artwork %d: OpenAI refine also failed: %s", artwork_id, last_err)
+
+    if refined_bytes is None:
+        raise ValueError(f"All refine methods failed. Last error: {last_err}")
 
     refined_url = _save_and_upload(refined_bytes)
     artwork.refined_url = refined_url

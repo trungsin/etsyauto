@@ -1,4 +1,4 @@
-"""Gemini Imagen client — image-to-image scene replacement via google-genai SDK."""
+"""Gemini Imagen client — image-to-image scene replacement and artwork refinement via google-genai SDK."""
 import base64
 import logging
 
@@ -14,6 +14,13 @@ _SCENE_INSTRUCTION = (
     "Place this product in the following scene: {scene}. "
     "Photorealistic, soft shadow, keep the product proportions intact. "
     "Do not alter the product itself."
+)
+_ARTWORK_REFINE_PROMPT = (
+    "This is a design artwork cropped from a mockup image. "
+    "Remove any mockup context (t-shirt texture, product shape, background clutter, shadows). "
+    "Clean and sharpen the edges of the design. "
+    "Output only the design on a perfectly clean white background, "
+    "ready for background removal in the next step."
 )
 
 
@@ -79,4 +86,60 @@ class GeminiImagenClient:
         raise ValueError(
             f"Gemini returned no image for scene prompt: {scene_prompt!r}. "
             f"Response: {response}"
+        )
+
+    def edit_for_artwork(self, image_bytes: bytes, prompt: str | None = None) -> bytes:
+        """Refine a design artwork image using Gemini image editing.
+
+        Sends the cropped mockup image with a cleaning prompt; returns a
+        PNG with the design on a clean white background.
+
+        Args:
+            image_bytes: PNG bytes of the cropped design area.
+            prompt: Override the default artwork refinement instruction.
+
+        Returns:
+            PNG bytes of the refined image.
+
+        Raises:
+            ValueError: If Gemini returns no image part in the response.
+        """
+        instruction = prompt or _ARTWORK_REFINE_PROMPT
+        model = settings.gemini_image_edit_model or "gemini-2.0-flash-preview-image-generation"
+        image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+
+        response = self._client.models.generate_content(
+            model=model,
+            contents=[
+                types.Content(
+                    role="user",
+                    parts=[
+                        types.Part(
+                            inline_data=types.Blob(
+                                mime_type="image/png",
+                                data=image_b64,
+                            )
+                        ),
+                        types.Part(text=instruction),
+                    ],
+                )
+            ],
+            config=types.GenerateContentConfig(
+                response_modalities=["IMAGE", "TEXT"],
+            ),
+        )
+
+        for candidate in response.candidates or []:
+            for part in candidate.content.parts or []:
+                if part.inline_data and part.inline_data.data:
+                    result_bytes = base64.b64decode(part.inline_data.data)
+                    logger.info(
+                        "Gemini artwork refine ok: %d → %d bytes (model=%s)",
+                        len(image_bytes), len(result_bytes), model,
+                    )
+                    return result_bytes
+
+        raise ValueError(
+            f"Gemini returned no image for artwork refine. Model={model}. "
+            f"Response text: {response.text!r}"
         )
