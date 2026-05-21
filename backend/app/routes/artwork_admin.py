@@ -124,15 +124,15 @@ def upscale(
     _: None = Depends(require_admin_token),
 ) -> dict:
     """Start Real-ESRGAN upscale as a background job. scale=2|3|4. Poll /{id}/status."""
-    if scale not in (2, 3, 4):
-        raise HTTPException(status_code=400, detail="scale must be 2, 3, or 4")
+    if scale not in (2, 3, 4, 5, 6):
+        raise HTTPException(status_code=400, detail="scale must be 2, 3, 4, 5, or 6")
     artwork = db.get(Artwork, artwork_id)
     if not artwork:
         raise HTTPException(status_code=404, detail=f"Artwork {artwork_id} not found")
-    if artwork.status != "removebg_done":
+    if artwork.status != "refined":
         raise HTTPException(
             status_code=400,
-            detail=f"Expected status 'removebg_done', got '{artwork.status}'",
+            detail=f"Expected status 'refined', got '{artwork.status}'",
         )
     # Mark upscaling before returning to prevent duplicate job spawning
     artwork.status = "upscaling"
@@ -170,7 +170,7 @@ def status(
     db: Session = Depends(get_db),
     _: None = Depends(require_admin_token),
 ) -> dict:
-    """Poll upscale progress. Returns {status, final_url} when done."""
+    """Poll upscale progress. Returns {status, final_url} when upscaled."""
     artwork = db.get(Artwork, artwork_id)
     if not artwork:
         raise HTTPException(status_code=404, detail=f"Artwork {artwork_id} not found")
@@ -178,5 +178,6 @@ def status(
         "id": artwork.id,
         "status": artwork.status,
         "final_url": artwork.final_url,
+        "removebg_url": artwork.removebg_url,
         "error_message": artwork.error_message,
     }

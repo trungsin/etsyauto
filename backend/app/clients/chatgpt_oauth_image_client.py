@@ -15,9 +15,11 @@ import sys
 import time
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
+from io import BytesIO
 from pathlib import Path
 
 import requests as http_requests
+from PIL import Image
 
 logger = logging.getLogger(__name__)
 
@@ -301,8 +303,32 @@ class ChatGPTOAuthImageClient:
                 "ChatGPT OAuth token missing — run: python scripts/chatgpt_oauth_login.py"
             )
 
+        # Pad non-square images to square with white before sending.
+        # gpt-image-2 edit always outputs 1024×1024; padding ensures the full
+        # design is visible instead of the bottom being cropped.
+        try:
+            src = Image.open(BytesIO(image_bytes)).convert("RGBA")
+            orig_w, orig_h = src.size
+            if orig_w != orig_h:
+                side = max(orig_w, orig_h)
+                canvas = Image.new("RGBA", (side, side), (255, 255, 255, 255))
+                # centre horizontally, top-align vertically so design reads naturally
+                canvas.paste(src, ((side - orig_w) // 2, 0), src)
+                buf = BytesIO()
+                canvas.save(buf, format="PNG")
+                padded_bytes = buf.getvalue()
+                logger.info(
+                    "ChatGPT OAuth: padded %dx%d → %dx%d square before edit",
+                    orig_w, orig_h, side, side,
+                )
+            else:
+                padded_bytes = image_bytes
+        except Exception as exc:
+            logger.warning("ChatGPT OAuth: could not pad image (%s), sending as-is", exc)
+            padded_bytes = image_bytes
+
         instruction = prompt or ARTWORK_REFINE_PROMPT
-        ref_images = [{"bytes": image_bytes, "mime": "image/png"}]
+        ref_images = [{"bytes": padded_bytes, "mime": "image/png"}]
         body = _build_request_body(
             prompt=instruction,
             ref_images=ref_images,
