@@ -13,10 +13,13 @@ import os
 
 import httpx
 from dotenv import set_key
-from fastapi import APIRouter, Cookie, Header, HTTPException, Request
+from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.database import get_db
+from app.services import app_settings_service
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +117,8 @@ def settings_ui(
             "gem_keys": gem_keys or [""],
             "gem_key_masks": [_mask(k) for k in gem_keys] if gem_keys else [""],
             "gemini_model": settings.gemini_ai_button_model,
+            "openai_key_mask": _mask(settings.openai_api_key),
+            "has_openai_key": bool(settings.openai_api_key),
             "saved": saved == "1",
         },
     )
@@ -129,11 +134,16 @@ async def save_settings(
     request: Request,
     x_admin_token: str | None = Header(default=None),
     admin_token: str | None = Cookie(default=None),
+    db: Session = Depends(get_db),
 ) -> RedirectResponse:
     _check_token(x_admin_token, request, admin_token)
 
     form = await request.form()
     env_path = os.path.abspath(_ENV_FILE)
+
+    def _save(key: str, value: str) -> None:
+        set_key(env_path, key, value)
+        app_settings_service.upsert(db, key, value)
 
     # Remove.bg keys
     rbg_keys = [
@@ -143,7 +153,7 @@ async def save_settings(
     ]
     if rbg_keys:
         joined = ",".join(rbg_keys)
-        set_key(env_path, "REMOVEBG_API_KEYS", joined)
+        _save("REMOVEBG_API_KEYS", joined)
         settings.removebg_api_keys = joined
         settings.removebg_api_key = rbg_keys[0]
         settings.removebg_api_key_backup = rbg_keys[1] if len(rbg_keys) > 1 else ""
@@ -157,16 +167,23 @@ async def save_settings(
     ]
     if gem_keys:
         joined = ",".join(gem_keys)
-        set_key(env_path, "GEMINI_API_KEYS", joined)
-        set_key(env_path, "GEMINI_API_KEY", gem_keys[0])
+        _save("GEMINI_API_KEYS", joined)
+        _save("GEMINI_API_KEY", gem_keys[0])
         settings.gemini_api_keys = joined
         settings.gemini_api_key = gem_keys[0]
         logger.info("settings: updated GEMINI_API_KEYS (%d keys)", len(gem_keys))
 
     gemini_model = str(form.get("gemini_ai_button_model", "")).strip()
     if gemini_model:
-        set_key(env_path, "GEMINI_AI_BUTTON_MODEL", gemini_model)
+        _save("GEMINI_AI_BUTTON_MODEL", gemini_model)
         settings.gemini_ai_button_model = gemini_model
+
+    # OpenAI key
+    openai_key = str(form.get("openai_api_key", "")).strip()
+    if openai_key:
+        _save("OPENAI_API_KEY", openai_key)
+        settings.openai_api_key = openai_key
+        logger.info("settings: updated OPENAI_API_KEY")
 
     return RedirectResponse(url="/admin/settings?saved=1", status_code=303)
 

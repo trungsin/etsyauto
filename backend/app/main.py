@@ -94,7 +94,14 @@ def _validate_notion_schema() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup: validate Notion schemas, start scheduler. Shutdown: stop scheduler."""
+    """Startup: restore DB settings, validate Notion schemas, start scheduler. Shutdown: stop scheduler."""
+    from app.database import SessionLocal
+    from app.services import app_settings_service
+    with SessionLocal() as db:
+        restored = app_settings_service.load_into_settings(db)
+        if restored:
+            logger.info("app_settings: restored %d settings from DB", restored)
+
     # v0.8.1 hotfix — review DB validate gated on NOTION_SYNC_ENABLED so users on
     # the default (Notion-deprecated) path don't hit schema-validate failures.
     # Idea Bank validate runs independently (separate workflow, not part of deprecation).

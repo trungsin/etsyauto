@@ -60,6 +60,20 @@
     </div>
   </section>
 
+  <!-- ── OpenAI Key ─────────────────────────────────────────────── -->
+  <section class="settings-section">
+    <h3>OpenAI API Key <span class="s-hint">(used for artwork image refinement)</span></h3>
+    <div class="settings-row">
+      <label class="settings-label">API Key
+        {% if has_openai_key %}<span style="color:#22c55e;font-size:.8rem">● configured</span>{% else %}<span style="color:#ef4444;font-size:.8rem">● not set</span>{% endif %}
+      </label>
+      <input type="password" name="openai_api_key" class="settings-input" style="width:100%;max-width:500px"
+             placeholder="{{ openai_key_mask or 'sk-proj-...' }}"
+             autocomplete="new-password">
+      <div class="s-hint" style="margin-top:.3rem">Leave blank to keep existing key.</div>
+    </div>
+  </section>
+
   <div class="settings-actions">
     <button type="submit" class="btn btn-primary">Save Settings</button>
   </div>
