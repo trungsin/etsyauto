@@ -64,7 +64,10 @@ class OpenaiImagenClient:
                     "n": "1",
                 },
             )
-            response.raise_for_status()
+            if not response.is_success:
+                err_body = response.text
+                logger.error("GPT-Image-1 error %s: %s", response.status_code, err_body)
+                raise ValueError(f"OpenAI {response.status_code}: {err_body}")
 
         body = response.json()
         data = body.get("data", [])

@@ -50,7 +50,7 @@
     <input type="file" id="file-input" accept="image/*">
     <div style="margin-top:.75rem">
       <div id="crop-wrap">
-        <img id="source-img" class="preview-img" alt="source">
+        <img id="source-img" class="preview-img" alt="source" draggable="false" style="user-select:none;-webkit-user-drag:none">
         <div id="crop-rect"></div>
       </div>
     </div>
@@ -194,12 +194,14 @@ fileInput.addEventListener('change', e => {
 });
 
 cropWrap.addEventListener('pointerdown', e => {
-  if (e.button !== 0 || !sourceImg.src) return;
-  const r = cropWrap.getBoundingClientRect();
-  sx = e.clientX - r.left;
-  sy = e.clientY - r.top;
+  if (e.button !== 0 || !sourceImg.naturalWidth) return;
+  e.preventDefault(); // prevent browser native image drag
+  const r = sourceImg.getBoundingClientRect();
+  const wrapR = cropWrap.getBoundingClientRect();
+  sx = e.clientX - wrapR.left;
+  sy = e.clientY - wrapR.top;
   dragging = true;
-  Object.assign(cropRect.style, { display:'block', left:sx+'px', top:sy+'px', width:'0', height:'0' });
+  cropRect.style.cssText = `display:block;left:${sx}px;top:${sy}px;width:0;height:0`;
   cropWrap.setPointerCapture(e.pointerId);
 });
 
@@ -219,6 +221,8 @@ cropWrap.addEventListener('pointerup', () => {
   dragging = false;
   btnCrop.disabled = !cropBox || cropBox.fw < 0.01 || cropBox.fh < 0.01;
 });
+
+cropWrap.addEventListener('pointercancel', () => { dragging = false; });
 
 // ── Step 1: Upload + Crop ─────────────────────────────────────────────────
 btnCrop.addEventListener('click', async () => {
