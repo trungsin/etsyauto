@@ -34,9 +34,19 @@ def artwork_page(
     _: None = Depends(require_admin_token),
 ):
     """Render the Cloden Design POD artwork pipeline admin page."""
+    from app.clients.chatgpt_oauth_image_client import has_session as chatgpt_has_session
+    has_refine = (
+        chatgpt_has_session()
+        or bool(settings.gemini_api_key or settings.gemini_api_keys)
+        or bool(settings.openai_api_key)
+    )
     return _get_jinja().TemplateResponse(
         request, "artwork/index.html",
-        {"has_openai_key": bool(settings.openai_api_key)},
+        {
+            "has_openai_key": bool(settings.openai_api_key),
+            "has_chatgpt_oauth": chatgpt_has_session(),
+            "has_refine": has_refine,
+        },
     )
 
 

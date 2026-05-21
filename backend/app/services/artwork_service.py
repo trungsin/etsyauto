@@ -120,10 +120,13 @@ def process_upload_and_crop(
 
 
 def refine_artwork(db: Session, artwork_id: int) -> Artwork:
-    """Refine cropped image using Gemini image editing (primary) or OpenAI GPT-Image-1 (fallback).
+    """Refine cropped image — provider chain: ChatGPT OAuth → Gemini → OpenAI API.
+
+    ChatGPT OAuth uses the Plus subscription (no API billing). Gemini and OpenAI
+    require paid API credits and are tried as fallbacks.
 
     Raises:
-        ValueError: If artwork not found, wrong status, or all refine attempts fail.
+        ValueError: If artwork not found, wrong status, or all providers fail.
     """
     artwork = db.get(Artwork, artwork_id)
     if not artwork:
@@ -135,28 +138,45 @@ def refine_artwork(db: Session, artwork_id: int) -> Artwork:
     refined_bytes: bytes | None = None
     last_err: str = ""
 
-    # Primary: Gemini image editing
-    if settings.gemini_api_key or settings.gemini_api_keys:
+    # 1. ChatGPT OAuth (gpt-image-2) — uses Plus subscription, no billing
+    from app.clients.chatgpt_oauth_image_client import (
+        ChatGPTOAuthImageClient,
+        has_session as chatgpt_has_session,
+    )
+    if chatgpt_has_session():
+        try:
+            logger.info("Artwork %d: calling ChatGPT OAuth gpt-image-2 (refine)", artwork_id)
+            refined_bytes = ChatGPTOAuthImageClient().edit_for_artwork(cropped_bytes)
+        except Exception as exc:
+            last_err = str(exc)
+            logger.warning("Artwork %d: ChatGPT OAuth refine failed: %s", artwork_id, last_err)
+
+    # 2. Gemini image editing
+    if refined_bytes is None and (settings.gemini_api_key or settings.gemini_api_keys):
         try:
             from app.clients.gemini_imagen_client import GeminiImagenClient
             logger.info("Artwork %d: calling Gemini image edit (refine)", artwork_id)
             refined_bytes = GeminiImagenClient().edit_for_artwork(cropped_bytes)
         except Exception as exc:
             last_err = str(exc)
-            logger.warning("Artwork %d: Gemini refine failed, trying OpenAI fallback: %s", artwork_id, last_err)
+            logger.warning("Artwork %d: Gemini refine failed: %s", artwork_id, last_err)
 
-    # Fallback: OpenAI GPT-Image-1
+    # 3. OpenAI GPT-Image-1 API (requires paid credits)
     if refined_bytes is None and settings.openai_api_key:
         try:
             from app.clients.openai_imagen_client import OpenaiImagenClient
-            logger.info("Artwork %d: calling GPT-Image-1 refine (fallback)", artwork_id)
+            logger.info("Artwork %d: calling GPT-Image-1 API (refine fallback)", artwork_id)
             refined_bytes = OpenaiImagenClient().edit_image(cropped_bytes)
         except Exception as exc:
             last_err = str(exc)
-            logger.error("Artwork %d: OpenAI refine also failed: %s", artwork_id, last_err)
+            logger.error("Artwork %d: OpenAI API refine failed: %s", artwork_id, last_err)
 
     if refined_bytes is None:
-        raise ValueError(f"All refine methods failed. Last error: {last_err}")
+        raise ValueError(
+            "All refine providers failed. "
+            "Login via ChatGPT OAuth (see scripts/chatgpt-oauth-login.py) or add API credits. "
+            f"Last error: {last_err}"
+        )
 
     refined_url = _save_and_upload(refined_bytes)
     artwork.refined_url = refined_url

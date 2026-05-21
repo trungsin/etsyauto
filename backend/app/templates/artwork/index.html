@@ -66,18 +66,31 @@
 
   <!-- ── STEP 2: Refine ────────────────────────────────────────────── -->
   <div class="step-card disabled" id="step-2">
-    <h2><span class="step-num">2</span> Refine with AI <small style="font-weight:400;color:#6b7280">(GPT-Image-1)</small></h2>
-    {% if not has_openai_key %}
+    <h2><span class="step-num">2</span> Refine with AI
+      <small style="font-weight:400;color:#6b7280">
+        {% if has_chatgpt_oauth %}(gpt-image-2 · Plus OAuth ✓)
+        {% elif has_refine %}(Gemini / OpenAI API)
+        {% else %}(chưa cấu hình){% endif %}
+      </small>
+    </h2>
+    {% if not has_refine %}
     <div style="background:#fffbeb;border:1px solid #fcd34d;color:#92400e;padding:.45rem .75rem;border-radius:4px;margin-bottom:.75rem;font-size:.875rem">
-      ⚠️ <strong>OPENAI_API_KEY</strong> chưa được cấu hình — thêm vào <code>.env</code> để dùng bước này,
-      hoặc bấm <strong>Skip</strong> để bỏ qua.
+      ⚠️ Chưa có provider nào. Để dùng bước này:
+      <ul style="margin:.4rem 0 0 1rem;padding:0">
+        <li><strong>ChatGPT Plus OAuth</strong> (miễn phí API): SSH tunnel + chạy <code>python scripts/chatgpt-oauth-login.py</code></li>
+        <li><strong>Gemini/OpenAI API</strong>: cần billing — cấu hình trong <a href="/admin/settings">Settings</a></li>
+      </ul>
+    </div>
+    {% elif has_chatgpt_oauth %}
+    <div style="background:#f0fdf4;border:1px solid #86efac;color:#166534;padding:.35rem .75rem;border-radius:4px;margin-bottom:.75rem;font-size:.875rem">
+      ✓ ChatGPT Plus OAuth — sử dụng gpt-image-2 (không tốn API credit)
     </div>
     {% endif %}
     <img id="cropped-img" class="preview-img" alt="cropped">
     <div class="step-actions">
-      <button id="btn-refine" class="btn btn-primary"{% if not has_openai_key %} disabled title="OPENAI_API_KEY chưa cấu hình"{% endif %}>Refine →</button>
+      <button id="btn-refine" class="btn btn-primary"{% if not has_refine %} disabled title="Chưa có AI provider"{% endif %}>Refine →</button>
       <button id="btn-skip-refine" class="btn" style="background:#f3f4f6;border:1px solid #d1d5db">Skip →</button>
-      <span class="spinner" id="refine-spinner" style="display:none">⏳ Calling GPT-Image-1… (up to ~30s)</span>
+      <span class="spinner" id="refine-spinner" style="display:none">⏳ Đang refine với AI… (có thể mất 30-90s)</span>
     </div>
     <p class="banner-error" id="err-2"></p>
   </div>
