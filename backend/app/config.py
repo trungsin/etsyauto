@@ -68,6 +68,7 @@ class Settings(BaseSettings):
 
     # OpenAI — used by Cloden Design artwork pipeline (GPT-Image-1 edit)
     openai_api_key: str = ""
+    openai_image_model: str = "gpt-image-1"
     # Feature flag — disable artwork pipeline if OpenAI key not configured
     enable_artwork: bool = False
 

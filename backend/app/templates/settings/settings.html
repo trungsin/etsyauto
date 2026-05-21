@@ -72,6 +72,12 @@
              autocomplete="new-password">
       <div class="s-hint" style="margin-top:.3rem">Leave blank to keep existing key.</div>
     </div>
+    <div class="settings-row" style="margin-top:1rem">
+      <label class="settings-label">Image Model</label>
+      <input type="text" name="openai_image_model" class="settings-input"
+             value="{{ openai_image_model }}" placeholder="gpt-image-1" style="max-width:300px">
+      <div class="s-hint" style="margin-top:.3rem">GPT image model for artwork refinement (default: gpt-image-1).</div>
+    </div>
   </section>
 
   <div class="settings-actions">

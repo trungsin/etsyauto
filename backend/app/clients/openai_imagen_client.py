@@ -58,7 +58,7 @@ class OpenaiImagenClient:
                 headers={"Authorization": f"Bearer {self._api_key}"},
                 files={"image": ("image.png", image_bytes, "image/png")},
                 data={
-                    "model": "gpt-image-1",
+                    "model": settings.openai_image_model or "gpt-image-1",
                     "prompt": prompt,
                     "size": size,
                     "n": "1",
