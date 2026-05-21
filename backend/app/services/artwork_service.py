@@ -259,9 +259,10 @@ def _upscale_with_upscayl(image_bytes: bytes, scale: int = 4) -> bytes:
         out = Path(tmpdir) / "output.png"
         inp.write_bytes(input_buf.getvalue())
 
-        cmd = [bin_path, "-i", str(inp), "-o", str(out), "-s", str(scale), "-g", "-1"]
+        cmd = [bin_path, "-i", str(inp), "-o", str(out), "-s", str(scale), "-g", "0"]
         if settings.upscayl_models:
-            cmd += ["-m", settings.upscayl_models, "-n", "realesrgan-x4plus-anime"]
+            model_name = settings.upscayl_model or "digital-art-4x"
+            cmd += ["-m", settings.upscayl_models, "-n", model_name]
 
         logger.info("Running upscayl-bin scale=%d: %s", scale, " ".join(cmd))
         try:

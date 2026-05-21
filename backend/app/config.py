@@ -75,7 +75,8 @@ class Settings(BaseSettings):
     # Set UPSCAYL_BIN in .env to the full path of the binary, e.g. /opt/upscayl-bin
     # Leave empty to search PATH. Set UPSCAYL_MODELS to override models directory.
     upscayl_bin: str = "upscayl-bin"
-    upscayl_models: str = ""  # if empty, binary uses its bundled/default models
+    upscayl_models: str = ""   # if empty, binary uses its default models path
+    upscayl_model: str = "digital-art-4x"  # model name; digital-art-4x best for flat/POD art
 
     # v0.8.0 — Idea miner: Etsy public API keyword search + signal collection.
     # etsy_miner_interval_sec: scheduler interval between full mining runs (default 1h).
