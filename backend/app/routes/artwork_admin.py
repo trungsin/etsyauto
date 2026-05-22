@@ -129,10 +129,10 @@ def upscale(
     artwork = db.get(Artwork, artwork_id)
     if not artwork:
         raise HTTPException(status_code=404, detail=f"Artwork {artwork_id} not found")
-    if artwork.status != "removebg_done":
+    if artwork.status != "refined":
         raise HTTPException(
             status_code=400,
-            detail=f"Expected status 'removebg_done', got '{artwork.status}'",
+            detail=f"Expected status 'refined', got '{artwork.status}'",
         )
     # Mark upscaling before returning to prevent duplicate job spawning
     artwork.status = "upscaling"

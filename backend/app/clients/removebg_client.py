@@ -94,7 +94,7 @@ class RemoveBgClient:
                 _REMOVEBG_URL,
                 headers={"X-Api-Key": api_key},
                 files={"image_file": ("image.png", png_bytes, "image/png")},
-                data={"size": "hd", "type": "product", "format": "png"},
+                data={"size": "4k", "type": "product", "format": "png"},
             )
             response.raise_for_status()
 
