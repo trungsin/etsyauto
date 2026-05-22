@@ -1,0 +1,31 @@
+{
+  "product": "pillow",
+  "angle": "couch",
+  "color": "cream",
+  "scene_type": "lifestyle",
+  "quad": [
+    [
+      620,
+      720
+    ],
+    [
+      1380,
+      720
+    ],
+    [
+      1380,
+      1320
+    ],
+    [
+      620,
+      1320
+    ]
+  ],
+  "mask": null,
+  "blend": "multiply",
+  "output_size": [
+    2000,
+    2000
+  ],
+  "marketplace_safe": true
+}

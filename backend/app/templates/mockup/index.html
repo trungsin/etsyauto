@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}Product Mockup Generator — EtsyAuto{% endblock %}
+
+{% block extra_head %}
+<style>
+  .mockup-wrap { max-width: 860px; margin-top: 1rem; }
+  .card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 1.25rem; background: #fff; margin-bottom: 1.5rem; }
+  .card h2 { margin: 0 0 1rem; font-size: 1.05rem; font-weight: 600; }
+  .field { margin-bottom: 1rem; }
+  .field label { display: block; font-weight: 500; margin-bottom: .35rem; font-size: .9rem; }
+  .file-input { border: 1px solid #d1d5db; border-radius: 4px; padding: .4rem .6rem; font: inherit; font-size: .875rem; width: 100%; }
+  .product-grid { display: flex; flex-wrap: wrap; gap: .5rem; }
+  .product-chip { display: inline-flex; align-items: center; gap: .35rem; padding: .3rem .7rem;
+                  border: 1px solid #d1d5db; border-radius: 999px; cursor: pointer;
+                  font-size: .875rem; user-select: none; transition: border-color .15s, background .15s; }
+  .product-chip input { display: none; }
+  .product-chip.checked { border-color: #4f46e5; background: #eef2ff; color: #3730a3; font-weight: 600; }
+  .btn-primary { background: #4f46e5; color: #fff; border: none; padding: .5rem 1.25rem;
+                 border-radius: 6px; font: inherit; font-size: .9rem; font-weight: 600;
+                 cursor: pointer; transition: background .15s; }
+  .btn-primary:hover { background: #4338ca; }
+  .btn-primary:disabled { background: #a5b4fc; cursor: not-allowed; }
+  .spinner-txt { color: #6b7280; font-size: .875rem; margin-left: .5rem; display: none; }
+  .error-box { background: #fef2f2; border: 1px solid #fca5a5; color: #991b1b;
+               padding: .6rem .9rem; border-radius: 6px; margin-bottom: 1rem; font-size: .9rem; }
+  .results-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 1rem; }
+  .result-card { border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden; background: #f9fafb; }
+  .result-card img { width: 100%; aspect-ratio: 1; object-fit: contain; background: #fff;
+                     border-bottom: 1px solid #e5e7eb; }
+  .result-card-footer { padding: .4rem .5rem; text-align: center; }
+  .result-card-footer a { font-size: .8rem; color: #4f46e5; text-decoration: none; font-weight: 500; }
+  .result-card-footer a:hover { text-decoration: underline; }
+  .results-count { font-size: .9rem; color: #6b7280; margin-bottom: .75rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mockup-wrap">
+  <h1 style="margin-bottom:.2rem">Product Mockup Generator</h1>
+  <p style="color:#6b7280;margin-bottom:1.5rem;font-size:.9rem">
+    Upload remove-bg'd artwork → select product types → get Etsy-ready 2000×2000 JPEG mockups.
+  </p>
+
+  {% if error %}
+  <div class="error-box">Generation failed: {{ error }}</div>
+  {% endif %}
+
+  <div class="card">
+    <h2>Generate Mockups</h2>
+    <form method="post" action="/admin/product-mockup/generate" enctype="multipart/form-data"
+          id="mockup-form" onsubmit="startSpinner()">
+
+      <div class="field">
+        <label>Artwork (PNG with transparent background)</label>
+        <input type="file" name="artwork" accept="image/png,image/jpeg,image/webp"
+               required class="file-input" id="artwork-input">
+      </div>
+
+      <div class="field">
+        <label>Product types</label>
+        <div class="product-grid" id="product-grid">
+          {% for p in products %}
+          <label class="product-chip checked" id="chip-{{ p }}">
+            <input type="checkbox" name="products" value="{{ p }}" checked onchange="toggleChip('{{ p }}')">
+            {{ p }}
+          </label>
+          {% endfor %}
+        </div>
+        {% if not products %}
+        <p style="color:#ef4444;font-size:.875rem">No templates loaded. Check templates_catalog directory.</p>
+        {% endif %}
+      </div>
+
+      <div style="display:flex;align-items:center;gap:.75rem">
+        <button type="submit" class="btn-primary" id="gen-btn" {% if not products %}disabled{% endif %}>
+          Generate Mockups
+        </button>
+        <span class="spinner-txt" id="spinner-txt">Generating… this may take a few seconds</span>
+      </div>
+    </form>
+  </div>
+
+  {% if results %}
+  <div class="card">
+    <h2>Results</h2>
+    <p class="results-count">{{ results|length }} mockup{{ 's' if results|length != 1 else '' }} generated</p>
+    <div class="results-grid">
+      {% for url in results %}
+      <div class="result-card">
+        <img src="{{ url }}" alt="mockup {{ loop.index }}" loading="lazy">
+        <div class="result-card-footer">
+          <a href="{{ url }}" download>Download</a>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+function toggleChip(product) {
+  const chip = document.getElementById('chip-' + product);
+  const cb = chip.querySelector('input');
+  chip.classList.toggle('checked', cb.checked);
+}
+function startSpinner() {
+  document.getElementById('gen-btn').disabled = true;
+  document.getElementById('spinner-txt').style.display = 'inline';
+}
+</script>
+{% endblock %}

@@ -68,6 +68,9 @@ class Settings(BaseSettings):
     etsy_dry_run: bool = False
     etsy_dry_run_scenario: str = "happy"
 
+    # Product mockup pipeline (genmockup embedded) — path to templates_catalog dir
+    genmockup_template_root: str = "static/templates_catalog"
+
     # OpenAI — used by Cloden Design artwork pipeline (GPT-Image-1 edit)
     openai_api_key: str = ""
     openai_image_model: str = "gpt-image-1"
