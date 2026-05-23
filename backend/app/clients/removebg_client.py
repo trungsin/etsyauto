@@ -2,6 +2,7 @@
 
 Key features:
 - Auto-converts WEBP/JPEG/GIF → PNG before sending (remove.bg works best with PNG).
+- Downsizes PNG to fit within remove.bg's 12 MB file-size limit.
 - Extracts human-readable error messages from remove.bg JSON error bodies.
 - Rotates through API keys on 402 (quota) or 429 (rate limit).
 """
@@ -17,6 +18,8 @@ logger = logging.getLogger(__name__)
 
 _REMOVEBG_URL = "https://api.remove.bg/v1.0/removebg"
 _LIMIT_STATUS_CODES = {402, 429}
+# remove.bg rejects files larger than 12 MB; stay comfortably below that.
+_MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 
 
 def _to_png(image_bytes: bytes) -> bytes:
@@ -32,6 +35,35 @@ def _to_png(image_bytes: bytes) -> bytes:
         converted = buf.getvalue()
     logger.info("Converted image to PNG: %d → %d bytes", len(image_bytes), len(converted))
     return converted
+
+
+def _fit_to_size_limit(png_bytes: bytes) -> bytes:
+    """Progressively halve dimensions until PNG fits within _MAX_UPLOAD_BYTES."""
+    if len(png_bytes) <= _MAX_UPLOAD_BYTES:
+        return png_bytes
+
+    with Image.open(BytesIO(png_bytes)) as img:
+        img = img.convert("RGBA")
+        w, h = img.size
+
+        while True:
+            w, h = w // 2, h // 2
+            if w < 1 or h < 1:
+                break
+            resized = img.resize((w, h), Image.LANCZOS)
+            buf = BytesIO()
+            resized.save(buf, format="PNG")
+            candidate = buf.getvalue()
+            if len(candidate) <= _MAX_UPLOAD_BYTES:
+                logger.info(
+                    "_fit_to_size_limit: resized to %dx%d (%d → %d bytes)",
+                    w, h, len(png_bytes), len(candidate),
+                )
+                return candidate
+
+    # Fallback: return whatever we have at minimum size
+    logger.warning("_fit_to_size_limit: could not shrink below limit; sending anyway")
+    return candidate  # type: ignore[return-value]
 
 
 def _extract_removebg_error(response: httpx.Response) -> str:
@@ -67,7 +99,7 @@ class RemoveBgClient:
         Rotates to the next key on HTTP 402/429. Raises ValueError with the
         remove.bg error message on 400. Raises on all other failures.
         """
-        png_bytes = _to_png(image_bytes)
+        png_bytes = _fit_to_size_limit(_to_png(image_bytes))
         last_error: Exception | None = None
 
         for idx, api_key in enumerate(self._api_keys):
