@@ -4,6 +4,7 @@ set -euo pipefail
 
 REPO_DIR="/home/lesin/etsyauto"
 BACKEND_DIR="$REPO_DIR/backend"
+UV="/home/lesin/.local/bin/uv"
 
 echo "[deploy] pulling latest code..."
 cd "$REPO_DIR"
@@ -11,10 +12,10 @@ git pull origin master
 
 echo "[deploy] syncing dependencies..."
 cd "$BACKEND_DIR"
-uv sync --quiet
+$UV sync --quiet
 
 echo "[deploy] running migrations..."
-uv run alembic upgrade head
+$UV run alembic upgrade head
 
 echo "[deploy] restarting service..."
 sudo systemctl restart etsyauto
