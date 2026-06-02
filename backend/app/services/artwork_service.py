@@ -203,9 +203,7 @@ def skip_refine_artwork(db: Session, artwork_id: int) -> Artwork:
 
 
 def removebg_artwork(db: Session, artwork_id: int) -> Artwork:
-    """Remove background via remove.bg. Transitions upscaled→removebg_done.
-
-    Runs after upscale so remove.bg receives a high-res input and outputs at 4k size.
+    """Remove background via remove.bg. Transitions refined→removebg_done.
 
     Raises:
         ValueError: If artwork not found, wrong status, or remove.bg call fails.
@@ -213,12 +211,12 @@ def removebg_artwork(db: Session, artwork_id: int) -> Artwork:
     artwork = db.get(Artwork, artwork_id)
     if not artwork:
         raise ValueError(f"Artwork {artwork_id} not found")
-    if artwork.status != "upscaled":
-        raise ValueError(f"Artwork {artwork_id} has status '{artwork.status}', expected 'upscaled'")
+    if artwork.status != "refined":
+        raise ValueError(f"Artwork {artwork_id} has status '{artwork.status}', expected 'refined'")
 
-    logger.info("Artwork %d: calling remove.bg on upscaled image", artwork_id)
-    upscaled_bytes = _load_image_bytes(artwork.final_url)
-    removebg_bytes = RemoveBgClient().remove_bg(upscaled_bytes)
+    logger.info("Artwork %d: calling remove.bg on refined image", artwork_id)
+    refined_bytes = _load_image_bytes(artwork.refined_url)
+    removebg_bytes = RemoveBgClient().remove_bg(refined_bytes)
 
     removebg_url = _save_and_upload(removebg_bytes)
     artwork.removebg_url = removebg_url
@@ -243,11 +241,11 @@ def run_upscale_job(artwork_id: int, scale: int = 4) -> None:
             logger.warning("run_upscale_job: artwork %d not found", artwork_id)
             return
         # Guard: route pre-sets "upscaling" — if status changed, another job ran
-        if artwork.status not in ("upscaling", "refined"):
+        if artwork.status not in ("upscaling", "removebg_done"):
             logger.warning("run_upscale_job: artwork %d has unexpected status '%s', skipping", artwork_id, artwork.status)
             return
 
-        input_bytes = _load_image_bytes(artwork.refined_url)
+        input_bytes = _load_image_bytes(artwork.removebg_url)
         output_bytes = _upscale_with_upscayl(input_bytes, scale=scale if scale <= 4 else 4)
         if scale > 4:
             # PIL resize from 4× to target scale (Lanczos, no extra upscayl pass needed)
@@ -262,10 +260,10 @@ def run_upscale_job(artwork_id: int, scale: int = 4) -> None:
 
         final_url = _save_and_upload(output_bytes)
         artwork.final_url = final_url
-        artwork.status = "upscaled"
+        artwork.status = "done"
         artwork.error_message = None
         db.commit()
-        logger.info("Artwork %d: upscale done (status=upscaled), url=%s", artwork_id, final_url)
+        logger.info("Artwork %d: upscale done (status=done), url=%s", artwork_id, final_url)
 
     except Exception as exc:  # noqa: BLE001 — background job must not crash the server
         logger.exception("Upscale job failed for artwork %d", artwork_id)
@@ -347,10 +345,10 @@ def fill_canvas_artwork(db: Session, artwork_id: int, canvas_w: int, canvas_h: i
     artwork = db.get(Artwork, artwork_id)
     if not artwork:
         raise ValueError(f"Artwork {artwork_id} not found")
-    if not artwork.removebg_url:
-        raise ValueError("Remove background step not complete — run Step 4 first")
+    if not artwork.final_url:
+        raise ValueError("Upscale step not complete — run Step 5 first")
 
-    image_bytes = _load_image_bytes(artwork.removebg_url)
+    image_bytes = _load_image_bytes(artwork.final_url)
     canvas_bytes = _apply_canvas(image_bytes, canvas_w, canvas_h, fit_mode)
     return _save_and_upload(canvas_bytes)
 
