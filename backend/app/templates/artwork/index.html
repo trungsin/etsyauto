@@ -90,6 +90,17 @@
     </div>
     {% endif %}
     <img id="cropped-img" class="preview-img" alt="cropped">
+    <div style="margin:.75rem 0 .25rem">
+      <div style="font-size:.875rem;font-weight:600;color:#374151;margin-bottom:.4rem">Màu nền sau refine:</div>
+      <label style="display:inline-flex;align-items:center;gap:.4rem;margin-right:1.25rem;cursor:pointer;font-size:.9rem">
+        <input type="radio" name="bg-mode" value="light" checked>
+        Nền trắng <span style="color:#6b7280;font-size:.8rem">(design tối — giữ nguyên màu)</span>
+      </label>
+      <label style="display:inline-flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.9rem">
+        <input type="radio" name="bg-mode" value="dark">
+        Nền tối <span style="color:#6b7280;font-size:.8rem">(design sáng — AI tự điều chỉnh màu)</span>
+      </label>
+    </div>
     <div class="step-actions">
       <button id="btn-refine" class="btn btn-primary"{% if not has_refine %} disabled title="Chưa có AI provider"{% endif %}>Refine →</button>
       <button id="btn-skip-refine" class="btn" style="background:#f3f4f6;border:1px solid #d1d5db">Skip →</button>
@@ -101,7 +112,9 @@
   <!-- ── STEP 3: Remove BG ─────────────────────────────────────────── -->
   <div class="step-card disabled" id="step-3">
     <h2><span class="step-num">3</span> Remove Background <small style="font-weight:400;color:#6b7280">(remove.bg 4K)</small></h2>
-    <img id="refined-img" class="preview-img" alt="refined" style="margin-bottom:.5rem">
+    <div id="refined-img-wrap" style="display:inline-block;border:1px solid #e5e7eb;border-radius:4px;padding:4px;margin-bottom:.5rem">
+      <img id="refined-img" class="preview-img" alt="refined" style="margin-bottom:0;display:none">
+    </div>
     <img id="removebg-img" class="preview-img checkerboard" alt="transparent">
     <div class="step-actions">
       <button id="btn-removebg" class="btn btn-primary">Remove Background →</button>
@@ -276,11 +289,16 @@ btnCrop.addEventListener('click', async () => {
 
 // ── Step 2: Refine ────────────────────────────────────────────────────────
 document.getElementById('btn-refine').addEventListener('click', async () => {
+  const bgMode = document.querySelector('input[name="bg-mode"]:checked')?.value || 'light';
+  const fd = new FormData();
+  fd.append('bg_mode', bgMode);
   setLoading('btn-refine', 'refine-spinner', true);
   document.getElementById('btn-skip-refine').style.display = 'none';
   try {
-    const res = await api('POST', `/admin/artwork/${artworkId}/refine`);
+    const res = await api('POST', `/admin/artwork/${artworkId}/refine`, fd);
     showImg('refined-img', res.refined_url);
+    const wrap = document.getElementById('refined-img-wrap');
+    if (wrap) wrap.style.background = bgMode === 'dark' ? '#1a1a1a' : '#fff';
     doneStep('step-2');
     enableStep('step-3');
   } catch(err) {

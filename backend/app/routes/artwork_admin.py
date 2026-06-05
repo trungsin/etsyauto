@@ -73,12 +73,15 @@ async def upload_and_crop(
 @router.post("/{artwork_id}/refine")
 def refine(
     artwork_id: int,
+    bg_mode: str = Form("light"),
     db: Session = Depends(get_db),
     _: None = Depends(require_admin_token),
 ) -> dict:
-    """Call GPT-Image-1 to clean/smooth the cropped image."""
+    """Refine the cropped image. bg_mode='light' (white bg) or 'dark' (black bg, brightens design)."""
+    if bg_mode not in ("light", "dark"):
+        raise HTTPException(status_code=400, detail="bg_mode must be 'light' or 'dark'")
     try:
-        artwork = artwork_service.refine_artwork(db, artwork_id)
+        artwork = artwork_service.refine_artwork(db, artwork_id, bg_mode=bg_mode)
     except (ValueError, httpx.HTTPError) as exc:
         code = 404 if "not found" in str(exc).lower() else 400
         raise HTTPException(status_code=code, detail=str(exc)) from exc

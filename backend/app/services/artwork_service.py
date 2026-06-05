@@ -24,6 +24,25 @@ logger = logging.getLogger(__name__)
 # Cap input before upscaling — SwiftShader CPU scales O(pixels); 512px → ~80s, 1024px → ~10min
 _UPSCALE_MAX_INPUT_PX = 512
 
+_REFINE_PROMPT_LIGHT = (
+    "This is a design artwork cropped from a product mockup. "
+    "Remove any mockup context (fabric texture, product shape, background, shadows). "
+    "Clean and sharpen the edges of the design. "
+    "Output only the design on a perfectly clean white background, "
+    "ready for background removal in the next step. "
+    "Keep the design artwork colors and shapes exactly as-is."
+)
+
+_REFINE_PROMPT_DARK = (
+    "This is a design artwork cropped from a product mockup. "
+    "Remove any mockup context (fabric texture, product shape, background, shadows). "
+    "Clean and sharpen the edges of the design. "
+    "Output the design on a perfectly solid black background. "
+    "Adjust the design colors so they are vivid and clearly visible against the dark background "
+    "(lighten or brighten dark design elements, ensure strong contrast). "
+    "Ready for background removal in the next step."
+)
+
 
 def _load_image_bytes(url: str) -> bytes:
     """Load image bytes from a URL or a local /static/ path.
@@ -119,11 +138,12 @@ def process_upload_and_crop(
     return artwork
 
 
-def refine_artwork(db: Session, artwork_id: int) -> Artwork:
+def refine_artwork(db: Session, artwork_id: int, bg_mode: str = "light") -> Artwork:
     """Refine cropped image — provider chain: ChatGPT OAuth → Gemini → OpenAI API.
 
-    ChatGPT OAuth uses the Plus subscription (no API billing). Gemini and OpenAI
-    require paid API credits and are tried as fallbacks.
+    Args:
+        bg_mode: "light" for white background (keeps design colors),
+                 "dark" for black background (brightens design for contrast).
 
     Raises:
         ValueError: If artwork not found, wrong status, or all providers fail.
@@ -134,6 +154,7 @@ def refine_artwork(db: Session, artwork_id: int) -> Artwork:
     if artwork.status != "cropped":
         raise ValueError(f"Artwork {artwork_id} has status '{artwork.status}', expected 'cropped'")
 
+    prompt = _REFINE_PROMPT_DARK if bg_mode == "dark" else _REFINE_PROMPT_LIGHT
     cropped_bytes = _load_image_bytes(artwork.cropped_url)
     refined_bytes: bytes | None = None
     last_err: str = ""
@@ -145,8 +166,8 @@ def refine_artwork(db: Session, artwork_id: int) -> Artwork:
     )
     if chatgpt_has_session():
         try:
-            logger.info("Artwork %d: calling ChatGPT OAuth gpt-image-2 (refine)", artwork_id)
-            refined_bytes = ChatGPTOAuthImageClient().edit_for_artwork(cropped_bytes)
+            logger.info("Artwork %d: calling ChatGPT OAuth gpt-image-2 (refine, bg=%s)", artwork_id, bg_mode)
+            refined_bytes = ChatGPTOAuthImageClient().edit_for_artwork(cropped_bytes, prompt=prompt)
         except Exception as exc:
             last_err = str(exc)
             logger.warning("Artwork %d: ChatGPT OAuth refine failed: %s", artwork_id, last_err)
@@ -155,8 +176,8 @@ def refine_artwork(db: Session, artwork_id: int) -> Artwork:
     if refined_bytes is None and (settings.gemini_api_key or settings.gemini_api_keys):
         try:
             from app.clients.gemini_imagen_client import GeminiImagenClient
-            logger.info("Artwork %d: calling Gemini image edit (refine)", artwork_id)
-            refined_bytes = GeminiImagenClient().edit_for_artwork(cropped_bytes)
+            logger.info("Artwork %d: calling Gemini image edit (refine, bg=%s)", artwork_id, bg_mode)
+            refined_bytes = GeminiImagenClient().edit_for_artwork(cropped_bytes, prompt=prompt)
         except Exception as exc:
             last_err = str(exc)
             logger.warning("Artwork %d: Gemini refine failed: %s", artwork_id, last_err)
@@ -165,8 +186,8 @@ def refine_artwork(db: Session, artwork_id: int) -> Artwork:
     if refined_bytes is None and settings.openai_api_key:
         try:
             from app.clients.openai_imagen_client import OpenaiImagenClient
-            logger.info("Artwork %d: calling GPT-Image-1 API (refine fallback)", artwork_id)
-            refined_bytes = OpenaiImagenClient().edit_image(cropped_bytes)
+            logger.info("Artwork %d: calling GPT-Image-1 API (refine fallback, bg=%s)", artwork_id, bg_mode)
+            refined_bytes = OpenaiImagenClient().edit_image(cropped_bytes, prompt=prompt)
         except Exception as exc:
             last_err = str(exc)
             logger.error("Artwork %d: OpenAI API refine failed: %s", artwork_id, last_err)
