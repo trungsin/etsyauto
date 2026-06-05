@@ -300,18 +300,22 @@ document.getElementById('btn-refine').addEventListener('click', async () => {
     doneStep('step-2');
     enableStep('step-3');
   } catch(err) {
-    showErr('err-2', err);
+    const detail = (typeof err === 'object' && err !== null) ? err.detail : String(err);
+    showRefineErr(detail);
     setLoading('btn-refine', 'refine-spinner', false);
     document.getElementById('btn-skip-refine').style.display = '';
   }
 });
 
 document.getElementById('btn-skip-refine').addEventListener('click', async () => {
+  const bgMode = document.querySelector('input[name="bg-mode"]:checked')?.value || 'light';
   document.getElementById('btn-refine').style.display = 'none';
   document.getElementById('btn-skip-refine').style.display = 'none';
   try {
     const res = await api('POST', `/admin/artwork/${artworkId}/skip-refine`);
     showImg('refined-img', res.refined_url);
+    const wrap = document.getElementById('refined-img-wrap');
+    if (wrap) wrap.style.background = bgMode === 'dark' ? '#1a1a1a' : '#fff';
     doneStep('step-2');
     enableStep('step-3');
   } catch(err) {
@@ -449,9 +453,21 @@ function setLoading(btnId, spinnerId, loading) {
 function showErr(id, msg) {
   const el = document.getElementById(id);
   if (!el) return;
-  el.textContent = (typeof msg === 'object' && msg !== null)
+  let text = (typeof msg === 'object' && msg !== null)
     ? (msg.detail || JSON.stringify(msg))
     : String(msg);
+  // Truncate very long error messages for readability
+  if (text.length > 300) text = text.slice(0, 300) + '…';
+  el.textContent = text;
+  el.style.display = '';
+}
+
+function showRefineErr(detail) {
+  const el = document.getElementById('err-2');
+  if (!el) return;
+  let text = detail || 'Refine thất bại';
+  if (text.length > 300) text = text.slice(0, 300) + '…';
+  el.innerHTML = `${text}<br><small style="color:#7f1d1d">→ Nhấn <strong>Skip</strong> để bỏ qua bước AI và tiếp tục.</small>`;
   el.style.display = '';
 }
 

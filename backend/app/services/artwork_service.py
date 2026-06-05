@@ -7,6 +7,7 @@ import logging
 import shutil
 import subprocess
 import tempfile
+import time
 from io import BytesIO
 from pathlib import Path
 
@@ -157,7 +158,7 @@ def refine_artwork(db: Session, artwork_id: int, bg_mode: str = "light") -> Artw
     prompt = _REFINE_PROMPT_DARK if bg_mode == "dark" else _REFINE_PROMPT_LIGHT
     cropped_bytes = _load_image_bytes(artwork.cropped_url)
     refined_bytes: bytes | None = None
-    last_err: str = ""
+    provider_errors: list[str] = []
 
     # 1. ChatGPT OAuth (gpt-image-2) — uses Plus subscription, no billing
     from app.clients.chatgpt_oauth_image_client import (
@@ -165,39 +166,51 @@ def refine_artwork(db: Session, artwork_id: int, bg_mode: str = "light") -> Artw
         has_session as chatgpt_has_session,
     )
     if chatgpt_has_session():
-        try:
-            logger.info("Artwork %d: calling ChatGPT OAuth gpt-image-2 (refine, bg=%s)", artwork_id, bg_mode)
-            refined_bytes = ChatGPTOAuthImageClient().edit_for_artwork(cropped_bytes, prompt=prompt)
-        except Exception as exc:
-            last_err = str(exc)
-            logger.warning("Artwork %d: ChatGPT OAuth refine failed: %s", artwork_id, last_err)
+        for attempt in range(2):  # retry once on rate-limit (per-min window may reset)
+            try:
+                logger.info("Artwork %d: ChatGPT OAuth gpt-image-2 refine (bg=%s, attempt=%d)", artwork_id, bg_mode, attempt + 1)
+                refined_bytes = ChatGPTOAuthImageClient().edit_for_artwork(cropped_bytes, prompt=prompt)
+                break
+            except Exception as exc:
+                err = str(exc)
+                is_rate_limit = "rate limit" in err.lower() or "rate_limit" in err.lower()
+                if is_rate_limit and attempt == 0:
+                    logger.warning("Artwork %d: ChatGPT rate-limited — retrying in 5s", artwork_id)
+                    time.sleep(5)
+                    continue
+                provider_errors.append(f"ChatGPT OAuth: {err[:200]}")
+                logger.warning("Artwork %d: ChatGPT OAuth refine failed: %s", artwork_id, err)
+                break
 
-    # 2. Gemini image editing
+    # 2. Gemini image editing (with key rotation + model fallback in client)
     if refined_bytes is None and (settings.gemini_api_key or settings.gemini_api_keys):
         try:
             from app.clients.gemini_imagen_client import GeminiImagenClient
-            logger.info("Artwork %d: calling Gemini image edit (refine, bg=%s)", artwork_id, bg_mode)
+            logger.info("Artwork %d: Gemini image edit refine (bg=%s)", artwork_id, bg_mode)
             refined_bytes = GeminiImagenClient().edit_for_artwork(cropped_bytes, prompt=prompt)
         except Exception as exc:
-            last_err = str(exc)
-            logger.warning("Artwork %d: Gemini refine failed: %s", artwork_id, last_err)
+            err = str(exc)
+            provider_errors.append(f"Gemini: {err[:200]}")
+            logger.warning("Artwork %d: Gemini refine failed: %s", artwork_id, err)
 
     # 3. OpenAI GPT-Image-1 API (requires paid credits)
     if refined_bytes is None and settings.openai_api_key:
         try:
             from app.clients.openai_imagen_client import OpenaiImagenClient
-            logger.info("Artwork %d: calling GPT-Image-1 API (refine fallback, bg=%s)", artwork_id, bg_mode)
+            logger.info("Artwork %d: GPT-Image-1 API refine fallback (bg=%s)", artwork_id, bg_mode)
             refined_bytes = OpenaiImagenClient().edit_image(cropped_bytes, prompt=prompt)
         except Exception as exc:
-            last_err = str(exc)
-            logger.error("Artwork %d: OpenAI API refine failed: %s", artwork_id, last_err)
+            err = str(exc)
+            provider_errors.append(f"OpenAI: {err[:200]}")
+            logger.error("Artwork %d: OpenAI API refine failed: %s", artwork_id, err)
 
     if refined_bytes is None:
-        raise ValueError(
-            "All refine providers failed. "
-            "Login via ChatGPT OAuth (see scripts/chatgpt-oauth-login.py) or add API credits. "
-            f"Last error: {last_err}"
-        )
+        if not provider_errors:
+            raise ValueError(
+                "No AI provider configured. Set up ChatGPT OAuth, Gemini API key, or OpenAI API key."
+            )
+        errors_summary = " | ".join(provider_errors)
+        raise ValueError(f"All refine providers failed — {errors_summary}")
 
     refined_url = _save_and_upload(refined_bytes)
     artwork.refined_url = refined_url
