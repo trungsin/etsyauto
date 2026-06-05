@@ -10,9 +10,8 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 _MODEL_ID = "gemini-2.5-flash-image"
-# Fallback model tried when primary model hits quota/billing errors.
-# gemini-2.0-flash-preview-image-generation has a free tier unlike 2.5-flash-image.
-_MODEL_FALLBACK = "gemini-2.0-flash-preview-image-generation"
+# Fallback model when primary hits billing/quota errors.
+_MODEL_FALLBACK = "gemini-3.1-flash-image-preview"
 _SCENE_INSTRUCTION = (
     "Place this product in the following scene: {scene}. "
     "Photorealistic, soft shadow, keep the product proportions intact. "

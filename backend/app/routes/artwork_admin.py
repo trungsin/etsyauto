@@ -83,8 +83,9 @@ def refine(
     try:
         artwork = artwork_service.refine_artwork(db, artwork_id, bg_mode=bg_mode)
     except (ValueError, httpx.HTTPError) as exc:
-        code = 404 if "not found" in str(exc).lower() else 400
-        raise HTTPException(status_code=code, detail=str(exc)) from exc
+        msg = str(exc)
+        code = 404 if msg.lower() == f"artwork {artwork_id} not found" else 400
+        raise HTTPException(status_code=code, detail=msg) from exc
     return {"id": artwork.id, "refined_url": artwork.refined_url, "status": artwork.status}
 
 
@@ -98,8 +99,9 @@ def skip_refine(
     try:
         artwork = artwork_service.skip_refine_artwork(db, artwork_id)
     except ValueError as exc:
-        code = 404 if "not found" in str(exc).lower() else 400
-        raise HTTPException(status_code=code, detail=str(exc)) from exc
+        msg = str(exc)
+        code = 404 if msg.lower() == f"artwork {artwork_id} not found" else 400
+        raise HTTPException(status_code=code, detail=msg) from exc
     return {"id": artwork.id, "refined_url": artwork.refined_url, "status": artwork.status}
 
 
@@ -113,8 +115,9 @@ def removebg(
     try:
         artwork = artwork_service.removebg_artwork(db, artwork_id)
     except (ValueError, httpx.HTTPError) as exc:
-        code = 404 if "not found" in str(exc).lower() else 400
-        raise HTTPException(status_code=code, detail=str(exc)) from exc
+        msg = str(exc)
+        code = 404 if msg.lower() == f"artwork {artwork_id} not found" else 400
+        raise HTTPException(status_code=code, detail=msg) from exc
     return {"id": artwork.id, "removebg_url": artwork.removebg_url, "status": artwork.status}
 
 
@@ -162,8 +165,9 @@ def canvas_fill(
     try:
         canvas_url = artwork_service.fill_canvas_artwork(db, artwork_id, canvas_w, canvas_h, fit_mode)
     except (ValueError, RuntimeError) as exc:
-        code = 404 if "not found" in str(exc).lower() else 400
-        raise HTTPException(status_code=code, detail=str(exc)) from exc
+        msg = str(exc)
+        code = 404 if msg.lower() == f"artwork {artwork_id} not found" else 400
+        raise HTTPException(status_code=code, detail=msg) from exc
     return {"canvas_url": canvas_url, "canvas_size": canvas_size}
 
 
