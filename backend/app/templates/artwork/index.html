@@ -94,11 +94,11 @@
       <div style="font-size:.875rem;font-weight:600;color:#374151;margin-bottom:.4rem">Màu nền sau refine:</div>
       <label style="display:inline-flex;align-items:center;gap:.4rem;margin-right:1.25rem;cursor:pointer;font-size:.9rem">
         <input type="radio" name="bg-mode" value="light" checked>
-        Nền trắng <span style="color:#6b7280;font-size:.8rem">(design tối — giữ nguyên màu)</span>
+        Nền trắng <span style="color:#6b7280;font-size:.8rem">(dùng khi design có màu đậm)</span>
       </label>
       <label style="display:inline-flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.9rem">
         <input type="radio" name="bg-mode" value="dark">
-        Nền tối <span style="color:#6b7280;font-size:.8rem">(design sáng — AI tự điều chỉnh màu)</span>
+        Nền tối <span style="color:#6b7280;font-size:.8rem">(dùng khi design có màu nhạt/trắng)</span>
       </label>
     </div>
     <div class="step-actions">
@@ -290,12 +290,10 @@ btnCrop.addEventListener('click', async () => {
 // ── Step 2: Refine ────────────────────────────────────────────────────────
 document.getElementById('btn-refine').addEventListener('click', async () => {
   const bgMode = document.querySelector('input[name="bg-mode"]:checked')?.value || 'light';
-  const fd = new FormData();
-  fd.append('bg_mode', bgMode);
   setLoading('btn-refine', 'refine-spinner', true);
   document.getElementById('btn-skip-refine').style.display = 'none';
   try {
-    const res = await api('POST', `/admin/artwork/${artworkId}/refine`, fd);
+    const res = await api('POST', `/admin/artwork/${artworkId}/refine?bg_mode=${bgMode}`);
     showImg('refined-img', res.refined_url);
     const wrap = document.getElementById('refined-img-wrap');
     if (wrap) wrap.style.background = bgMode === 'dark' ? '#1a1a1a' : '#fff';

@@ -2,7 +2,7 @@
 import logging
 
 import httpx
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
@@ -73,11 +73,11 @@ async def upload_and_crop(
 @router.post("/{artwork_id}/refine")
 def refine(
     artwork_id: int,
-    bg_mode: str = Form("light"),
+    bg_mode: str = Query("light"),
     db: Session = Depends(get_db),
     _: None = Depends(require_admin_token),
 ) -> dict:
-    """Refine the cropped image. bg_mode='light' (white bg) or 'dark' (black bg, brightens design)."""
+    """Refine the cropped image. ?bg_mode=light (white bg) or ?bg_mode=dark (black bg, brightens design)."""
     if bg_mode not in ("light", "dark"):
         raise HTTPException(status_code=400, detail="bg_mode must be 'light' or 'dark'")
     try:
