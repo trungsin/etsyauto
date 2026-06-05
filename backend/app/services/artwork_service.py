@@ -26,22 +26,26 @@ logger = logging.getLogger(__name__)
 _UPSCALE_MAX_INPUT_PX = 512
 
 _REFINE_PROMPT_LIGHT = (
-    "This is a design artwork cropped from a product mockup. "
-    "Remove any mockup context (fabric texture, product shape, background, shadows). "
-    "Clean and sharpen the edges of the design. "
-    "Output only the design on a perfectly clean white background, "
-    "ready for background removal in the next step. "
-    "Keep the design artwork colors and shapes exactly as-is."
+    "This is a design artwork cropped from a product mockup image. "
+    "Your task: faithfully reconstruct and enhance this design as a clean, high-quality graphic. "
+    "1. Remove all mockup context: fabric texture, product shape, wrinkles, shadows, and background noise. "
+    "2. Upscale and sharpen the design — increase perceived resolution, make lines crisp, text legible, and details well-defined. "
+    "3. Enhance color vibrancy and contrast while preserving the original color scheme exactly. "
+    "4. Reconstruct any design elements that appear blurry or degraded by the mockup. "
+    "5. Place the final design centered on a perfectly clean white background. "
+    "The output must be a faithful, high-quality reproduction of the original design — do NOT alter shapes, layout, or creative intent."
 )
 
 _REFINE_PROMPT_DARK = (
-    "This is a design artwork cropped from a product mockup. "
-    "Remove any mockup context (fabric texture, product shape, background, shadows). "
-    "Clean and sharpen the edges of the design. "
-    "Output the design on a perfectly solid black background. "
-    "Adjust the design colors so they are vivid and clearly visible against the dark background "
-    "(lighten or brighten dark design elements, ensure strong contrast). "
-    "Ready for background removal in the next step."
+    "This is a design artwork cropped from a product mockup image. "
+    "Your task: faithfully reconstruct and enhance this design as a clean, high-quality graphic. "
+    "1. Remove all mockup context: fabric texture, product shape, wrinkles, shadows, and background noise. "
+    "2. Upscale and sharpen the design — increase perceived resolution, make lines crisp, text legible, and details well-defined. "
+    "3. Reconstruct any design elements that appear blurry or degraded by the mockup. "
+    "4. Place the final design on a perfectly solid black background. "
+    "5. Adjust the design colors to be vivid and clearly visible on the dark background: "
+    "   lighten or brighten any dark design elements, ensure strong contrast against black. "
+    "The output must be a faithful, high-quality reproduction of the original design — do NOT alter shapes, layout, or creative intent."
 )
 
 
