@@ -345,8 +345,23 @@ class ChatGPTOAuthImageClient:
             timeout=TIMEOUT_SECONDS,
         )
         if resp.status_code != 200:
-            snippet = resp.text[:500] if hasattr(resp, "text") else ""
+            try:
+                err_body = resp.json()
+            except Exception:
+                err_body = {}
             resp.close()
+            # When the token is invalidated server-side, clear it so has_session() returns
+            # False on subsequent calls — prevents retrying with a known-bad token.
+            if resp.status_code == 401 and err_body.get("error", {}).get("code") == "token_invalidated":
+                logger.warning("ChatGPT OAuth: token invalidated by server — clearing access token")
+                try:
+                    s = load_session()
+                    if s:
+                        s.access_token = ""
+                        save_session(s)
+                except Exception as _clr_exc:
+                    logger.warning("ChatGPT OAuth: could not clear session: %s", _clr_exc)
+            snippet = (str(err_body)[:400] if err_body else (resp.text[:400] if hasattr(resp, "text") else ""))
             raise RuntimeError(f"ChatGPT API {resp.status_code}: {snippet}")
 
         try:

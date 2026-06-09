@@ -143,24 +143,12 @@ def process_upload_and_crop(
     return artwork
 
 
-def refine_artwork(db: Session, artwork_id: int, bg_mode: str = "light") -> Artwork:
-    """Refine cropped image — provider chain: ChatGPT OAuth → Gemini → OpenAI API.
-
-    Args:
-        bg_mode: "light" for white background (keeps design colors),
-                 "dark" for black background (brightens design for contrast).
+def _call_refine_providers(artwork_id: int, cropped_bytes: bytes, prompt: str) -> bytes:
+    """Run provider chain (ChatGPT OAuth → Gemini → OpenAI) and return refined image bytes.
 
     Raises:
-        ValueError: If artwork not found, wrong status, or all providers fail.
+        ValueError: If all configured providers fail or none are configured.
     """
-    artwork = db.get(Artwork, artwork_id)
-    if not artwork:
-        raise ValueError(f"Artwork {artwork_id} not found")
-    if artwork.status != "cropped":
-        raise ValueError(f"Artwork {artwork_id} has status '{artwork.status}', expected 'cropped'")
-
-    prompt = _REFINE_PROMPT_DARK if bg_mode == "dark" else _REFINE_PROMPT_LIGHT
-    cropped_bytes = _load_image_bytes(artwork.cropped_url)
     refined_bytes: bytes | None = None
     provider_errors: list[str] = []
 
@@ -170,9 +158,9 @@ def refine_artwork(db: Session, artwork_id: int, bg_mode: str = "light") -> Artw
         has_session as chatgpt_has_session,
     )
     if chatgpt_has_session():
-        for attempt in range(2):  # retry once on rate-limit (per-min window may reset)
+        for attempt in range(2):
             try:
-                logger.info("Artwork %d: ChatGPT OAuth gpt-image-2 refine (bg=%s, attempt=%d)", artwork_id, bg_mode, attempt + 1)
+                logger.info("Artwork %d: ChatGPT OAuth gpt-image-2 refine (attempt=%d)", artwork_id, attempt + 1)
                 refined_bytes = ChatGPTOAuthImageClient().edit_for_artwork(cropped_bytes, prompt=prompt)
                 break
             except Exception as exc:
@@ -190,7 +178,7 @@ def refine_artwork(db: Session, artwork_id: int, bg_mode: str = "light") -> Artw
     if refined_bytes is None and (settings.gemini_api_key or settings.gemini_api_keys):
         try:
             from app.clients.gemini_imagen_client import GeminiImagenClient
-            logger.info("Artwork %d: Gemini image edit refine (bg=%s)", artwork_id, bg_mode)
+            logger.info("Artwork %d: Gemini image edit refine", artwork_id)
             refined_bytes = GeminiImagenClient().edit_for_artwork(cropped_bytes, prompt=prompt)
         except Exception as exc:
             err = str(exc)
@@ -201,7 +189,7 @@ def refine_artwork(db: Session, artwork_id: int, bg_mode: str = "light") -> Artw
     if refined_bytes is None and settings.openai_api_key:
         try:
             from app.clients.openai_imagen_client import OpenaiImagenClient
-            logger.info("Artwork %d: GPT-Image-1 API refine fallback (bg=%s)", artwork_id, bg_mode)
+            logger.info("Artwork %d: GPT-Image-1 API refine fallback", artwork_id)
             refined_bytes = OpenaiImagenClient().edit_image(cropped_bytes, prompt=prompt)
         except Exception as exc:
             err = str(exc)
@@ -209,20 +197,46 @@ def refine_artwork(db: Session, artwork_id: int, bg_mode: str = "light") -> Artw
             logger.error("Artwork %d: OpenAI API refine failed: %s", artwork_id, err)
 
     if refined_bytes is None:
-        if not provider_errors:
-            raise ValueError(
-                "No AI provider configured. Set up ChatGPT OAuth, Gemini API key, or OpenAI API key."
-            )
-        errors_summary = " | ".join(provider_errors)
+        errors_summary = " | ".join(provider_errors) if provider_errors else "No AI provider configured"
         raise ValueError(f"All refine providers failed — {errors_summary}")
+    return refined_bytes
 
-    refined_url = _save_and_upload(refined_bytes)
-    artwork.refined_url = refined_url
-    artwork.status = "refined"
-    db.commit()
-    db.refresh(artwork)
-    logger.info("Artwork %d: refined, url=%s", artwork_id, refined_url)
-    return artwork
+
+def run_refine_job(artwork_id: int, bg_mode: str = "light") -> None:
+    """BackgroundTask: AI image refinement. Transitions refining→refined|refine_failed.
+
+    Opens its own DB session (request session closed before background task runs).
+    """
+    db = SessionLocal()
+    artwork = None
+    try:
+        artwork = db.get(Artwork, artwork_id)
+        if not artwork:
+            logger.warning("run_refine_job: artwork %d not found", artwork_id)
+            return
+        if artwork.status != "refining":
+            logger.warning("run_refine_job: artwork %d unexpected status '%s', skipping", artwork_id, artwork.status)
+            return
+
+        prompt = _REFINE_PROMPT_DARK if bg_mode == "dark" else _REFINE_PROMPT_LIGHT
+        cropped_bytes = _load_image_bytes(artwork.cropped_url)
+        refined_bytes = _call_refine_providers(artwork_id, cropped_bytes, prompt)
+
+        refined_url = _save_and_upload(refined_bytes)
+        artwork.refined_url = refined_url
+        artwork.status = "refined"
+        artwork.error_message = None
+        db.commit()
+        logger.info("Artwork %d: refined, url=%s", artwork_id, refined_url)
+
+    except Exception as exc:
+        logger.exception("Refine job failed for artwork %d", artwork_id)
+        if artwork is not None:
+            artwork.status = "refine_failed"
+            artwork.error_message = str(exc)
+            db.commit()
+    finally:
+        db.close()
 
 
 def skip_refine_artwork(db: Session, artwork_id: int) -> Artwork:

@@ -1,6 +1,6 @@
 """Artwork model — tracks each step in the Cloden Design POD artwork pipeline.
 
-Status machine: pending → cropped → refined → removebg_done → upscaling → done | failed
+Status machine: pending → cropped → refining → refined → removebg_done → upscaling → done | failed | refine_failed
 """
 from datetime import datetime
 
@@ -15,7 +15,7 @@ class Artwork(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
-    # pending | cropped | refined | removebg_done | upscaling | done | failed  (upscaled = legacy, no longer used)
+    # pending | cropped | refining | refined | refine_failed | removebg_done | upscaling | done | failed
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     original_url: Mapped[str | None] = mapped_column(String(500), nullable=True)

@@ -104,7 +104,7 @@
     <div class="step-actions">
       <button id="btn-refine" class="btn btn-primary"{% if not has_refine %} disabled title="Chưa có AI provider"{% endif %}>Refine →</button>
       <button id="btn-skip-refine" class="btn" style="background:#f3f4f6;border:1px solid #d1d5db">Skip →</button>
-      <span class="spinner" id="refine-spinner" style="display:none">⏳ Đang refine với AI… (có thể mất 30-90s)</span>
+      <span class="spinner" id="refine-spinner" style="display:none">⏳ Đang refine với AI… kiểm tra mỗi 5s</span>
     </div>
     <p class="banner-error" id="err-2"></p>
   </div>
@@ -210,9 +210,12 @@
 <script>
 'use strict';
 // ── State ──────────────────────────────────────────────────────────────────
-let artworkId    = null;
-let pollTimer    = null;
-let pollFailCount = 0;
+let artworkId      = null;
+let pollTimer      = null;
+let pollFailCount  = 0;
+let refineTimer    = null;
+let refineFail     = 0;
+let refineBgMode   = 'light';
 
 // ── Crop drag-select ───────────────────────────────────────────────────────
 const fileInput = document.getElementById('file-input');
@@ -289,16 +292,13 @@ btnCrop.addEventListener('click', async () => {
 
 // ── Step 2: Refine ────────────────────────────────────────────────────────
 document.getElementById('btn-refine').addEventListener('click', async () => {
-  const bgMode = document.querySelector('input[name="bg-mode"]:checked')?.value || 'light';
+  refineBgMode = document.querySelector('input[name="bg-mode"]:checked')?.value || 'light';
+  refineFail = 0;
   setLoading('btn-refine', 'refine-spinner', true);
   document.getElementById('btn-skip-refine').style.display = 'none';
   try {
-    const res = await api('POST', `/admin/artwork/${artworkId}/refine?bg_mode=${bgMode}`);
-    showImg('refined-img', res.refined_url);
-    const wrap = document.getElementById('refined-img-wrap');
-    if (wrap) wrap.style.background = bgMode === 'dark' ? '#1a1a1a' : '#fff';
-    doneStep('step-2');
-    enableStep('step-3');
+    await api('POST', `/admin/artwork/${artworkId}/refine?bg_mode=${refineBgMode}`);
+    refineTimer = setInterval(pollRefineStatus, 5000);
   } catch(err) {
     const detail = (typeof err === 'object' && err !== null) ? err.detail : String(err);
     showRefineErr(detail);
@@ -306,6 +306,37 @@ document.getElementById('btn-refine').addEventListener('click', async () => {
     document.getElementById('btn-skip-refine').style.display = '';
   }
 });
+
+async function pollRefineStatus() {
+  try {
+    const res = await api('GET', `/admin/artwork/${artworkId}/status`);
+    refineFail = 0;
+    if (res.status === 'refined') {
+      clearInterval(refineTimer); refineTimer = null;
+      showImg('refined-img', res.refined_url);
+      const wrap = document.getElementById('refined-img-wrap');
+      if (wrap) wrap.style.background = refineBgMode === 'dark' ? '#1a1a1a' : '#fff';
+      doneStep('step-2');
+      enableStep('step-3');
+    } else if (res.status === 'refine_failed') {
+      clearInterval(refineTimer); refineTimer = null;
+      setLoading('btn-refine', 'refine-spinner', false);
+      document.getElementById('btn-skip-refine').style.display = '';
+      showRefineErr(res.error_message || 'Refine thất bại — xem server logs');
+    } else {
+      const sp = document.getElementById('refine-spinner');
+      if (sp) sp.textContent = `⏳ Đang refine với AI (${res.status})… kiểm tra mỗi 5s`;
+    }
+  } catch(err) {
+    refineFail++;
+    if (refineFail >= 3) {
+      clearInterval(refineTimer); refineTimer = null;
+      setLoading('btn-refine', 'refine-spinner', false);
+      document.getElementById('btn-skip-refine').style.display = '';
+      showRefineErr(`Không thể lấy trạng thái refine (${refineFail} lần thất bại): ${err?.detail || JSON.stringify(err)}`);
+    }
+  }
+}
 
 document.getElementById('btn-skip-refine').addEventListener('click', async () => {
   const bgMode = document.querySelector('input[name="bg-mode"]:checked')?.value || 'light';

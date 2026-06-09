@@ -70,23 +70,29 @@ async def upload_and_crop(
     return {"id": artwork.id, "cropped_url": artwork.cropped_url, "status": artwork.status}
 
 
-@router.post("/{artwork_id}/refine")
+@router.post("/{artwork_id}/refine", status_code=202)
 def refine(
     artwork_id: int,
+    background_tasks: BackgroundTasks,
     bg_mode: str = Query("light"),
     db: Session = Depends(get_db),
     _: None = Depends(require_admin_token),
 ) -> dict:
-    """Refine the cropped image. ?bg_mode=light (white bg) or ?bg_mode=dark (black bg, brightens design)."""
+    """Start AI refinement as a background job. Poll /{id}/status for refined|refine_failed."""
     if bg_mode not in ("light", "dark"):
         raise HTTPException(status_code=400, detail="bg_mode must be 'light' or 'dark'")
-    try:
-        artwork = artwork_service.refine_artwork(db, artwork_id, bg_mode=bg_mode)
-    except (ValueError, httpx.HTTPError) as exc:
-        msg = str(exc)
-        code = 404 if msg.lower() == f"artwork {artwork_id} not found" else 400
-        raise HTTPException(status_code=code, detail=msg) from exc
-    return {"id": artwork.id, "refined_url": artwork.refined_url, "status": artwork.status}
+    artwork = db.get(Artwork, artwork_id)
+    if not artwork:
+        raise HTTPException(status_code=404, detail=f"Artwork {artwork_id} not found")
+    if artwork.status != "cropped":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Artwork {artwork_id} has status '{artwork.status}', expected 'cropped'",
+        )
+    artwork.status = "refining"
+    db.commit()
+    background_tasks.add_task(artwork_service.run_refine_job, artwork_id, bg_mode)
+    return {"id": artwork_id, "status": "refining"}
 
 
 @router.post("/{artwork_id}/skip-refine")
@@ -184,6 +190,7 @@ def status(
     return {
         "id": artwork.id,
         "status": artwork.status,
+        "refined_url": artwork.refined_url,
         "final_url": artwork.final_url,
         "removebg_url": artwork.removebg_url,
         "error_message": artwork.error_message,

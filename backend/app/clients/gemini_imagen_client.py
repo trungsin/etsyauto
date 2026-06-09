@@ -26,11 +26,19 @@ _ARTWORK_REFINE_PROMPT = (
 )
 
 _QUOTA_SIGNALS = ("429", "resource_exhausted", "quota", "billing", "limit")
+# Model not found → also worth trying fallback model (model deprecated or renamed).
+_MODEL_NOT_FOUND_SIGNALS = ("404", "not_found", "is not found for api version")
 
 
 def _is_quota_error(exc: Exception) -> bool:
     s = str(exc).lower()
     return any(sig in s for sig in _QUOTA_SIGNALS)
+
+
+def _should_try_fallback(exc: Exception) -> bool:
+    """True if we should try the fallback model (quota exhausted or model not found)."""
+    s = str(exc).lower()
+    return any(sig in s for sig in _QUOTA_SIGNALS) or any(sig in s for sig in _MODEL_NOT_FOUND_SIGNALS)
 
 
 class GeminiImagenClient:
@@ -134,9 +142,9 @@ class GeminiImagenClient:
             last_error = exc
             if primary_model == _MODEL_FALLBACK:
                 raise
-            if not _is_quota_error(exc):
+            if not _should_try_fallback(exc):
                 raise
-            logger.warning("Gemini primary model %s quota/billing error — trying fallback %s: %s", primary_model, _MODEL_FALLBACK, str(exc)[:120])
+            logger.warning("Gemini primary model %s failed — trying fallback %s: %s", primary_model, _MODEL_FALLBACK, str(exc)[:120])
 
         # Fallback model with key rotation
         response = self._generate_with_rotation(_MODEL_FALLBACK, contents, config)
