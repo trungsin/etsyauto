@@ -15,6 +15,7 @@ from PIL import Image
 from sqlalchemy.orm import Session
 
 from app.clients.removebg_client import RemoveBgClient
+from app.clients.rembg_client import RembgClient
 from app.config import settings
 from app.database import SessionLocal
 from app.models.artwork import Artwork
@@ -271,9 +272,16 @@ def removebg_artwork(db: Session, artwork_id: int) -> Artwork:
     if artwork.status != "refined":
         raise ValueError(f"Artwork {artwork_id} has status '{artwork.status}', expected 'refined'")
 
-    logger.info("Artwork %d: calling remove.bg on refined image", artwork_id)
+    logger.info("Artwork %d: removing background", artwork_id)
     refined_bytes = _load_image_bytes(artwork.refined_url)
-    removebg_bytes = RemoveBgClient().remove_bg(refined_bytes)
+
+    # Try local rembg first (free). Fall back to remove.bg API if local fails.
+    try:
+        removebg_bytes = RembgClient().remove_bg(refined_bytes)
+        logger.info("Artwork %d: removebg via local rembg", artwork_id)
+    except Exception as local_exc:
+        logger.warning("Artwork %d: local rembg failed (%s) — falling back to remove.bg API", artwork_id, local_exc)
+        removebg_bytes = RemoveBgClient().remove_bg(refined_bytes)
 
     removebg_url = _save_and_upload(removebg_bytes)
     artwork.removebg_url = removebg_url
