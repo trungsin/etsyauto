@@ -311,7 +311,7 @@ async function pollRefineStatus() {
   try {
     const res = await api('GET', `/admin/artwork/${artworkId}/status`);
     refineFail = 0;
-    if (res.status === 'refined') {
+    if (res.status === 'refined' && res.refined_url) {
       clearInterval(refineTimer); refineTimer = null;
       showImg('refined-img', res.refined_url);
       const wrap = document.getElementById('refined-img-wrap');
@@ -470,7 +470,7 @@ function doneStep(id) {
 
 function showImg(id, src) {
   const el = document.getElementById(id);
-  if (!el) return;
+  if (!el || !src) return;
   el.src = src; el.style.display = 'block';
 }
 
