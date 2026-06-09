@@ -240,11 +240,11 @@ def run_refine_job(artwork_id: int, bg_mode: str = "light") -> None:
 
 
 def skip_refine_artwork(db: Session, artwork_id: int) -> Artwork:
-    """Skip GPT refinement — copy cropped_url to refined_url. Transitions cropped→refined."""
+    """Skip GPT refinement — copy cropped_url to refined_url. Accepts cropped|refine_failed|refining."""
     artwork = db.get(Artwork, artwork_id)
     if not artwork:
         raise ValueError(f"Artwork {artwork_id} not found")
-    if artwork.status != "cropped":
+    if artwork.status not in ("cropped", "refine_failed", "refining"):
         raise ValueError(f"Artwork {artwork_id} has status '{artwork.status}', expected 'cropped'")
     artwork.refined_url = artwork.cropped_url
     artwork.status = "refined"
