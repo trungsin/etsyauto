@@ -84,7 +84,7 @@ def refine(
     artwork = db.get(Artwork, artwork_id)
     if not artwork:
         raise HTTPException(status_code=404, detail=f"Artwork {artwork_id} not found")
-    if artwork.status not in ("cropped", "refine_failed"):
+    if artwork.status not in ("cropped", "refine_failed", "refining"):
         raise HTTPException(
             status_code=400,
             detail=f"Artwork {artwork_id} has status '{artwork.status}', expected 'cropped'",

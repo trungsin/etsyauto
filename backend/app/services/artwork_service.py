@@ -223,18 +223,23 @@ def run_refine_job(artwork_id: int, bg_mode: str = "light") -> None:
         refined_bytes = _call_refine_providers(artwork_id, cropped_bytes, prompt)
 
         refined_url = _save_and_upload(refined_bytes)
-        artwork.refined_url = refined_url
-        artwork.status = "refined"
+        # Reload to avoid overwriting a skip that ran concurrently
+        db.refresh(artwork)
+        artwork.refined_url = refined_url  # always store AI result (better than skip)
+        if artwork.status == "refining":
+            artwork.status = "refined"
         artwork.error_message = None
         db.commit()
-        logger.info("Artwork %d: refined, url=%s", artwork_id, refined_url)
+        logger.info("Artwork %d: refined (status=%s), url=%s", artwork_id, artwork.status, refined_url)
 
     except Exception as exc:
         logger.exception("Refine job failed for artwork %d", artwork_id)
         if artwork is not None:
-            artwork.status = "refine_failed"
-            artwork.error_message = str(exc)
-            db.commit()
+            db.refresh(artwork)  # reload — skip may have already resolved status
+            if artwork.status == "refining":  # only fail if skip hasn't resolved it
+                artwork.status = "refine_failed"
+                artwork.error_message = str(exc)
+                db.commit()
     finally:
         db.close()
 
