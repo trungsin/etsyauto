@@ -115,6 +115,15 @@ async def lifespan(app: FastAPI):
         )
     _validate_notion_idea_bank_schema()
     sched.start()
+    # Warm rembg model in background — kills ~100s cold start on first cutout
+    # request (66s model load + 37s inference → Cloudflare 524 risk).
+    # Skipped under pytest: TestClient triggers lifespan, and warmup would
+    # download/load a ~930MB model while holding the inference lock (flaky tests).
+    import sys
+    if "pytest" not in sys.modules:
+        import threading
+        from app.clients.rembg_client import warmup as rembg_warmup
+        threading.Thread(target=rembg_warmup, name="rembg-warmup", daemon=True).start()
     yield
     sched.shutdown()
 

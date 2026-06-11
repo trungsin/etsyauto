@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     # precedence over single photoroom_api_key.
     photoroom_api_keys: str = ""
     photoroom_api_key: str = ""
+    # Local rembg model (no API key needed). birefnet-general: cleanest edges,
+    # ~36.8s/img on 6-core CPU, MIT license, ~930MB download on first use.
+    # Alternative: isnet-general-use (~3.4s/img, lower quality). Avoid bria-rmbg
+    # (non-commercial license).
+    rembg_model: str = "birefnet-general"
     gemini_api_keys: str = ""   # comma-separated; takes precedence over gemini_api_key
     gemini_api_key: str = ""    # legacy single key
     # Model for admin AI buttons. 2.5-flash-lite: higher free-tier quota than 2.5-flash (20 RPD) — sufficient quality.

@@ -1,14 +1,15 @@
-"""Background-removal provider selection — PhotoRoom preferred, remove.bg fallback.
+"""Background-removal provider selection — local rembg primary, APIs fallback.
 
 All providers expose the same interface: ``remove_bg(image_bytes) -> bytes``
-(transparent PNG). Call sites use :func:`get_bg_removal_client`; provider
-choice is a pure .env change (set PHOTOROOM_API_KEY to prefer PhotoRoom).
-If the preferred provider fails (e.g. PhotoRoom 402 — plan not active),
-the chain automatically falls through to the next configured provider.
+(transparent PNG). Call sites use :func:`get_bg_removal_client`. Chain order:
+local rembg first (always present, $0/image, no key needed), then PhotoRoom
+and remove.bg as API fallbacks when their keys are configured. If a provider
+fails, the chain automatically falls through to the next one.
 """
 import logging
 
 from app.clients.photoroom_client import PhotoRoomClient
+from app.clients.rembg_client import RembgClient
 from app.clients.removebg_client import RemoveBgClient
 from app.config import settings
 
@@ -20,8 +21,9 @@ class ChainBgRemovalClient:
 
     def __init__(self, clients: list) -> None:
         if not clients:
-            raise ValueError("No background-removal provider configured "
-                             "(set PHOTOROOM_API_KEY or REMOVEBG_API_KEYS)")
+            # Unreachable via get_bg_removal_client() (rembg always present);
+            # kept defensive for direct construction.
+            raise ValueError("No background-removal provider in chain")
         self._clients = clients
 
     def remove_bg(self, image_bytes: bytes) -> bytes:
@@ -39,8 +41,9 @@ class ChainBgRemovalClient:
 
 
 def get_bg_removal_client() -> ChainBgRemovalClient:
-    """Build provider chain from .env: PhotoRoom first (if key set), then remove.bg."""
-    clients: list = []
+    """Build provider chain: local rembg always first ($0), then API providers
+    (PhotoRoom, remove.bg) appended only when their keys are configured."""
+    clients: list = [RembgClient()]
     if settings.photoroom_api_keys or settings.photoroom_api_key:
         clients.append(PhotoRoomClient())
     if settings.removebg_api_keys or settings.removebg_api_key or settings.removebg_api_key_backup:

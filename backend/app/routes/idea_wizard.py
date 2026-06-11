@@ -18,6 +18,7 @@ from io import BytesIO
 
 import httpx
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from PIL import Image
 from pydantic import BaseModel, Field, field_validator
@@ -567,10 +568,12 @@ async def extract_design(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    # Strip background via PhotoRoom/remove.bg
+    # Strip background via provider chain (local rembg first, APIs fallback).
+    # run_in_threadpool: rembg inference is CPU-bound (~37s) and must not
+    # block the event loop (server-wide freeze → Cloudflare 524).
     try:
         rbg = get_bg_removal_client()
-        cutout_bytes = rbg.remove_bg(cropped_bytes)
+        cutout_bytes = await run_in_threadpool(rbg.remove_bg, cropped_bytes)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=503, detail=f"Background removal failed: {exc}") from exc
 

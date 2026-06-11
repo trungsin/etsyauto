@@ -93,7 +93,7 @@ Full setup guide with all API key registration steps: [docs/deployment-guide.md]
 | Service | Typical Cost |
 |---------|-------------|
 | Anthropic Claude Sonnet 4.6 | ~$0.02 |
-| remove.bg | $0.09–$0.20 |
+| Background removal (local rembg) | $0.00 (PhotoRoom/remove.bg API fallback: $0.09–$0.20) |
 | Google Gemini Imagen | ~$0.01–$0.05 |
 | Cloudflare R2 | < $0.001 |
 | **Total** | **< $0.30 typical, < $0.50 cap** |
@@ -102,7 +102,7 @@ Full setup guide with all API key registration steps: [docs/deployment-guide.md]
 
 ## Tech Stack
 
-FastAPI · SQLite · APScheduler · Anthropic Claude Sonnet 4.6 · remove.bg · Google Gemini Imagen · Notion API · Cloudflare R2 · Etsy Open API v3 · Chrome MV3 · uv
+FastAPI · SQLite · APScheduler · Anthropic Claude Sonnet 4.6 · rembg (local BG removal; PhotoRoom/remove.bg fallback) · Google Gemini Imagen · Notion API · Cloudflare R2 · Etsy Open API v3 · Chrome MV3 · uv
 
 ---
 

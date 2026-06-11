@@ -118,13 +118,15 @@ def removebg(
     db: Session = Depends(get_db),
     _: None = Depends(require_admin_token),
 ) -> dict:
-    """Remove background via remove.bg — returns transparent PNG URL."""
+    """Remove background via provider chain (local rembg first, APIs fallback)."""
     try:
         artwork = artwork_service.removebg_artwork(db, artwork_id)
     except (ValueError, httpx.HTTPError) as exc:
         msg = str(exc)
         code = 404 if msg.lower() == f"artwork {artwork_id} not found" else 400
         raise HTTPException(status_code=code, detail=msg) from exc
+    except Exception as exc:  # noqa: BLE001 — e.g. rembg RuntimeError in keyless setup
+        raise HTTPException(status_code=502, detail=f"Background removal failed: {exc}") from exc
     return {"id": artwork.id, "removebg_url": artwork.removebg_url, "status": artwork.status}
 
 

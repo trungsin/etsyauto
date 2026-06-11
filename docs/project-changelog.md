@@ -4,6 +4,22 @@ All notable changes to EtsyAuto. Format: [Keep a Changelog](https://keepachangel
 
 ---
 
+## [Unreleased] — 2026-06-11
+
+Self-hosted background removal (local-first). Local rembg is now the primary BG-removal provider for all 4 call sites (artwork pipeline, reference cutout, idea wizard, mockup pipeline); PhotoRoom/remove.bg APIs demoted to fallback. $0/image.
+
+### Added
+- `REMBG_MODEL` setting (default `birefnet-general` — cleanest edges, ~37s/img on 6-core CPU, MIT license; ~930MB first-use download to `~/.u2net/`)
+- `rembg_client.warmup()` — model pre-loaded in a daemon thread at startup (skipped under pytest), eliminating ~100s cold start / Cloudflare 524 risk on first cutout
+- Module-level inference lock — serializes session creation + inference (one inference saturates all CPU cores)
+- `tests/test_bg_removal_chain.py` — 12 tests: chain order, fallback, model config, lock, warmup (no model download in suite)
+
+### Changed
+- `get_bg_removal_client()` chain order: `RembgClient` (always) → `PhotoRoomClient` (if key) → `RemoveBgClient` (if key); works with zero API keys configured
+- `artwork_service.removebg_artwork()` — bespoke rembg-then-API fallback replaced by the provider chain (DRY)
+- `idea_wizard.extract_design` — BG removal now runs via `run_in_threadpool` (CPU-bound inference no longer blocks the event loop)
+- `artwork_admin /removebg` — unexpected provider errors return 502 instead of unhandled 500
+
 ## [0.11.0] — 2026-05-20
 
 Cloden Design — POD Artwork Pipeline. Standalone admin page (`/admin/artwork`) for converting raw mockup images into clean, print-ready POD artwork through a step-by-step AI pipeline: upload + canvas crop → GPT-Image-1 refine/clean → remove.bg transparent cutout → Real-ESRGAN 4x upscale.
