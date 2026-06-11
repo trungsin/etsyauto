@@ -130,7 +130,7 @@ class TestExtractDesignHappy:
 
         with (
             patch("app.routes.idea_wizard._download_with_retry", return_value=png_bytes),
-            patch("app.routes.idea_wizard.RemoveBgClient") as mock_rbg_cls,
+            patch("app.routes.idea_wizard.get_bg_removal_client") as mock_rbg_cls,
             patch("app.routes.idea_wizard.R2StorageClient") as mock_r2_cls,
         ):
             mock_rbg = MagicMock()
@@ -228,7 +228,7 @@ class TestExtractDesignOverwrite:
 
         with (
             patch("app.routes.idea_wizard._download_with_retry", return_value=png_bytes),
-            patch("app.routes.idea_wizard.RemoveBgClient") as mock_rbg_cls,
+            patch("app.routes.idea_wizard.get_bg_removal_client") as mock_rbg_cls,
             patch("app.routes.idea_wizard.R2StorageClient") as mock_r2_cls,
         ):
             mock_rbg = MagicMock()

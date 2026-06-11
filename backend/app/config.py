@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     removebg_api_keys: str = ""
     removebg_api_key: str = ""        # legacy primary — used when removebg_api_keys is empty
     removebg_api_key_backup: str = "" # legacy backup  — used when removebg_api_keys is empty
+    # PhotoRoom background removal — preferred over remove.bg when configured.
+    # photoroom_api_keys: comma-separated list (rotated on 402/429); takes
+    # precedence over single photoroom_api_key.
+    photoroom_api_keys: str = ""
+    photoroom_api_key: str = ""
     gemini_api_keys: str = ""   # comma-separated; takes precedence over gemini_api_key
     gemini_api_key: str = ""    # legacy single key
     # Model for admin AI buttons. 2.5-flash-lite: higher free-tier quota than 2.5-flash (20 RPD) — sufficient quality.

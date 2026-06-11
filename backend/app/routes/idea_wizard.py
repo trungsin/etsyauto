@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.clients.r2_storage_client import R2StorageClient
-from app.clients.removebg_client import RemoveBgClient
+from app.clients.bg_removal import get_bg_removal_client
 from app.config import settings
 from app.database import get_db
 from app.services import design_service, idea_service, listing_creator_service, template_service
@@ -567,9 +567,9 @@ async def extract_design(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    # Strip background via remove.bg
+    # Strip background via PhotoRoom/remove.bg
     try:
-        rbg = RemoveBgClient()
+        rbg = get_bg_removal_client()
         cutout_bytes = rbg.remove_bg(cropped_bytes)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=503, detail=f"Background removal failed: {exc}") from exc

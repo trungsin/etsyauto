@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.clients.gemini_text_client import GeminiTextClient
-from app.clients.removebg_client import RemoveBgClient
+from app.clients.bg_removal import get_bg_removal_client
 from app.models.reference import Reference
 
 logger = logging.getLogger(__name__)
@@ -289,7 +289,7 @@ def create_cutout(
         )
 
     # Strip background
-    rbg_client = RemoveBgClient()
+    rbg_client = get_bg_removal_client()
     cutout_bytes = rbg_client.remove_bg(image_bytes)
 
     # Create design row (validates PNG, uploads to R2)

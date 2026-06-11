@@ -3,8 +3,8 @@ import json
 import logging
 from pathlib import Path
 
+from app.clients.bg_removal import get_bg_removal_client
 from app.clients.imagen_client import ImagenClient
-from app.clients.removebg_client import RemoveBgClient
 from app.config import settings
 from app.database import SessionLocal
 from app.services import listing_service
@@ -42,7 +42,7 @@ def run_mockup_pipeline_job() -> None:
 
         logger.info("Mockup pipeline: found %d pending listing(s)", len(pending))
 
-        removebg = RemoveBgClient()
+        removebg = get_bg_removal_client()
         imagen = ImagenClient()
         scene_prompts = _load_scene_prompts("default")
 
@@ -52,7 +52,7 @@ def run_mockup_pipeline_job() -> None:
         session.close()
 
 
-def _process_listing(session, removebg: RemoveBgClient, imagen: ImagenClient,
+def _process_listing(session, removebg, imagen: ImagenClient,
                      scene_prompts: list[str], listing) -> None:
     """Claim and process one listing; log errors without re-raising."""
     listing_id = listing.id

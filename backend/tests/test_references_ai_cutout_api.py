@@ -225,7 +225,7 @@ def test_cutout_accepts_etsy_url_at_different_size(client):
     upgraded_url = "https://i.etsystatic.com/12345/r/il/abc/999/il_fullxfull.999_xyz.jpg"
 
     with (
-        patch("app.services.reference_service.RemoveBgClient") as mock_rbg_cls,
+        patch("app.services.reference_service.get_bg_removal_client") as mock_rbg_cls,
         patch("app.clients.r2_storage_client.R2StorageClient") as mock_r2_cls,
         patch("httpx.Client") as mock_http_cls,
     ):
@@ -269,7 +269,7 @@ def test_cutout_creates_design_and_links(client):
     ref_id = _create_ref(client)
 
     with (
-        patch("app.services.reference_service.RemoveBgClient") as mock_rbg_cls,
+        patch("app.services.reference_service.get_bg_removal_client") as mock_rbg_cls,
         patch("app.clients.r2_storage_client.R2StorageClient") as mock_r2_cls,
         patch("httpx.Client") as mock_http_cls,
     ):
@@ -314,7 +314,7 @@ def test_cutout_idempotent_replaces_old_design(client):
 
     def _do_cutout():
         with (
-            patch("app.services.reference_service.RemoveBgClient") as mock_rbg_cls,
+            patch("app.services.reference_service.get_bg_removal_client") as mock_rbg_cls,
             patch("app.clients.r2_storage_client.R2StorageClient") as mock_r2_cls,
             patch("httpx.Client") as mock_http_cls,
         ):
@@ -396,7 +396,7 @@ def test_cutout_with_crop_box_applies_pil_crop(client):
         return _FAKE_PNG_BYTES
 
     with (
-        patch("app.services.reference_service.RemoveBgClient") as mock_rbg_cls,
+        patch("app.services.reference_service.get_bg_removal_client") as mock_rbg_cls,
         patch("app.clients.r2_storage_client.R2StorageClient") as mock_r2_cls,
         patch("httpx.Client") as mock_http_cls,
     ):
