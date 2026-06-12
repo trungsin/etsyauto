@@ -18,6 +18,8 @@ echo "[deploy] running migrations..."
 $UV run alembic upgrade head
 
 echo "[deploy] restarting service..."
-sudo systemctl restart etsyauto
+# User-level unit owns port 8787; XDG_RUNTIME_DIR needed for systemctl --user over non-interactive SSH
+export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+systemctl --user restart etsyauto-backend
 
 echo "[deploy] done — $(date -u '+%Y-%m-%d %H:%M UTC')"
