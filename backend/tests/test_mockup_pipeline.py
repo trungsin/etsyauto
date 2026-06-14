@@ -91,14 +91,6 @@ def _add_title_variants(session, listing_id: int, count: int = 3) -> None:
     session.commit()
 
 
-def _mock_removebg_response(png_bytes: bytes) -> MagicMock:
-    resp = MagicMock()
-    resp.content = png_bytes
-    resp.headers = {"content-type": "image/png"}
-    resp.raise_for_status = MagicMock()
-    return resp
-
-
 def _mock_download_response(png_bytes: bytes) -> MagicMock:
     resp = MagicMock()
     resp.content = png_bytes
@@ -131,7 +123,7 @@ class TestHappyPath:
         png = _small_png_bytes()
 
         with patch("app.services.image_service.settings") as mock_settings, \
-             patch("app.clients.removebg_client.settings") as mock_rb_settings, \
+             patch("app.workers.mockup_pipeline.get_bg_removal_client") as mock_get_bg, \
              patch("app.clients.imagen_client.settings") as mock_img_settings, \
              patch("httpx.Client") as MockHttpxClient, \
              patch("google.genai.Client") as MockGenaiClient, \
@@ -139,15 +131,17 @@ class TestHappyPath:
 
             # Configure settings
             mock_settings.static_dir = str(tmp_path)
-            mock_rb_settings.removebg_api_key = "test-rb-key"
             mock_img_settings.gemini_api_key = "test-img-key"
 
-            # httpx client used for both download and remove.bg
+            # Background-removal provider chain: return the cutout directly
+            # (the chain itself is covered by test_bg_removal_chain.py).
+            mock_get_bg.return_value.remove_bg.return_value = png
+
+            # httpx client used for the source-image download
             mock_http_instance = MagicMock()
             mock_http_instance.__enter__ = MagicMock(return_value=mock_http_instance)
             mock_http_instance.__exit__ = MagicMock(return_value=False)
             mock_http_instance.get.return_value = _mock_download_response(png)
-            mock_http_instance.post.return_value = _mock_removebg_response(png)
             MockHttpxClient.return_value = mock_http_instance
 
             # Imagen client: mock generate_images
@@ -329,14 +323,14 @@ class TestDownloadFailure:
         listing_id = listing.id
 
         with patch("app.services.image_service.settings") as mock_settings, \
-             patch("app.clients.removebg_client.settings") as mock_rb_settings, \
+             patch("app.workers.mockup_pipeline.get_bg_removal_client") as mock_get_bg, \
              patch("app.clients.imagen_client.settings") as mock_img_settings, \
              patch("httpx.Client") as MockHttpxClient, \
              patch("google.genai.Client"):
 
             mock_settings.static_dir = str(tmp_path)
-            mock_rb_settings.removebg_api_key = "test-rb-key"
             mock_img_settings.gemini_api_key = "test-img-key"
+            mock_get_bg.return_value.remove_bg.return_value = _small_png_bytes()
 
             mock_http_instance = MagicMock()
             mock_http_instance.__enter__ = MagicMock(return_value=mock_http_instance)
