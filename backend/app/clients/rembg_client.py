@@ -37,6 +37,13 @@ _ALPHA_MIN_ISLAND_FRACTION = 0.01
 _DESPILL_BG_MIN_FRACTION = 0.02   # need ≥2% removed pixels to sample bg reliably
 _DESPILL_BG_MAX_STD = 30.0        # bg counts as "solid" only if colour std below this
 _DESPILL_COLOR_DISTANCE = 100.0   # drop fringe within this RGB distance of bg colour
+# Despill only the OUTER halo: bg-coloured fringe within this many px of a
+# removed-bg pixel. Larger interior regions of legitimate bg-coloured design
+# content (e.g. white squares of a checker pattern, walled in by opaque ink)
+# never touch the background, so they sit outside the ring and are preserved.
+# Without this gate, despill zeroes interior seams, disconnects the content into
+# tiny islands, and the island-removal pass then strips it (over-removal bug).
+_DESPILL_EDGE_RING = 3
 
 
 def _get_session():
@@ -74,11 +81,15 @@ def _despill_solid_bg(arr, alpha) -> None:
     rembg keeps the original RGB under removed (alpha==0) pixels, so we detect
     the background colour from them. If that background is near-uniform (a solid
     white/black plate, as the refine step produces), drop any partial-alpha edge
-    pixel whose colour is within _DESPILL_COLOR_DISTANCE of it — that is the
-    background-coloured halo. Photographic cutouts have a high-variance bg and
-    are skipped entirely, so soft edges (hair, etc.) are preserved.
+    pixel whose colour is within _DESPILL_COLOR_DISTANCE of it AND that sits in
+    the outer halo (within _DESPILL_EDGE_RING px of removed background) — that is
+    the background-coloured fringe. Interior bg-coloured design content (walled
+    in by opaque ink, never touching the background) lies outside the ring and is
+    preserved. Photographic cutouts have a high-variance bg and are skipped
+    entirely, so soft edges (hair, etc.) are preserved.
     """
     import numpy as np
+    from scipy import ndimage
 
     bg_mask = alpha == 0
     if bg_mask.mean() < _DESPILL_BG_MIN_FRACTION:
@@ -91,7 +102,9 @@ def _despill_solid_bg(arr, alpha) -> None:
 
     bg_color = np.median(bg_samples, axis=0)
     dist = np.sqrt(((rgb - bg_color) ** 2).sum(axis=2))
-    fringe = (alpha > 0) & (alpha < 255) & (dist < _DESPILL_COLOR_DISTANCE)
+    # Restrict to the outer halo: pixels adjacent (≤ring px) to removed bg.
+    near_bg = ndimage.binary_dilation(bg_mask, iterations=_DESPILL_EDGE_RING)
+    fringe = (alpha > 0) & (alpha < 255) & (dist < _DESPILL_COLOR_DISTANCE) & near_bg
     dropped = int(fringe.sum())
     if dropped:
         alpha[fringe] = 0

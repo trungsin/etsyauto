@@ -119,6 +119,64 @@ def test_remove_bg_empty_result_raises():
             rembg_client.RembgClient().remove_bg(b"img")
 
 
+# ── alpha cleanup: despill preserves interior bg-coloured content ─────────────
+
+def _checker_on_white_png() -> bytes:
+    """Synthetic rembg-style output: design on a removed solid-white bg, with
+    interior white squares walled in by opaque black ink (a checker bolt) plus a
+    1px white halo ringing the design. Mirrors the over-removal repro."""
+    from io import BytesIO
+
+    import numpy as np
+    from PIL import Image
+
+    h = w = 40
+    arr = np.zeros((h, w, 4), dtype=np.uint8)
+    # Removed solid-white background everywhere (alpha 0, RGB white retained).
+    arr[:, :, :3] = 255
+    # Opaque black design block in the centre…
+    arr[8:32, 8:32] = [0, 0, 0, 255]
+    # …with an interior white square (opaque) walled inside the black block.
+    arr[16:24, 16:24] = [255, 255, 255, 255]
+    # 1px semi-transparent white halo ringing the block (the fringe to remove).
+    arr[7, 7:33] = [255, 255, 255, 120]
+    arr[32, 7:33] = [255, 255, 255, 120]
+    buf = BytesIO()
+    Image.fromarray(arr, "RGBA").save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _interior_white_alpha(png: bytes) -> int:
+    from io import BytesIO
+
+    import numpy as np
+    from PIL import Image
+
+    arr = np.array(Image.open(BytesIO(png)).convert("RGBA"))
+    return int(arr[20, 20, 3])  # centre of the interior white square
+
+
+def test_clean_alpha_preserves_interior_bg_coloured_content():
+    """Regression: interior white squares (bg-coloured, walled in opaque ink)
+    must survive despill + island removal. Bug was despill zeroing interior
+    seams → island pass stripping the disconnected squares."""
+    png = _checker_on_white_png()
+    cleaned = rembg_client._clean_alpha(png)
+    assert _interior_white_alpha(cleaned) == 255  # interior square intact
+
+
+def test_clean_alpha_still_removes_outer_halo():
+    """Despill must still drop the bg-coloured fringe ringing the design."""
+    from io import BytesIO
+
+    import numpy as np
+    from PIL import Image
+
+    cleaned = rembg_client._clean_alpha(_checker_on_white_png())
+    arr = np.array(Image.open(BytesIO(cleaned)).convert("RGBA"))
+    assert int(arr[7, 20, 3]) == 0  # outer white halo removed
+
+
 # ── warmup ───────────────────────────────────────────────────────────────────
 
 def test_warmup_loads_session():
