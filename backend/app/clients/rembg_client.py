@@ -28,6 +28,16 @@ _ALPHA_FAINT_THRESHOLD = 12
 # details survive (they belong to the main component).
 _ALPHA_MIN_ISLAND_FRACTION = 0.01
 
+# Despill (de-fringe) tuning. On flat artwork over a SOLID background (the
+# refine step outputs designs on pure white/black), rembg leaves a halo of
+# semi-transparent edge pixels whose RGB is still the background colour → a
+# dirty dark/light fringe. We drop partial-alpha pixels whose colour is close
+# to the detected background. Gated to solid backgrounds only, so photographic
+# cutouts (hair, soft edges) are never touched.
+_DESPILL_BG_MIN_FRACTION = 0.02   # need ≥2% removed pixels to sample bg reliably
+_DESPILL_BG_MAX_STD = 30.0        # bg counts as "solid" only if colour std below this
+_DESPILL_COLOR_DISTANCE = 100.0   # drop fringe within this RGB distance of bg colour
+
 
 def _get_session():
     """Return cached ONNX session for the configured model (lazy singleton)."""
@@ -58,12 +68,45 @@ def warmup() -> None:
         logger.exception("rembg warmup failed — first request will retry or fall back to API")
 
 
-def _clean_alpha(png_bytes: bytes) -> bytes:
-    """Clean the alpha mask: drop faint background haze + detached stray blobs.
+def _despill_solid_bg(arr, alpha) -> None:
+    """In-place de-fringe for flat art on a SOLID background.
 
-    Two passes on the alpha channel:
+    rembg keeps the original RGB under removed (alpha==0) pixels, so we detect
+    the background colour from them. If that background is near-uniform (a solid
+    white/black plate, as the refine step produces), drop any partial-alpha edge
+    pixel whose colour is within _DESPILL_COLOR_DISTANCE of it — that is the
+    background-coloured halo. Photographic cutouts have a high-variance bg and
+    are skipped entirely, so soft edges (hair, etc.) are preserved.
+    """
+    import numpy as np
+
+    bg_mask = alpha == 0
+    if bg_mask.mean() < _DESPILL_BG_MIN_FRACTION:
+        return  # not enough background to sample reliably
+
+    rgb = arr[:, :, :3].astype(np.int16)
+    bg_samples = rgb[bg_mask]
+    if float(bg_samples.std(axis=0).max()) >= _DESPILL_BG_MAX_STD:
+        return  # non-uniform background (photo) — leave soft edges untouched
+
+    bg_color = np.median(bg_samples, axis=0)
+    dist = np.sqrt(((rgb - bg_color) ** 2).sum(axis=2))
+    fringe = (alpha > 0) & (alpha < 255) & (dist < _DESPILL_COLOR_DISTANCE)
+    dropped = int(fringe.sum())
+    if dropped:
+        alpha[fringe] = 0
+        logger.info("rembg despill: removed %d bg-coloured fringe px (bg=%s)",
+                    dropped, bg_color.astype(int).tolist())
+
+
+def _clean_alpha(png_bytes: bytes) -> bytes:
+    """Clean the alpha mask: drop faint haze, despill solid-bg fringe, strip blobs.
+
+    Passes (in order):
       1. Faint-haze threshold — alpha < _ALPHA_FAINT_THRESHOLD → 0.
-      2. Island removal — keep the largest connected component (the main
+      2. Solid-bg despill — drop background-coloured edge halo (gated to flat
+         art on a uniform background; skipped for photographic cutouts).
+      3. Island removal — keep the largest connected component (the main
          design); zero any detached blob smaller than _ALPHA_MIN_ISLAND_FRACTION
          of it. Thin details connected to the design survive.
 
@@ -82,7 +125,10 @@ def _clean_alpha(png_bytes: bytes) -> bytes:
         # Pass 1: drop faint background haze.
         alpha[alpha < _ALPHA_FAINT_THRESHOLD] = 0
 
-        # Pass 2: remove detached stray blobs.
+        # Pass 2: de-fringe background-coloured halo on solid backgrounds.
+        _despill_solid_bg(arr, alpha)
+
+        # Pass 3: remove detached stray blobs.
         mask = alpha > 0
         labels, count = ndimage.label(mask)
         if count > 1:
