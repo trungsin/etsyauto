@@ -22,8 +22,13 @@ from app.services.image_service import download_image, save_to_static, upload_to
 
 logger = logging.getLogger(__name__)
 
-# Cap input before upscaling — SwiftShader CPU scales O(pixels); 512px → ~80s, 1024px → ~10min
-_UPSCALE_MAX_INPUT_PX = 512
+# Cap input before upscaling — SwiftShader CPU scales O(pixels). Measured on this
+# box (upscayl-lite-4x): 512px→~150s, 768px→~310s, 1024px→~525s for a 4× pass.
+# 1024 keeps the full refined/cutout resolution (4× → 4096px, sharpest POD print);
+# the upscayl timeout below is set to 900s to give ~9min runs safe headroom.
+_UPSCALE_MAX_INPUT_PX = 1024
+# Hard limit for a single upscayl CLI run; must exceed the slowest expected pass.
+_UPSCALE_TIMEOUT_S = 900
 
 _REFINE_PROMPT_LIGHT = (
     "This is a design artwork cropped from a product mockup image. "
@@ -335,7 +340,7 @@ def run_upscale_job(artwork_id: int, scale: int = 4) -> None:
 
 
 def _upscale_with_upscayl(image_bytes: bytes, scale: int = 4) -> bytes:
-    """Upscale via upscayl-bin CLI. Caps input at 1024px, passes -g -1 for CPU.
+    """Upscale via upscayl-bin CLI. Caps input at _UPSCALE_MAX_INPUT_PX, runs on GPU 0.
 
     Binary path: settings.upscayl_bin (default "upscayl-bin" on PATH).
     Models dir: settings.upscayl_models (optional; uses binary's bundled default if empty).
@@ -375,9 +380,9 @@ def _upscale_with_upscayl(image_bytes: bytes, scale: int = 4) -> bytes:
 
         logger.info("Running upscayl-bin scale=%d: %s", scale, " ".join(cmd))
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=_UPSCALE_TIMEOUT_S)
         except subprocess.TimeoutExpired as exc:
-            raise RuntimeError("upscayl-bin timed out after 600s") from exc
+            raise RuntimeError(f"upscayl-bin timed out after {_UPSCALE_TIMEOUT_S}s") from exc
 
         if result.returncode != 0:
             raise RuntimeError(

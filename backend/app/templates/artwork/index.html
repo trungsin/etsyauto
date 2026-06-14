@@ -135,7 +135,7 @@
       <div style="display:flex;flex-direction:column;gap:.4rem">
         <label style="display:flex;align-items:baseline;gap:.5rem;cursor:pointer;font-size:.9rem">
           <input type="radio" name="upscale-scale" value="2">
-          <span>2× — nhanh (~80s)</span>
+          <span>2× — thấp</span>
           <span id="scale-out-2" style="color:#6b7280;font-size:.8rem"></span>
         </label>
         <label style="display:flex;align-items:baseline;gap:.5rem;cursor:pointer;font-size:.9rem">
@@ -145,7 +145,7 @@
         </label>
         <label style="display:flex;align-items:baseline;gap:.5rem;cursor:pointer;font-size:.9rem">
           <input type="radio" name="upscale-scale" value="4" checked>
-          <span>4× — chất lượng cao (~4-5 phút)</span>
+          <span>4× — chất lượng cao (~9 phút ở 1024px)</span>
           <span id="scale-out-4" style="color:#6b7280;font-size:.8rem"></span>
         </label>
         <label style="display:flex;align-items:baseline;gap:.5rem;cursor:pointer;font-size:.9rem">
@@ -374,7 +374,7 @@ document.getElementById('btn-removebg').addEventListener('click', async () => {
 
 // When removebg image loads, compute capped input size for upscaler output estimates
 document.getElementById('removebg-img').addEventListener('load', function() {
-  const CAP = 512;
+  const CAP = 1024;  // must match _UPSCALE_MAX_INPUT_PX in artwork_service.py
   const maxDim = Math.max(this.naturalWidth, this.naturalHeight);
   const ratio = maxDim > CAP ? CAP / maxDim : 1;
   const inW = Math.round(this.naturalWidth * ratio);
