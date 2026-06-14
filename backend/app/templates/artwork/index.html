@@ -15,6 +15,8 @@
               background: #4f46e5; color: #fff; font-size: .8rem; font-weight: 700; flex-shrink: 0; }
   .step-card.disabled .step-num { background: #9ca3af; }
   .preview-img { max-width: 100%; max-height: 380px; border: 1px solid #e5e7eb; border-radius: 4px; display: none; }
+  /* Step 1 crop source: show large so drag-select is precise (crop math is fraction-based). */
+  #source-img { max-height: 70vh; }
   .checkerboard { background-image:
     linear-gradient(45deg,#ccc 25%,transparent 25%),
     linear-gradient(-45deg,#ccc 25%,transparent 25%),
